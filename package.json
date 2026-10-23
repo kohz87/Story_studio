@@ -1,0 +1,13 @@
+{
+  "name": "story-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Story Studio: the pack editor and creator kit for the Story Suite (SillyTavern).",
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "test": "node --test \"tests/**/*.test.js\"",
+    "test:dot": "node --test --test-reporter=dot \"tests/**/*.test.js\"",
+    "sync-sb": "node scripts/sync-sb.mjs"
+  }
+}
