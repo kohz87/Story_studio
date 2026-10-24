@@ -656,6 +656,7 @@ function checkParentForm(form, constants) {
         const value = form[key];
         if (typeof value !== 'string' || !DEF_ID.test(value) || value.length > 160 || value.split('/')[1].length > 64) add(key, 'Expected an SB definition ID');
     }
+    if (typeof form.skill === 'string' && form.skill.split('/').at(-1).length > 52) add('skill', 'Base skill slug must leave room for both pathway steps');
     for (const key of ['name', 'note']) {
         for (const error of validateSchemaValue(form[key], rulesV2Schema.$defs[key], rulesV2Schema.$defs, key)) add(error.path, error.message);
     }
@@ -2434,6 +2435,9 @@ export function exportRulesV2(document, constants = RULES_V2_CONSTANTS) {
     const packKey = chk.pack.id;
     const canonical = buildCanonicalDocument(chk.pack, packKey);
     const text = JSON.stringify(canonical, null, 2) + '\n';
+    if (byteLength(text) > RULES_V2_LIMITS.packBytes) {
+        return { ok: false, errors: [{ code: RULES_V2_ERROR_CODES.TOO_LARGE, path: '', message: 'Canonical export exceeds 512 KiB' }] };
+    }
     const hash = chk.hash;
 
     return { ok: true, text, hash };
