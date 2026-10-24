@@ -667,6 +667,8 @@ export function openPack(json) {
     let parseError = null;
 
     if (typeof json === 'string') {
+        // Match Story Block's validateRulesPack, which drops a leading byte order mark.
+        json = json.replace(/^\uFEFF/, '');
         if (new TextEncoder().encode(json).length > MAX_BYTES) {
             return deepFreeze({
                 document: null,
