@@ -1358,6 +1358,7 @@ export function setField(model, path, value) {
         };
     }
 
+    let pathParent = model.document;
     for (let i = 0; i < safePath.length; i++) {
         const seg = safePath[i];
         if (typeof seg !== 'string' && typeof seg !== 'number') {
@@ -1381,6 +1382,15 @@ export function setField(model, path, value) {
                 errors: [{ code: 'unsafe-key', path: '', message: `Unsafe path segment: ${seg}` }],
             };
         }
+        // Traversal accepts canonical numeric strings as array indices. Identity guards
+        // must see the same path, including when a record or its ancestor is replaced.
+        if (Array.isArray(pathParent) && typeof seg === 'string') {
+            const index = Number(seg);
+            if (Number.isInteger(index) && index >= 0 && String(index) === seg) safePath[i] = index;
+        }
+        pathParent = pathParent !== null && typeof pathParent === 'object'
+            ? Object.getOwnPropertyDescriptor(pathParent, safePath[i])?.value
+            : undefined;
     }
 
     const pathStr = safePath.join('.');

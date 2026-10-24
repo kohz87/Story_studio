@@ -98,7 +98,8 @@ test('initial history state has current model and empty undo/redo stacks', () =>
     const pack = smallRulesPack();
     const model = openPack(pack);
     assert.equal(model.validation.ok, true, JSON.stringify(model.validation.errors));
-    assert.ok(typeof model.hash === 'string' && model.hash.length === 64);
+    assert.ok(typeof model.rulesHash === 'string' && model.rulesHash.length === 64);
+    assert.ok(typeof model.packHash === 'string' && model.packHash.length === 64);
     assert.deepEqual(model.document.content.rules[0].statLabels, {});
 
     const history = createHistory(model);
@@ -116,7 +117,8 @@ test('successful commit updates current model, records undo, and clears redo', (
     const pack = smallRulesPack();
     const model0 = openPack(pack);
     assert.equal(model0.validation.ok, true, JSON.stringify(model0.validation.errors));
-    assert.ok(typeof model0.hash === 'string' && model0.hash.length === 64);
+    assert.ok(typeof model0.rulesHash === 'string' && model0.rulesHash.length === 64);
+    assert.ok(typeof model0.packHash === 'string' && model0.packHash.length === 64);
 
     const history = createHistory(model0);
 
@@ -144,7 +146,8 @@ test('undo and redo restore exact model snapshots across multiple edits', () => 
     const pack = smallRulesPack();
     const m0 = openPack(pack);
     assert.equal(m0.validation.ok, true, JSON.stringify(m0.validation.errors));
-    assert.ok(typeof m0.hash === 'string' && m0.hash.length === 64);
+    assert.ok(typeof m0.rulesHash === 'string' && m0.rulesHash.length === 64);
+    assert.ok(typeof m0.packHash === 'string' && m0.packHash.length === 64);
     assert.deepEqual(m0.document.content.rules[0].statLabels, {});
 
     const history = createHistory(m0);

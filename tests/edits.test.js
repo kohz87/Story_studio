@@ -125,7 +125,8 @@ test('add operation is pure and appends record to kind collection', () => {
     // Pure undo returns exact original snapshot
     const undone = res.undo();
     assert.equal(undone, model);
-    assert.equal(undone.hash, model.hash);
+    assert.equal(undone.rulesHash, model.rulesHash);
+    assert.equal(undone.packHash, model.packHash);
 });
 
 test('add rejects duplicate IDs and unsupported kinds', () => {
@@ -244,7 +245,8 @@ test('full class rename updates all typed inbound references and preserves note 
     // Pure undo restores exact original model
     const undone = res.undo();
     assert.equal(undone, model);
-    assert.equal(undone.hash, model.hash);
+    assert.equal(undone.rulesHash, model.rulesHash);
+    assert.equal(undone.packHash, model.packHash);
 });
 
 test('full item rename updates itemRules, creature loot, shops, recipes, quests, and start inventory', () => {
@@ -348,7 +350,8 @@ test('full item rename updates itemRules, creature loot, shops, recipes, quests,
     // Pure undo restores exact previous model and hash
     const undone = res.undo();
     assert.equal(undone, model);
-    assert.equal(undone.hash, model.hash);
+    assert.equal(undone.rulesHash, model.rulesHash);
+    assert.equal(undone.packHash, model.packHash);
 });
 
 test('full skill rename atomically rebases base-forms, generated-parent graph, branches, and typed refs', () => {
@@ -398,7 +401,8 @@ test('full skill rename atomically rebases base-forms, generated-parent graph, b
     // Entire pack revalidated and valid per shared rules-v2 checker
     assert.equal(res.model.validation.ok, true, JSON.stringify(res.model.validation.errors));
     assert.equal(res.model.validation.errors.length, 0);
-    assert.ok(typeof res.model.hash === 'string' && res.model.hash.length === 64);
+    assert.ok(typeof res.model.rulesHash === 'string' && res.model.rulesHash.length === 64);
+    assert.ok(typeof res.model.packHash === 'string' && res.model.packHash.length === 64);
 
     // Export canonical and round trip
     const exportedText = exportPack(res.model);
@@ -407,13 +411,15 @@ test('full skill rename atomically rebases base-forms, generated-parent graph, b
     // Round trip and hash parity
     const model2 = openPack(exportedText);
     assert.equal(model2.validation.ok, true, JSON.stringify(model2.validation.errors));
-    assert.equal(model2.hash, res.model.hash);
+    assert.equal(model2.rulesHash, res.model.rulesHash);
+    assert.equal(model2.packHash, res.model.packHash);
     assert.deepEqual(model2.document, res.model.document);
 
     // Pure undo returns exact original snapshot
     const undone = res.undo();
     assert.equal(undone, model);
-    assert.equal(undone.hash, model.hash);
+    assert.equal(undone.rulesHash, model.rulesHash);
+    assert.equal(undone.packHash, model.packHash);
 });
 
 test('renameId refuses invalid IDs, foreign pack IDs, and inconsistent branch slugs', () => {
@@ -568,7 +574,8 @@ test('cascade delete transitively removes class, owned skills, branches, and des
     // Pure undo restores exact previous model
     const undone = res.undo();
     assert.equal(undone, model);
-    assert.equal(undone.hash, model.hash);
+    assert.equal(undone.rulesHash, model.rulesHash);
+    assert.equal(undone.packHash, model.packHash);
 });
 
 test('cascade delete removes item, itemRules, start inventory, and related references cleanly', () => {
@@ -612,7 +619,8 @@ test('cascade delete removes item, itemRules, start inventory, and related refer
     // Pure undo restores exact previous model
     const undone = res.undo();
     assert.equal(undone, model);
-    assert.equal(undone.hash, model.hash);
+    assert.equal(undone.rulesHash, model.rulesHash);
+    assert.equal(undone.packHash, model.packHash);
 });
 
 test('moveClass coherently updates tiers, descendant tiers, and rejects cycles/overflow', () => {
@@ -665,7 +673,8 @@ test('moveClass coherently updates tiers, descendant tiers, and rejects cycles/o
     // Pure undo restores exact original model
     const undone = rootRes.undo();
     assert.equal(undone, model);
-    assert.equal(undone.hash, model.hash);
+    assert.equal(undone.rulesHash, model.rulesHash);
+    assert.equal(undone.packHash, model.packHash);
 });
 
 test('setField is pure, replaces leaf values, and exposes intermediate validation errors', () => {
@@ -960,13 +969,23 @@ test('table-based cascade regression covers every supported kind without danglin
         // No old typed refs to target
         const fullTargetId = `pack.fixture/${targetId}`;
         const refs = res.model.references || [];
-        assert.ok(!refs.some(r => r.targetId === fullTargetId || r.targetId === targetId), `No old typed refs to ${targetId}`);
+        const targetKind = kind === 'legacySkills' ? 'legacySkills' : kind;
+        assert.ok(!refs.some(r => r.targetKind === targetKind && (r.targetId === fullTargetId || r.targetId === targetId)), `No old typed refs to ${kind}/${targetId}`);
+        if (kind === 'skills' || kind === 'branches' || kind === 'classes') {
+            const remainingSkills = new Set(res.model.document.content.rules[0].skills.map(s => s.slug));
+            const removedSkills = model.document.content.rules[0].skills.filter(s => !remainingSkills.has(s.slug));
+            assert.ok(!refs.some(r => r.targetKind === 'forms' && (
+                (kind === 'branches' && (r.targetId === fullTargetId || r.targetId.startsWith(`${fullTargetId}-`)))
+                || removedSkills.some(s => r.targetId === `pack.fixture/${s.slug}-base` || r.targetId.startsWith(`pack.fixture/${s.slug}-base-`))
+            )), 'No refs to removed derived forms');
+        }
 
         // Specific cascade behaviors:
         if (kind === 'itemRules') {
             // itemRule removal only deletes itemRule: items and shops stocking it remain
             assert.ok(res.model.document.content.items.some(i => i.slug === 's-item'));
             assert.ok(res.model.document.content.shops.some(s => s.slug === 'sh1'));
+            assert.ok(refs.some(r => r.kind === 'shops' && r.targetKind === 'items' && r.targetId === fullTargetId));
         } else if (kind === 'items') {
             // item removal cascades to itemRules, recipes, shops
             assert.equal(res.model.document.content.rules[0].itemRules.length, 0);
@@ -1322,7 +1341,8 @@ test('add written branch repairs graph, restores golden export/hash, supports em
     const res = add(model, 'branches', branch);
     assert.equal(res.ok, true);
     assert.equal(res.model.validation.ok, true); // final valid
-    assert.equal(res.model.hash, fullModel.hash);
+    assert.equal(res.model.rulesHash, fullModel.rulesHash);
+    assert.equal(res.model.packHash, fullModel.packHash);
     assert.equal(exportPack(res.model), exportPack(fullModel));
     assert.deepEqual(branch, branchCopy); // no caller mutation
     assert.equal(res.undo(), model); // exact undo
@@ -1481,4 +1501,37 @@ test('invalid drafts and malformed containers do not crash edit operations', () 
         remove(malformedModel, 'skills', 's30', { cascade: true });
         moveClass(malformedModel, 'c1', 'c0');
     });
+});
+
+test('numeric-string paths enforce identity guards for records, collections and ancestors', () => {
+    const model = openPack(smallRulesPack());
+    assert.equal(model.validation.ok, true);
+    const before = exportPack(model);
+    const manifest = structuredClone(model.document.content.rules[0]);
+    manifest.skills[0].slug = 'escape';
+    const changedClass = { ...model.document.content.rules[0].classes[0], slug: 'escape' };
+    const cases = [
+        [['content', 'rules', 0, 'classes', 0], null],
+        [['content', 'rules', 0, 'classes', 0], changedClass],
+        [['content', 'rules', 0, 'classes'], []],
+        [['content', 'rules', 0], manifest],
+    ];
+    for (const [path, value] of cases) {
+        for (const actualPath of [path, path.map(String), path.map((s, i) => i === 2 ? String(s) : s)]) {
+            const res = setField(model, actualPath, value);
+            assert.equal(res.ok, false, JSON.stringify(actualPath));
+            assert.equal(res.errors[0].code, 'identity-field');
+            assert.equal(res.model, model);
+            assert.equal(exportPack(res.model), before);
+            assert.equal(res.model.rulesHash, model.rulesHash);
+            assert.equal(res.model.packHash, model.packHash);
+        }
+    }
+    const numeric = setField(model, ['content', 'rules', 0, 'classes', 0, 'name'], 'New class name');
+    const strings = setField(model, ['content', 'rules', '0', 'classes', '0', 'name'], 'New class name');
+    assert.equal(strings.ok, true);
+    assert.equal(strings.model.validation.ok, true);
+    assert.equal(exportPack(strings.model), exportPack(numeric.model));
+    assert.equal(strings.model.rulesHash, numeric.model.rulesHash);
+    assert.equal(strings.model.packHash, numeric.model.packHash);
 });
