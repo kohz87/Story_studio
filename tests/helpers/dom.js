@@ -317,6 +317,10 @@ function createSelectorMatcher(selector) {
             return false;
         };
     }
+    if (selector.endsWith(':first-child')) {
+        const match = createSelectorMatcher(selector.slice(0, -12));
+        return el => match(el) && el.parentElement?.children[0] === el;
+    }
     if (selector.endsWith(':last-child')) {
         const match = createSelectorMatcher(selector.slice(0, -11));
         return el => match(el) && el.parentElement?.children.at(-1) === el;
