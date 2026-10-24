@@ -1083,7 +1083,7 @@ test('valid smallRulesPack with 600 places note length 300 ASCII passes shared c
 // Regression 8: Primitive leaves at depth 16 are allowed following shared safety checker
 test('primitive leaves at depth 16 are allowed following shared safety checker', () => {
     let deep = 'leaf-value';
-    for (let d = 16; d >= 1; d--) {
+    for (let d = 15; d >= 1; d--) {
         deep = { next: deep };
     }
     const doc = {
@@ -1099,6 +1099,35 @@ test('primitive leaves at depth 16 are allowed following shared safety checker',
 
     const refs = indexReferences(doc);
     assert.ok(refs.some(r => r.kind === 'classes' && r.targetId === 'pack.fixture/c0'));
+    assert.ok(!validateRulesPack(doc).errors.some(error => error.code === 'too-large'));
+    assert.deepEqual(openPack(doc).document.deep, deep);
+
+    doc.deep = { next: deep };
+    assert.ok(validateRulesPack(doc).errors.some(error => error.code === 'too-large'));
+    assert.deepEqual(indexReferences(doc), []);
+    assert.equal(openPack(doc).document, null);
+});
+
+test('route names and aliases use shared place folding while qualified foreign IDs stay intact', () => {
+    const pack = smallRulesPack();
+    pack.content.places[0].aliases = ['Safe Haven'];
+    pack.content.routes = [
+        { slug: 'road', from: 'HAVEN', to: 'Mill', kind: 'road' },
+        { slug: 'trail', from: '  ＳＡＦＥ ＨＡＶＥＮ  ', to: 'MILL', kind: 'trail' },
+    ];
+    assert.equal(validateRulesPack(pack).ok, true);
+    const model = openPack(pack);
+    assert.equal(model.validation.ok, true);
+    for (const [index, field, slug] of [[0, 'from', 'haven'], [0, 'to', 'mill'], [1, 'from', 'haven'], [1, 'to', 'mill']]) {
+        const expected = {
+            kind: 'routes', id: `pack.fixture/${index ? 'trail' : 'road'}`,
+            path: ['content', 'routes', index, field], targetKind: 'places', targetId: `pack.fixture/${slug}`,
+        };
+        assert.deepEqual(model.references.find(ref => ref.path.join('.') === expected.path.join('.')), expected);
+        assert.deepEqual(indexReferences(pack).find(ref => ref.path.join('.') === expected.path.join('.')), expected);
+    }
+    pack.content.routes[0].from = 'pack.foreign/haven';
+    assert.equal(indexReferences(pack).find(ref => ref.path.join('.') === 'content.routes.0.from').targetId, 'pack.foreign/haven');
 });
 
 // Regression 9: Canonical export exceeding 512 KiB handled as immutable invalid model preserving authored document

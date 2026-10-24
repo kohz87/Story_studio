@@ -6,6 +6,7 @@ import {
     rulesV2Schema,
     RULES_V2_LIMITS,
 } from '../vendor/story-block/src/v2/packs/rules-v2.js';
+import { foldKey } from '../vendor/story-block/src/text.js';
 
 export { rulesV2Schema };
 
@@ -199,12 +200,10 @@ export function indexReferences(document) {
     const placeSlugMap = new Map();
     for (const p of contentPlaces) {
         if (!p || typeof p !== 'object') continue;
-        if (p.slug) placeSlugMap.set(p.slug, p.slug);
-        if (p.name) placeSlugMap.set(p.name, p.slug);
-        if (Array.isArray(p.aliases)) {
-            for (const alias of p.aliases) {
-                if (alias) placeSlugMap.set(alias, p.slug);
-            }
+        const keys = [p.slug, ...[p.name, ...(Array.isArray(p.aliases) ? p.aliases : [])]
+            .filter(value => typeof value === 'string').map(foldKey)];
+        for (const key of keys) {
+            if (key && !placeSlugMap.has(key)) placeSlugMap.set(key, p.slug);
         }
     }
 
@@ -215,9 +214,9 @@ export function indexReferences(document) {
             if (placeSlugMap.has(local)) return `${prefix}${placeSlugMap.get(local)}`;
             return ref;
         }
-        if (placeSlugMap.has(ref)) {
-            return `${prefix}${placeSlugMap.get(ref)}`;
-        }
+        if (ref.startsWith('pack.') || ref.startsWith('story/') || ref.includes('/')) return ref;
+        const slug = placeSlugMap.get(ref) ?? placeSlugMap.get(foldKey(ref));
+        if (slug) return `${prefix}${slug}`;
         return ref;
     }
 
