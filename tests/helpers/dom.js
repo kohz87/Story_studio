@@ -218,6 +218,7 @@ export class MockElement extends MockNode {
 
     setAttribute(name, value) {
         this._attributes.set(name, String(value));
+        if (name === 'value') this._value = String(value);
     }
 
     getAttribute(name) {
@@ -304,6 +305,34 @@ export class MockElement extends MockNode {
 
 function createSelectorMatcher(selector) {
     selector = selector.trim();
+    const parts = selector.split(/\s+(?=(?:[^"']|"[^"]*"|'[^']*')*$)/);
+    if (parts.length > 1) {
+        const last = createSelectorMatcher(parts.pop());
+        const ancestor = createSelectorMatcher(parts.join(' '));
+        return el => {
+            if (!last(el)) return false;
+            for (let node = el.parentElement; node; node = node.parentElement) {
+                if (ancestor(node)) return true;
+            }
+            return false;
+        };
+    }
+    if (selector.endsWith(':last-child')) {
+        const match = createSelectorMatcher(selector.slice(0, -11));
+        return el => match(el) && el.parentElement?.children.at(-1) === el;
+    }
+    const compound = selector.match(/^(\.[\w-]+)(\[.*\])$/);
+    if (compound) {
+        const a = createSelectorMatcher(compound[1]);
+        const b = createSelectorMatcher(compound[2]);
+        return el => a(el) && b(el);
+    }
+    const attrClass = selector.match(/^([\w-]+\[.*\])(\.[\w-]+)$/);
+    if (attrClass) {
+        const a = createSelectorMatcher(attrClass[1]);
+        const b = createSelectorMatcher(attrClass[2]);
+        return el => a(el) && b(el);
+    }
 
     if (selector.startsWith('#')) {
         const id = selector.slice(1);
@@ -388,13 +417,17 @@ export function createTestContext(packOrModel) {
     let history = createHistory(model);
     const selection = { kind: 'classes', id: null, form: null };
 
+    const app = doc.createElement('div');
+    app.classList.add('studio');
     const main = doc.createElement('main');
     const inspector = doc.createElement('aside');
     const overlays = doc.createElement('div');
-    doc.body.append(main, inspector, overlays);
+    app.append(main, inspector, overlays);
+    doc.body.append(app);
 
     const ctx = {
         doc,
+        app,
         main,
         inspector,
         overlays,
@@ -417,6 +450,7 @@ export function createTestContext(packOrModel) {
             selection.id = id;
             selection.form = form;
             ctx.render();
+            if (id !== null) app.classList.add('inspector-open');
         },
         render() {
             main.replaceChildren();

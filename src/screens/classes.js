@@ -1,37 +1,38 @@
 import { el, button, field } from '../dom.js';
 import { KINDS, LABELS, records, identity, localId } from '../records.js';
 import { add, renameId, remove, moveClass, setField } from '../edits.js';
+import { validateRulesPack } from '../../vendor/story-block/src/v2/packs/rules-v2.js';
 
-/**
- * Pure helper to set or replace a field on a class record by slug.
- */
+// Sets or replaces a field on a class record by slug.
 export function classField(model, classSlug, fieldName, value) {
     const list = records(model, 'classes');
-    const idx = list.findIndex(c => localId(model, identity(c)) === localId(model, classSlug));
+    const idx = list.findIndex(c => c && typeof c === 'object' && localId(model, identity(c)) === localId(model, classSlug));
     if (idx === -1) {
         return { ok: false, model, errors: [{ code: 'not-found', message: `Class ${classSlug} not found` }] };
     }
     return setField(model, ['content', 'rules', 0, 'classes', idx, fieldName], value);
 }
 
-/**
- * Pure helper to compute exact removed records, start inventory items,
- * and derived generated skill forms between a model and its cascade-preview model.
- */
-export function cascadeChanges(beforeModel, previewModel, targetSlug = null) {
+// Computes exact removed records, start inventory items, and derived forms.
+export function cascadeChanges(beforeModel, previewModel, _targetSlug = null) {
     const changes = [];
     if (!beforeModel?.document || !previewModel?.document) return changes;
 
     const beforeDoc = beforeModel.document;
     const afterDoc = previewModel.document;
 
-    // 1. Compare records across all KINDS
+    // Compare records across all KINDS
     for (const kind of KINDS) {
         const beforeList = records(beforeModel, kind);
         const afterList = records(previewModel, kind);
-        const afterIds = new Set(afterList.map(r => localId(previewModel, identity(r))));
+        const afterIds = new Set(
+            afterList
+                .map(r => (r && typeof r === 'object' ? localId(previewModel, identity(r)) : null))
+                .filter(Boolean)
+        );
 
         for (const item of beforeList) {
+            if (!item || typeof item !== 'object') continue;
             const rawId = identity(item);
             const id = localId(beforeModel, rawId);
             if (!afterIds.has(id)) {
@@ -47,7 +48,7 @@ export function cascadeChanges(beforeModel, previewModel, targetSlug = null) {
         }
     }
 
-    // 2. Compare start.inventory.items
+    // Compare start.inventory.items
     const beforeInv = Array.isArray(beforeDoc.start?.inventory?.items) ? beforeDoc.start.inventory.items : [];
     const afterInv = Array.isArray(afterDoc.start?.inventory?.items) ? afterDoc.start.inventory.items : [];
     const normalizeInv = (entry) => {
@@ -68,27 +69,114 @@ export function cascadeChanges(beforeModel, previewModel, targetSlug = null) {
         }
     }
 
-    // 3. Derived generated forms for removed skills
-    const removedSkills = changes.filter(c => c.kind === 'skills').map(c => c.id);
-    for (const skillSlug of removedSkills) {
-        const base = `${skillSlug}-base`;
-        const forms = [base];
-        const s1 = [`${base}-g`, `${base}-a`, `${base}-b`];
-        for (const p of s1) {
-            forms.push(p);
-            for (const ch of ['g', 'a', 'b']) {
-                forms.push(`${p}-${ch}`);
+    // Exact removed forms: base forms labeled "Base form", reachable generated labeled "Generated form"
+    const removedSkills = new Set(changes.filter(c => c.kind === 'skills').map(c => c.id));
+    const removedBranches = new Set(changes.filter(c => c.kind === 'branches').map(c => c.id));
+
+    let expandedForms = null;
+    try {
+        const valRes = validateRulesPack(beforeDoc);
+        if (valRes?.ok && valRes.resolved?.forms) {
+            expandedForms = valRes.resolved.forms;
+        }
+    } catch {
+        expandedForms = null;
+    }
+
+    if (expandedForms) {
+        for (const form of Object.values(expandedForms)) {
+            if (!form?.id) continue;
+            const normFormId = localId(beforeModel, form.id);
+            const normSkillId = form.skill ? localId(beforeModel, form.skill) : null;
+            const normFromForm = form.fromForm ? localId(beforeModel, form.fromForm) : null;
+
+            if (form.origin === 'base') {
+                if (normSkillId && removedSkills.has(normSkillId)) {
+                    changes.push({
+                        kind: 'forms',
+                        id: normFormId,
+                        name: normFormId,
+                        label: `${normFormId} (Base form)`,
+                    });
+                }
+            } else if (form.origin === 'generated') {
+                const isRemoved =
+                    (normSkillId && removedSkills.has(normSkillId)) ||
+                    (normFromForm && (removedBranches.has(normFromForm) || removedSkills.has(normSkillId)));
+                if (isRemoved) {
+                    changes.push({
+                        kind: 'forms',
+                        id: normFormId,
+                        name: normFormId,
+                        label: `${normFormId} (Generated form)`,
+                    });
+                }
             }
         }
-        for (const formSlug of forms) {
-            const wasBranch = changes.some(c => c.kind === 'branches' && c.id === formSlug);
-            if (!wasBranch) {
+    } else {
+        const beforeClasses = records(beforeModel, 'classes').filter(c => c && typeof c === 'object');
+        const beforeBranches = records(beforeModel, 'branches').filter(b => b && typeof b === 'object');
+
+        for (const skillSlug of removedSkills) {
+            const baseSlug = `${skillSlug}-base`;
+            changes.push({
+                kind: 'forms',
+                id: baseSlug,
+                name: baseSlug,
+                label: `${baseSlug} (Base form)`,
+            });
+
+            const owningClass = beforeClasses.find(c => Array.isArray(c.skills) && c.skills.some(s => s && localId(beforeModel, s) === skillSlug));
+            if (owningClass && owningClass.tier === 3) {
                 changes.push({
                     kind: 'forms',
-                    id: formSlug,
-                    name: formSlug,
-                    label: `${formSlug} (Generated form)`,
+                    id: `${baseSlug}-g`,
+                    name: `${baseSlug}-g`,
+                    label: `${baseSlug}-g (Generated form)`,
                 });
+                changes.push({
+                    kind: 'forms',
+                    id: `${baseSlug}-g-g`,
+                    name: `${baseSlug}-g-g`,
+                    label: `${baseSlug}-g-g (Generated form)`,
+                });
+
+                for (const b of beforeBranches) {
+                    if (b.skill && localId(beforeModel, b.skill) === skillSlug && b.fromForm && localId(beforeModel, b.fromForm) === baseSlug) {
+                        if (b.choice === 'a') {
+                            changes.push({
+                                kind: 'forms',
+                                id: `${baseSlug}-a-g`,
+                                name: `${baseSlug}-a-g`,
+                                label: `${baseSlug}-a-g (Generated form)`,
+                            });
+                        } else if (b.choice === 'b') {
+                            changes.push({
+                                kind: 'forms',
+                                id: `${baseSlug}-b-g`,
+                                name: `${baseSlug}-b-g`,
+                                label: `${baseSlug}-b-g (Generated form)`,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        for (const branchId of removedBranches) {
+            const b = beforeBranches.find(r => r.slug && localId(beforeModel, r.slug) === branchId);
+            if (b && b.skill && !removedSkills.has(localId(beforeModel, b.skill))) {
+                if (b.choice && (b.choice === 'a' || b.choice === 'b') && typeof b.fromForm === 'string' && b.fromForm.endsWith('-base')) {
+                    const genFormId = `${branchId}-g`;
+                    if (!changes.some(c => c.kind === 'forms' && c.id === genFormId)) {
+                        changes.push({
+                            kind: 'forms',
+                            id: genFormId,
+                            name: genFormId,
+                            label: `${genFormId} (Generated form)`,
+                        });
+                    }
+                }
             }
         }
     }
@@ -96,97 +184,52 @@ export function cascadeChanges(beforeModel, previewModel, targetSlug = null) {
     return changes;
 }
 
-/**
- * Finds all problems associated with a class from the live checker validation errors.
- */
+// Maps live validation errors to a class record safely by path or message reference.
 function getClassProblems(model, cls, cIdx) {
-    if (!model) return [];
-    const clsSlug = localId(model, cls.slug);
+    if (!model || !cls) return [];
+    const clsSlug = cls.slug ? localId(model, cls.slug) : '';
     const problems = [];
     const errors = model?.validation?.errors || [];
-
-    const pathBracket = `classes[${cIdx}]`;
-    const pathDot = `classes.${cIdx}`;
+    const pathRegex = new RegExp(`classes(?:\\[|\\.)${cIdx}(?:\\]|\\.|$)`);
 
     for (const err of errors) {
         const p = err.path || '';
         const msg = err.message || '';
-        if (p.includes(pathBracket) || p.includes(pathDot) || p === `content.rules.0.classes[${cIdx}]`) {
+        if (pathRegex.test(p)) {
             problems.push(err);
-        } else if (msg.includes(`"${clsSlug}"`)) {
+        } else if (clsSlug && (msg.includes(`"${clsSlug}"`) || msg.includes(`'${clsSlug}'`))) {
             problems.push(err);
         }
     }
-
-    // Live draft check if not yet caught by validator errors:
-    if (Array.isArray(cls.skills) && cls.skills.length !== 3) {
-        if (!problems.some(e => e.code === 'class-skills')) {
-            problems.push({
-                code: 'class-skills',
-                path: `content.rules[0].classes[${cIdx}].skills`,
-                message: `Class "${clsSlug}" has ${cls.skills.length} skills; every class needs exactly 3.`,
-            });
-        }
-    }
-
     return problems;
 }
 
-/**
- * Finds valid parent candidates for a class according to progression rules.
- */
-function getValidParentCandidates(classes, cls, packId) {
-    const clsSlug = localId({ document: { id: packId } }, cls.slug);
-
-    // BFS to find all descendants of cls (cannot be parent of cls)
-    const descendants = new Set([clsSlug]);
-    const queue = [clsSlug];
-    while (queue.length > 0) {
-        const cur = queue.shift();
-        for (const other of classes) {
-            const oSlug = localId({ document: { id: packId } }, other.slug);
-            const oParent = other.parent ? localId({ document: { id: packId } }, other.parent) : null;
-            if (oParent === cur && !descendants.has(oSlug)) {
-                descendants.add(oSlug);
-                queue.push(oSlug);
-            }
-        }
-    }
-
-    // Maximum depth in descendant subtree
-    function getSubtreeDepth(rootSlug) {
-        let maxDepth = 0;
-        for (const other of classes) {
-            const oParent = other.parent ? localId({ document: { id: packId } }, other.parent) : null;
-            if (oParent === rootSlug) {
-                const oSlug = localId({ document: { id: packId } }, other.slug);
-                maxDepth = Math.max(maxDepth, 1 + getSubtreeDepth(oSlug));
-            }
-        }
-        return maxDepth;
-    }
-    const subtreeDepth = getSubtreeDepth(clsSlug);
-
-    return classes.filter(candidate => {
-        const cSlug = localId({ document: { id: packId } }, candidate.slug);
-        if (descendants.has(cSlug)) return false;
-        if (typeof candidate.tier !== 'number' || candidate.tier < 0 || candidate.tier >= 3) return false;
-        if (candidate.tier + 1 + subtreeDepth > 3) return false;
-        return true;
-    });
+// Authoritative candidate parent selection using moveClass.ok; safe against cycles.
+function getValidParentCandidates(model, validClasses, cls) {
+    if (!model || !cls?.slug) return [];
+    const clsSlug = localId(model, cls.slug);
+    return validClasses
+        .filter(({ cls: cand }) => {
+            if (!cand?.slug) return false;
+            const candSlug = localId(model, cand.slug);
+            if (candSlug === clsSlug) return false;
+            return moveClass(model, cls.slug, cand.slug).ok;
+        })
+        .map(({ cls: cand }) => cand);
 }
 
-/**
- * Generates an unused slug in the pack.
- */
+// Generates an unused slug in the pack.
 function getUniqueClassSlug(model, base = 'new-class') {
     const existing = new Set();
     for (const k of KINDS) {
         for (const r of records(model, k)) {
-            const id = identity(r);
-            if (id) existing.add(localId(model, id));
+            if (r && typeof r === 'object') {
+                const id = identity(r);
+                if (id) existing.add(localId(model, id));
+            }
         }
     }
+    base = base.slice(0, 54).replace(/-+$/, '');
     if (!existing.has(base)) return base;
     let n = 1;
     while (existing.has(`${base}-${n}`)) {
@@ -195,29 +238,33 @@ function getUniqueClassSlug(model, base = 'new-class') {
     return `${base}-${n}`;
 }
 
-/**
- * Renders the Classes screen, Inspector, and sets up Cascade Removal dialog.
- */
+// Renders the Classes screen, Inspector, and Cascade Removal dialog.
 export function renderClasses(ctx) {
     const model = ctx.model;
     const doc = ctx.doc;
     const packId = model?.document?.id || 'pack';
-    const classes = records(model, 'classes');
+    const rawClasses = records(model, 'classes');
 
-    // Build child map for parent/child relationship counts
-    const childMap = new Map();
-    for (const c of classes) {
-        if (c.parent) {
-            const pSlug = localId(model, c.parent);
-            if (!childMap.has(pSlug)) childMap.set(pSlug, []);
-            childMap.get(pSlug).push(c);
+    // Filter valid records while retaining original indices for document paths
+    const validClasses = [];
+    for (let i = 0; i < rawClasses.length; i++) {
+        const c = rawClasses[i];
+        if (c && typeof c === 'object' && !Array.isArray(c)) {
+            validClasses.push({ cls: c, idx: i });
         }
     }
 
-    // Build main screen container
+    const childMap = new Map();
+    for (const { cls } of validClasses) {
+        if (cls.parent && typeof cls.parent === 'string') {
+            const pSlug = localId(model, cls.parent);
+            if (!childMap.has(pSlug)) childMap.set(pSlug, []);
+            childMap.get(pSlug).push(cls);
+        }
+    }
+
     const screen = el(doc, 'div', '', { class: 'classes-screen' });
 
-    // Header
     const header = el(doc, 'div', '', { class: 'classes-header' });
     const title = el(doc, 'h1', 'Classes');
     const subtitle = el(doc, 'div', 'Tier 0 → 3 · every class has exactly 3 skills · every leaf is tier 3', { class: 'classes-subtitle' });
@@ -233,33 +280,36 @@ export function renderClasses(ctx) {
         const result = add(ctx.model, 'classes', newRecord);
         if (result.ok) {
             ctx.selection.id = slug;
-            ctx.apply(result);
+            if (ctx.apply(result)) {
+                ctx.select('classes', slug);
+            }
         } else {
             ctx.notify((result.errors || [{ code: 'add-failed', message: 'Could not add root class' }]).map(e => `${e.code}: ${e.message}`).join('\n'));
         }
     });
     header.append(title, subtitle, addRootBtn);
 
-    // Tier column headers
     const tierLabels = el(doc, 'div', '', { class: 'classes-tier-labels' });
     const TIER_TITLES = ['TIER 0 · START', 'TIER 1', 'TIER 2', 'TIER 3 · ADVANCED'];
     for (let t = 0; t < 4; t++) {
         tierLabels.append(el(doc, 'div', TIER_TITLES[t]));
     }
 
-    // 4 Tier columns
     const columnsContainer = el(doc, 'div', '', { class: 'classes-columns' });
-    const tierColumns = [el(doc, 'div', '', { class: 'classes-column' }), el(doc, 'div', '', { class: 'classes-column' }), el(doc, 'div', '', { class: 'classes-column' }), el(doc, 'div', '', { class: 'classes-column' })];
+    const tierColumns = [
+        el(doc, 'div', '', { class: 'classes-column' }),
+        el(doc, 'div', '', { class: 'classes-column' }),
+        el(doc, 'div', '', { class: 'classes-column' }),
+        el(doc, 'div', '', { class: 'classes-column' }),
+    ];
 
-    // Partition classes into tiers 0..3
     const tierBuckets = [[], [], [], []];
-    for (let idx = 0; idx < classes.length; idx++) {
-        const cls = classes[idx];
+    for (const item of validClasses) {
+        const cls = item.cls;
         const tier = typeof cls.tier === 'number' && Number.isInteger(cls.tier) && cls.tier >= 0 && cls.tier <= 3 ? cls.tier : 0;
-        tierBuckets[tier].push({ cls, idx });
+        tierBuckets[tier].push(item);
     }
 
-    // Sort tier 1..3 by parent order in preceding tier for aligned visual hierarchy
     for (let t = 1; t < 4; t++) {
         const parentOrder = new Map(tierBuckets[t - 1].map((item, i) => [localId(model, item.cls.slug), i]));
         tierBuckets[t].sort((a, b) => {
@@ -269,7 +319,6 @@ export function renderClasses(ctx) {
         });
     }
 
-    // Render class cards in tier columns
     for (let t = 0; t < 4; t++) {
         for (const { cls, idx } of tierBuckets[t]) {
             const isSelected = ctx.selection.id !== null && localId(model, ctx.selection.id) === localId(model, cls.slug);
@@ -281,23 +330,20 @@ export function renderClasses(ctx) {
             const card = button(doc, '', () => ctx.select('classes', cls.slug), {
                 class: 'class-card',
                 'aria-pressed': isSelected ? 'true' : 'false',
-                'data-slug': cls.slug,
+                'data-slug': cls.slug || '',
             });
             if (hasProblem) card.setAttribute('data-has-problem', 'true');
 
-            // Name row
             const nameRow = el(doc, 'span', '', { class: 'class-card-header' });
-            const nameSpan = el(doc, 'span', cls.name || cls.slug, { class: 'class-card-name' });
+            const nameSpan = el(doc, 'span', cls.name || cls.slug || '', { class: 'class-card-name' });
             nameRow.append(nameSpan);
             if (hasProblem) {
                 nameRow.append(el(doc, 'span', '', { class: 'problem-dot', 'aria-label': 'Has a problem' }));
             }
 
-            // Slug & skill count meta
             const skillCount = Array.isArray(cls.skills) ? cls.skills.length : 0;
-            const meta = el(doc, 'span', `${cls.slug} · ${skillCount}/3 skills`, { class: 'class-card-meta' });
+            const meta = el(doc, 'span', `${cls.slug || ''} · ${skillCount}/3 skills`, { class: 'class-card-meta' });
 
-            // Parent & children relationship info
             let relText = '';
             if (cls.tier === 0) {
                 relText = `${childCount} ${childCount === 1 ? 'child' : 'children'}`;
@@ -315,33 +361,26 @@ export function renderClasses(ctx) {
     screen.append(header, tierLabels, columnsContainer);
     ctx.main.append(screen);
 
-    // ==========================================
-    // Inspector: selected class panel
-    // ==========================================
+    // Inspector
     const selSlug = ctx.selection.id ? localId(model, ctx.selection.id) : null;
-    const selectedIdx = classes.findIndex(c => localId(model, c.slug) === selSlug);
-    const selectedClass = selectedIdx !== -1 ? classes[selectedIdx] : null;
+    const selectedItem = selSlug ? validClasses.find(item => localId(model, item.cls.slug) === selSlug) : null;
 
-    if (!selectedClass) {
+    if (!selectedItem) {
         ctx.inspector.append(el(doc, 'p', 'Select a class from the tree to inspect and edit.', { class: 'muted' }));
         return;
     }
 
-    const cIdx = selectedIdx;
-    const cls = selectedClass;
+    const { cls, idx: cIdx } = selectedItem;
     const classPath = ['content', 'rules', 0, 'classes', cIdx];
 
-    // Title & Tier Chip
     const titleRow = el(doc, 'div', '', { class: 'inspector-title-row' });
     titleRow.append(
-        el(doc, 'h2', cls.name || cls.slug),
-        el(doc, 'span', `Tier ${cls.tier}`, { class: 'chip' })
+        el(doc, 'h2', cls.name || cls.slug || ''),
+        el(doc, 'span', `Tier ${cls.tier ?? 0}`, { class: 'chip' })
     );
 
-    // Name & Slug Grid
     const nameSlugGrid = el(doc, 'div', '', { class: 'inspector-grid' });
 
-    // Name input
     const nameInput = el(doc, 'input', '', {
         id: 'class-name',
         value: cls.name ?? '',
@@ -349,13 +388,12 @@ export function renderClasses(ctx) {
     });
     nameInput.addEventListener('change', () => {
         const val = nameInput.value;
-        if (val !== cls.name) {
-            ctx.apply(setField(ctx.model, [...classPath, 'name'], val));
+        if (val !== (cls.name ?? '')) {
+            if (!ctx.apply(setField(ctx.model, [...classPath, 'name'], val))) nameInput.value = cls.name ?? '';
         }
     });
     const nameField = field(doc, 'NAME', nameInput);
 
-    // Slug input
     const slugInput = el(doc, 'input', '', {
         id: 'class-id',
         value: cls.slug ?? '',
@@ -363,15 +401,19 @@ export function renderClasses(ctx) {
     });
     slugInput.addEventListener('change', () => {
         const nextId = slugInput.value.trim();
-        if (nextId && nextId !== cls.slug) {
+        if (nextId !== (cls.slug ?? '')) {
             const result = renameId(ctx.model, 'classes', cls.slug, nextId);
             if (result.ok) {
-                // Update selection before apply so re-render finds the class under its new slug
-                ctx.selection.id = nextId;
+                const normId = localId(result.model || ctx.model, nextId);
+                ctx.selection.id = normId;
                 const ok = ctx.apply(result);
-                if (!ok) ctx.selection.id = cls.slug;
+                if (ok) {
+                    ctx.select('classes', normId);
+                } else {
+                    ctx.selection.id = cls.slug;
+                }
             } else {
-                slugInput.value = cls.slug;
+                slugInput.value = cls.slug ?? '';
                 ctx.notify((result.errors || [{ code: 'bad-id', message: 'Invalid slug' }]).map(e => `${e.code}: ${e.message}`).join('\n'));
             }
         }
@@ -379,7 +421,6 @@ export function renderClasses(ctx) {
     const slugField = field(doc, 'ID (SLUG)', slugInput);
     nameSlugGrid.append(nameField, slugField);
 
-    // Inbound references count by typed target
     const fullId = `pack.${packId}/${cls.slug}`;
     const allRefs = ctx.model?.references || [];
     const inboundRefs = allRefs.filter(r => r.targetKind === 'classes' && (r.targetId === fullId || r.targetId === cls.slug));
@@ -390,7 +431,6 @@ export function renderClasses(ctx) {
     const breakdown = [...refsByKind.entries()].map(([k, n]) => `${k} (${n})`).join(', ');
     const refsNote = el(doc, 'div', `Renaming the ID updates every reference to it (${inboundRefs.length} places${breakdown ? ': ' + breakdown : ''}).`, { class: 'muted' });
 
-    // Parent select
     const parentSelect = el(doc, 'select', '', {
         id: 'class-parent',
         'data-path': JSON.stringify([...classPath, 'parent']),
@@ -399,15 +439,15 @@ export function renderClasses(ctx) {
     if (!cls.parent) rootOption.selected = true;
     parentSelect.append(rootOption);
 
-    const validParents = getValidParentCandidates(classes, cls, packId);
+    const validParents = getValidParentCandidates(ctx.model, validClasses, cls);
     for (const cand of validParents) {
-        const opt = el(doc, 'option', `${cand.name || cand.slug} (${cand.slug} · Tier ${cand.tier})`, { value: cand.slug });
-        if (cls.parent && localId(ctx.model, cls.parent) === cand.slug) opt.selected = true;
+        const cSlug = localId(ctx.model, cand.slug);
+        const opt = el(doc, 'option', `${cand.name || cSlug} (${cSlug} · Tier ${cand.tier})`, { value: cSlug });
+        if (cls.parent && localId(ctx.model, cls.parent) === cSlug) opt.selected = true;
         parentSelect.append(opt);
     }
 
-    // If current parent is not among valid candidates (e.g. invalid draft), keep it visible
-    if (cls.parent && !validParents.some(c => c.slug === localId(ctx.model, cls.parent))) {
+    if (cls.parent && !validParents.some(c => localId(ctx.model, c.slug) === localId(ctx.model, cls.parent))) {
         const opt = el(doc, 'option', `${cls.parent} (invalid parent)`, { value: cls.parent });
         opt.selected = true;
         parentSelect.append(opt);
@@ -416,12 +456,11 @@ export function renderClasses(ctx) {
     parentSelect.addEventListener('change', () => {
         const newParent = parentSelect.value || null;
         if (newParent !== (cls.parent || null)) {
-            ctx.apply(moveClass(ctx.model, cls.slug, newParent));
+            if (!ctx.apply(moveClass(ctx.model, cls.slug, newParent))) parentSelect.value = localId(ctx.model, cls.parent) || '';
         }
     });
     const parentField = field(doc, 'PARENT', parentSelect);
 
-    // Skills group
     const skillsGroup = el(doc, 'div', '', {
         id: 'class-skills',
         tabindex: '-1',
@@ -437,11 +476,11 @@ export function renderClasses(ctx) {
     skillsHeader.append(skillsTitle, skillsCount);
     skillsGroup.append(skillsHeader);
 
-    const availableSkills = records(ctx.model, 'skills');
+    const availableSkills = records(ctx.model, 'skills').filter(s => s && typeof s === 'object');
     const slotCount = Math.max(3, currentSkills.length);
 
     for (let slotIdx = 0; slotIdx < slotCount; slotIdx++) {
-        const currentSlotSkill = currentSkills[slotIdx] || '';
+        const currentSlotSkill = localId(ctx.model, currentSkills[slotIdx]) || '';
         const row = el(doc, 'div', '', { class: 'skill-row' });
 
         const select = el(doc, 'select', '', {
@@ -471,7 +510,7 @@ export function renderClasses(ctx) {
 
         select.addEventListener('change', () => {
             const picked = select.value;
-            let nextSkills = [...(cls.skills || [])];
+            let nextSkills = Array.isArray(cls.skills) ? [...cls.skills] : [];
             if (!picked) {
                 if (slotIdx < nextSkills.length) {
                     nextSkills.splice(slotIdx, 1);
@@ -499,7 +538,6 @@ export function renderClasses(ctx) {
         skillsGroup.append(row);
     }
 
-    // Problems status box
     const clsProblems = getClassProblems(ctx.model, cls, cIdx);
     let problemBox = null;
     if (clsProblems.length > 0) {
@@ -507,21 +545,22 @@ export function renderClasses(ctx) {
         problemBox = el(doc, 'div', msg, { role: 'status', class: 'warning' });
     }
 
-    // Bottom actions: + Child class and Remove…
     const actionsRow = el(doc, 'div', '', { class: 'row' });
     const childBtn = button(doc, '+ Child class', () => {
         const slug = getUniqueClassSlug(ctx.model, `${cls.slug}-child`);
         const newRecord = {
             slug,
             name: '[CLASS NAME]',
-            tier: cls.tier + 1,
+            tier: (typeof cls.tier === 'number' ? cls.tier : 0) + 1,
             parent: cls.slug,
             skills: [],
         };
         const result = add(ctx.model, 'classes', newRecord);
         if (result.ok) {
             ctx.selection.id = slug;
-            ctx.apply(result);
+            if (ctx.apply(result)) {
+                ctx.select('classes', slug);
+            }
         } else {
             ctx.notify((result.errors || [{ code: 'add-failed', message: 'Could not add child class' }]).map(e => `${e.code}: ${e.message}`).join('\n'));
         }
@@ -539,9 +578,7 @@ export function renderClasses(ctx) {
     ctx.inspector.append(actionsRow);
 }
 
-/**
- * Opens the native modal cascade removal dialog.
- */
+// Opens the native modal cascade removal dialog.
 function openCascadeDialog(ctx, cls, invoker) {
     const previewResult = remove(ctx.model, 'classes', cls.slug, { cascade: true });
     if (!previewResult.ok) {
@@ -564,7 +601,7 @@ function openCascadeDialog(ctx, cls, invoker) {
         closeDialog();
     });
 
-    const title = el(ctx.doc, 'h2', `Remove ${cls.name}?`);
+    const title = el(ctx.doc, 'h2', `Remove ${cls.name || cls.slug}?`);
     const desc = el(ctx.doc, 'p', 'Other parts of the pack use it. Removing it also removes:');
     const list = el(ctx.doc, 'ul');
     for (const c of changes) {
