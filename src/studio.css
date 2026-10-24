@@ -104,3 +104,5 @@ button.danger.primary{background:color-mix(in srgb,var(--danger) 78%,#000);color
 .skills-breadcrumb{min-width:0;flex-wrap:wrap}.breadcrumb-current,.skills-title-row h1,.lower-tier-card-meta{overflow-wrap:anywhere;min-width:0;max-width:100%}.path-node-label{min-width:0}.node-budget-track{position:absolute;left:10px;right:10px;bottom:3px;width:auto;height:3px}.path-node{padding-bottom:5px}
 
 .node-budget-bar{display:block}
+
+.lower-tier-card-meta.warn{color:var(--warn-text)}

@@ -93,6 +93,16 @@ export function applyTransforms(parentForm, transforms) {
         if (typeof tr.op !== 'string') {
             throw new Error('Malformed transform: missing op');
         }
+        const indexed = ['set-target', 'set-element', 'set-power', 'replace-effect', 'remove-effect'];
+        if (indexed.includes(tr.op) && (!Number.isInteger(tr.at) || tr.at < 0 || tr.at >= form.effects.length)) {
+            throw new Error('Malformed transform: effect index is out of bounds');
+        }
+        if (tr.op === 'remove-effect' && form.effects.length <= 1) {
+            throw new Error('Malformed transform: cannot remove the sole effect');
+        }
+        if (tr.op === 'add-effect' && form.effects.length >= 4) {
+            throw new Error('Malformed transform: at most four effects are allowed');
+        }
         switch (tr.op) {
             case 'set-target': {
                 if (typeof tr.at !== 'number' || tr.at < 0 || tr.value === undefined) {
@@ -341,7 +351,8 @@ export function resolveSkillForms(model, skillSlug) {
             let form = resolvedForms?.[id];
             if (!form) {
                 try {
-                    form = applyTransforms(baseFormObj, branch?.transforms ?? []);
+                    if (!branch) throw new Error('Written branch has not been authored');
+                    form = applyTransforms(baseFormObj, branch.transforms);
                     delete form.powerScore;
                     form.id = id;
                     form.skill = baseFormObj.skill;
@@ -499,7 +510,8 @@ export function resolveSkillForms(model, skillSlug) {
                         };
                     } else if (parentNode?.form) {
                         try {
-                            form = applyTransforms(parentNode.form, branch?.transforms ?? []);
+                            if (!branch) throw new Error('Written branch has not been authored');
+                            form = applyTransforms(parentNode.form, branch.transforms);
                             delete form.powerScore;
                             form.id = id;
                             form.skill = baseFormObj.skill;
@@ -693,11 +705,12 @@ function renderLowerTierScreen(ctx, screen, skill, sIdx, ownerClass, tabSkills) 
         const stat = itemSkill?.base?.stat || SCHEMA_STATS[0];
         const costMp = itemSkill?.base?.cost?.mp ?? 0;
         const costSp = itemSkill?.base?.cost?.sp ?? 0;
-        const score = powerScore(itemSkill?.base || {}).score ?? 0;
+        const scoreResult = powerScore(itemSkill?.base || {});
+        const score = scoreResult.ok ? scoreResult.score : 'unavailable';
         const budget = budgetFor(tier, 0);
 
         const metaRow = el(doc, 'div', `${ts.slug} · ${type} · ${stat} · MP: ${costMp}, SP: ${costSp} · Power: ${score} / ${budget}`, {
-            class: 'lower-tier-card-meta',
+            class: scoreResult.ok ? 'lower-tier-card-meta' : 'lower-tier-card-meta warn',
         });
 
         card.append(headerRow, metaRow);
@@ -1169,8 +1182,9 @@ function renderBranchControls(ctx, node) {
         const curTransforms = Array.isArray(branch.transforms) ? JSON.parse(JSON.stringify(branch.transforms)) : [];
         const isPhysical = node.form?.type === 'physical';
         const newCost = {
-            mp: isPhysical ? 0 : val,
-            sp: isPhysical ? val : 0,
+            ...curCost,
+            mp: isPhysical ? (curCost.mp ?? 0) : val,
+            sp: isPhysical ? val : (curCost.sp ?? 0),
             cooldown: curCost.cooldown ?? 0,
         };
         const remaining = curTransforms.filter(t => !(t && typeof t === 'object' && t.op === 'set-cost'));

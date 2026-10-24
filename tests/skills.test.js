@@ -775,3 +775,48 @@ test('T3-17: Malformed base effects show unavailable scores and remain repairabl
         assert.match(ctx.inspector.querySelector('.budget-ratio').textContent, /\d+ \/ \d+/);
     }
 });
+
+test('T3-18: Changing branch cost preserves other resource and cooldown in an invalid draft', () => {
+    const pack = smallRulesPack();
+    pack.content.rules[0].skills[9].base.cost = { mp: 7, sp: 2, cooldown: 3 };
+    const ctx = createTestContext(pack);
+    ctx.onRender = () => renderScreen(ctx);
+    ctx.select('skills', 's30', 'a');
+    const cost = ctx.inspector.querySelector('#form-cost');
+    cost.value = '5';
+    cost.dispatchEvent({ type: 'change' });
+    const branch = ctx.model.document.content.rules[0].branches.find(b => b.slug === 's30-base-a');
+    assert.deepEqual(branch.transforms.at(-1).value, { mp: 7, sp: 5, cooldown: 3 });
+    assert.equal(ctx.model.validation.ok, false);
+});
+
+test('T3-19: Missing written forms and their descendants have no fabricated preview', () => {
+    const pack = smallRulesPack();
+    pack.content.rules[0].branches = pack.content.rules[0].branches.filter(b => b.slug !== 's30-base-a' && b.slug !== 's30-base-b-a');
+    const nodes = resolveSkillForms(openPack(pack), 's30');
+    for (const key of ['a', 'a-a', 'a-g', 'a-b', 'b-a']) {
+        assert.equal(nodes.find(n => n.key === key).previewUnavailable, true, key);
+    }
+    assert.match(nodes.find(n => n.key === 'a').error, /not been authored/);
+});
+
+test('T3-20: Invalid transform indexes and effect counts cannot produce a good preview', () => {
+    const base = smallRulesPack().content.rules[0].skills[9].base;
+    for (const at of [-1, 0.5, 4]) {
+        assert.throws(() => applyTransforms(base, [{ op: 'set-power', at, value: 2 }]), /index/);
+    }
+    assert.throws(() => applyTransforms(base, [{ op: 'remove-effect', at: 0 }]), /sole effect/);
+    const full = { ...base, effects: Array(4).fill(base.effects[0]) };
+    assert.throws(() => applyTransforms(full, [{ op: 'add-effect', value: base.effects[0] }]), /four effects/);
+});
+
+test('T3-21: Lower-tier list warns when the base score is unavailable', () => {
+    const pack = smallRulesPack();
+    pack.content.rules[0].skills[0].base.effects = [];
+    const ctx = createTestContext(pack);
+    ctx.onRender = () => renderScreen(ctx);
+    ctx.select('skills', 's00');
+    const meta = ctx.main.querySelector('.lower-tier-card-meta');
+    assert.match(meta.textContent, /Power: unavailable/);
+    assert.equal(meta.classList.contains('warn'), true);
+});
