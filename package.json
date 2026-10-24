@@ -1,6 +1,7 @@
 {
   "name": "story-studio",
   "version": "0.1.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "description": "Story Studio: the pack editor and creator kit for the Story Suite (SillyTavern).",
   "type": "module",

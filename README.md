@@ -15,4 +15,4 @@ Status: part 1, the engine (open and export, edits with undo, a plain dev page).
 
 ## Licence
 
-GPL-3.0, as Story Block. See LICENSE.
+AGPL-3.0, as Story Block, whose code Studio bundles. See LICENSE.
