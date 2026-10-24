@@ -660,7 +660,7 @@ export function indexReferences(document) {
 
 /**
  * Opens a rules pack from a JSON string or plain object.
- * Returns an immutable snapshot model { document, validation, references, hash }.
+ * Returns an immutable snapshot model { document, validation, references, rulesHash, packHash }.
  */
 export function openPack(json) {
     let parsedInput = json;
