@@ -119,7 +119,8 @@ test('golden seed tree structure: 4 tiers, 3 skills/class (12 total), 24 branche
     const model = openPack(pack);
     assert.equal(model.validation.ok, true);
     assert.equal(model.validation.errors.length, 0);
-    assert.ok(typeof model.hash === 'string' && model.hash.length === 64);
+    assert.ok(typeof model.rulesHash === 'string' && model.rulesHash.length === 64);
+    assert.ok(typeof model.packHash === 'string' && model.packHash.length === 64);
 });
 
 test('canonical round trip twice equals shared exporter and hash parity', () => {
@@ -130,7 +131,8 @@ test('canonical round trip twice equals shared exporter and hash parity', () => 
     // First round trip: open authored pack object -> export
     const model1 = openPack(pack);
     assert.equal(model1.validation.ok, true);
-    assert.equal(model1.hash, sharedExp.hash);
+    assert.equal(model1.rulesHash, sharedExp.rulesHash);
+    assert.equal(model1.packHash, sharedExp.packHash);
 
     const text1 = exportPack(model1);
     assert.equal(text1, sharedExp.text);
@@ -138,7 +140,8 @@ test('canonical round trip twice equals shared exporter and hash parity', () => 
     // Second round trip: open exported canonical text -> export again
     const model2 = openPack(text1);
     assert.equal(model2.validation.ok, true);
-    assert.equal(model2.hash, model1.hash);
+    assert.equal(model2.rulesHash, model1.rulesHash);
+    assert.equal(model2.packHash, model1.packHash);
     assert.deepEqual(model2.document, model1.document);
 
     const text2 = exportPack(model2);
@@ -227,7 +230,8 @@ test('malformed JSON returns null document, structured errors, and export throws
 
     assert.equal(model.document, null);
     assert.equal(model.validation.ok, false);
-    assert.equal(model.hash, null);
+    assert.equal(model.rulesHash, null);
+    assert.equal(model.packHash, null);
     assert.deepEqual(model.references, []);
     assert.ok(model.validation.errors.length > 0);
     assert.equal(model.validation.errors[0].code, 'bad-schema');
@@ -262,7 +266,8 @@ test('invalid documents remain editable with checker errors and indexed referenc
 
     assert.equal(model.validation.ok, false);
     assert.ok(model.validation.errors.length > 0);
-    assert.equal(model.hash, null);
+    assert.equal(model.rulesHash, null);
+    assert.equal(model.packHash, null);
 
     // Authored document is preserved safely for editing
     assert.ok(model.document !== null);
@@ -349,7 +354,7 @@ test('complete reference paths including generated parent form, foreign place/NP
                 xp: 50,
                 items: [{ def: 'potion', qty: 2 }],
             },
-            chain: { previous: null, next: 'mill-defense' },
+            chain: { previous: null, next: 'mill-followup' },
             durationMinutes: 1440,
             repeat: null,
         }],
@@ -373,6 +378,9 @@ test('complete reference paths including generated parent form, foreign place/NP
             stat: 'STR+DEX',
         }],
     });
+
+    pack.content.quests.push({ ...structuredClone(pack.content.quests[0]),
+        slug: 'mill-followup', name: 'Mill follow-up', requirements: [], chain: null });
 
     // Add SB routes, events (omitting after rather than null), and start inventory
     pack.content.routes = [
@@ -542,7 +550,7 @@ test('complete reference paths including generated parent form, foreign place/NP
     assert.equal(qRewardItem.targetId, 'pack.fixture/potion');
 
     const qChainNext = refs.find(r => r.kind === 'quests' && r.path.join('.').includes('chain.next'));
-    assert.equal(qChainNext.targetId, 'pack.fixture/mill-defense');
+    assert.equal(qChainNext.targetId, 'pack.fixture/mill-followup');
 
     // 10. Shop place and stock item
     const shopPlace = refs.find(r => r.kind === 'shops' && r.targetKind === 'places');
@@ -1028,7 +1036,8 @@ test('preserves invalid-but-plain authored doc with extra large plain array and 
     assert.equal(model.validation.ok, false);
     assert.ok(model.document !== null);
     assert.equal(model.document.extra.length, 180);
-    assert.equal(model.hash, null);
+    assert.equal(model.rulesHash, null);
+    assert.equal(model.packHash, null);
 
     const parentRef = model.references.find(
         r => r.kind === 'classes' && r.path.join('.') === 'content.rules.0.classes.0.parent'
@@ -1154,7 +1163,8 @@ test('canonical export exceeding 512 KiB handled as immutable invalid model pres
     // openPack handles export failure as immutable invalid model: never parses undefined or throws
     const model = openPack(pack);
     assert.equal(model.validation.ok, false);
-    assert.equal(model.hash, null);
+    assert.equal(model.rulesHash, null);
+    assert.equal(model.packHash, null);
     assert.deepEqual(model.validation.errors, exportRes.errors);
 
     // Authored document preserved for editing
@@ -1185,10 +1195,60 @@ test('hostile proxy trap does not throw in openPack or indexReferences', () => {
     const model = openPack(hostile);
     assert.equal(model.validation.ok, false);
     assert.equal(model.document, null);
-    assert.equal(model.hash, null);
+    assert.equal(model.rulesHash, null);
+    assert.equal(model.packHash, null);
     assert.deepEqual(model.references, []);
 
     // indexReferences must return empty array without throwing
     const refs = indexReferences(hostile);
     assert.deepEqual(refs, []);
+});
+
+test('model exposes both shared hashes with distinct rules and envelope scope', () => {
+    const pack = smallRulesPack();
+    const original = openPack(pack);
+    const checked = validateRulesPack(pack);
+    assert.equal(original.rulesHash, checked.rulesHash);
+    assert.equal(original.packHash, checked.packHash);
+    assert.equal(Object.hasOwn(original, 'hash'), false);
+    const renamed = openPack({ ...pack, name: 'Renamed pack' });
+    assert.equal(renamed.validation.ok, true);
+    assert.equal(renamed.rulesHash, original.rulesHash);
+    assert.notEqual(renamed.packHash, original.packHash);
+    pack.content.rules[0].skills[0].name = 'Renamed skill';
+    const changedRules = openPack(pack);
+    assert.equal(changedRules.validation.ok, true);
+    assert.notEqual(changedRules.rulesHash, original.rulesHash);
+    assert.notEqual(changedRules.packHash, original.packHash);
+    const reopened = openPack(exportPack(changedRules));
+    assert.equal(reopened.rulesHash, changedRules.rulesHash);
+    assert.equal(reopened.packHash, changedRules.packHash);
+});
+
+test('rules packs must declare the shared capability, including safe invalid drafts', () => {
+    const pack = smallRulesPack();
+    pack.requires.capabilities = [];
+    const checked = validateRulesPack(pack);
+    const model = openPack(pack);
+    assert.equal(checked.ok, false);
+    assert.equal(model.validation.ok, false);
+    assert.deepEqual(model.validation.errors, checked.errors);
+    assert.ok(model.validation.errors.some(e => e.code === 'MISSING_CAPABILITY'));
+    assert.ok(model.document);
+    assert.equal(model.rulesHash, null);
+    assert.equal(model.packHash, null);
+    assert.throws(() => exportPack(model));
+    pack.requires.capabilities = ['rb-rules-v2'];
+    assert.equal(openPack(pack).validation.ok, true);
+});
+
+test('JSON text keeps shared duplicate-key validation before editing', () => {
+    const text = JSON.stringify(smallRulesPack()).replace('"id":"fixture"', '"id":"fixture","id":"fixture"');
+    const checked = validateRulesPack(text);
+    const model = openPack(text);
+    assert.equal(checked.ok, false);
+    assert.equal(model.validation.ok, false);
+    assert.deepEqual(model.validation.errors, checked.errors);
+    assert.ok(model.validation.errors.some(e => e.code === 'dup-id'));
+    assert.throws(() => exportPack(model));
 });

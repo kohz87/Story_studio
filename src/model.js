@@ -680,7 +680,8 @@ export function openPack(json) {
                     warnings: [],
                 },
                 references: [],
-                hash: null,
+                rulesHash: null,
+                packHash: null,
             });
         }
         try {
@@ -703,7 +704,8 @@ export function openPack(json) {
                 warnings: [],
             },
             references: [],
-            hash: null,
+            rulesHash: null,
+            packHash: null,
         });
     }
 
@@ -721,11 +723,12 @@ export function openPack(json) {
                 warnings: validation.warnings ?? [],
             },
             references: [],
-            hash: null,
+            rulesHash: null,
+            packHash: null,
         });
     }
 
-    const checkResult = validateRulesPack(parsedInput);
+    const checkResult = validateRulesPack(typeof json === 'string' ? json : parsedInput);
 
     if (checkResult.ok) {
         const exportResult = exportRulesV2(checkResult.pack);
@@ -744,7 +747,8 @@ export function openPack(json) {
                     warnings: checkResult.warnings ?? [],
                 },
                 references,
-                hash: null,
+                rulesHash: null,
+                packHash: null,
             });
         }
 
@@ -759,7 +763,8 @@ export function openPack(json) {
                 warnings: checkResult.warnings ?? [],
             },
             references,
-            hash: checkResult.hash,
+            rulesHash: checkResult.rulesHash,
+            packHash: checkResult.packHash,
         });
     }
 
@@ -774,7 +779,8 @@ export function openPack(json) {
                 warnings: checkResult.warnings ?? [],
             },
             references: [],
-            hash: null,
+            rulesHash: null,
+            packHash: null,
         });
     }
 
@@ -788,7 +794,8 @@ export function openPack(json) {
             warnings: checkResult.warnings ?? [],
         },
         references,
-        hash: null,
+        rulesHash: null,
+        packHash: null,
     });
 }
 
