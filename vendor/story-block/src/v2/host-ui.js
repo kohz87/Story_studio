@@ -961,7 +961,7 @@ export function renderSettingsHost(root, { registry, settings, doc = globalThis.
 
     // Versions (compat.js): each module, its version, the Story Block it needs, and what is out of step.
     function versionsFold() {
-        const report = compatReport({ hostVersion: registry.hostVersion?.() ?? '', modules: registry.modules(), refusals: registry.refusals?.() ?? [] });
+        const report = compatReport({ hostVersion: registry.hostVersion?.() ?? '', modules: registry.modules(), refusals: registry.refusals?.() ?? [], lifecycle: id => registry.lifecycle?.(id) ?? null });
         const { details, body } = fold(doc, VERSIONS_FOLD, 'Versions', report.outOfStep ? `${report.outOfStep} out of step` : 'all in step');
         if (report.outOfStep) details.classList.add('story-suite-fold-warn');
         note('panel', VERSIONS_FOLD, { label: 'Versions', help: report.outOfStep ? `${report.outOfStep} out of step` : 'all in step' }, 'Modules', details);
@@ -1067,7 +1067,7 @@ export function createTabHost(root, { registry, view, api = null, doc = globalTh
         const tabs = registry.tabs();
         if (!tabs.some(tab => tab.id === current)) current = tabs[0]?.id ?? null;
         // An active tab's alert (a red dot) takes the last pinned slot while it has something to show (screen-bar.js pinAlerts).
-        bar.update({ items: pinAlerts(tabs.map(tab => ({ id: tab.id, label: tab.title, icon: iconFor(tab.id, tab.icon), alert: tab.alert === true }))), current: current ?? '' });
+        bar.update({ items: pinAlerts(tabs.map(tab => ({ id: tab.id, label: tab.title, icon: iconFor(tab.id, tab.icon), alert: tab.alert === true, alertText: tab.alertText ?? '' }))), current: current ?? '' });
         // The pane's widgets go before the pane is drawn again (a redraw of the same tab too): their listeners and observers.
         dispose(pane);
         if (typeof release === 'function') { try { release(); } catch { /* a tab's cleanup failing must not block the redraw */ } }
