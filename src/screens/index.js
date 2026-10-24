@@ -1,6 +1,8 @@
 import { el } from '../dom.js';
 import { renderClasses } from './classes.js';
 import { renderSkills } from './skills.js';
+import { renderRecords } from './records.js';
+import { KINDS } from '../records.js';
 
 export function renderScreen(ctx) {
     if (ctx.selection.kind === 'classes' && ctx.model?.document) {
@@ -9,6 +11,10 @@ export function renderScreen(ctx) {
     }
     if (ctx.selection.kind === 'skills' && ctx.model?.document) {
         renderSkills(ctx);
+        return;
+    }
+    if (ctx.selection.kind !== 'check' && ctx.model?.document && KINDS.includes(ctx.selection.kind)) {
+        renderRecords(ctx);
         return;
     }
     ctx.main.append(el(ctx.doc, 'h1', ctx.selection.kind === 'check' ? 'Check and export' : 'Pack editor'));
