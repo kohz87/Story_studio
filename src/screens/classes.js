@@ -1,6 +1,6 @@
 import { safeLabel, el, button, field } from '../dom.js';
 import { KINDS, LABELS, records, identity, localId } from '../records.js';
-import { add, renameId, remove, moveClass, setField } from '../edits.js';
+import { add, addClassSkill, renameId, remove, moveClass, setField } from '../edits.js';
 import { schemaForKind, validateField } from '../form-schema.js';
 import { validateRulesPack } from '../../vendor/story-block/src/v2/packs/rules-v2.js';
 
@@ -540,6 +540,10 @@ export function renderClasses(ctx) {
 
         skillsGroup.append(row);
     }
+
+    const addSkill = button(doc, '+ Skill', () => ctx.apply(addClassSkill(ctx.model, cls.slug)));
+    addSkill.disabled = currentSkills.length >= 3;
+    skillsGroup.append(addSkill);
 
     const clsProblems = getClassProblems(ctx.model, cls, cIdx);
     let problemBox = null;

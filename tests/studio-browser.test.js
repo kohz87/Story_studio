@@ -102,6 +102,11 @@ async function checkAccessibility(page) {
             if (node.tagName === 'BUTTON' && !node.textContent.trim() && !node.getAttribute('aria-label')) findings.push('Unlabelled button');
         }
         if (document.documentElement.scrollWidth > document.documentElement.clientWidth) findings.push('Horizontal page overflow');
+        for (const node of document.querySelectorAll('*')) {
+            const box = node.getBoundingClientRect();
+            if (box.width && box.height && ['auto', 'scroll'].includes(getComputedStyle(node).overflowX)
+                && node.scrollWidth > node.clientWidth + 1) findings.push('Horizontal scroller: ' + node.tagName + ' ' + node.className);
+        }
         return findings;
     });
     assert.deepEqual(findings, []);
@@ -181,6 +186,14 @@ for (const theme of ['dark', 'light']) for (const width of [1280, 1024]) {
             await page.locator('#class-skills select').nth(2).selectOption('s02');
             assert.equal(await page.locator('.topbar button.primary').isEnabled(), true);
 
+            await selectClass(page, 'c3');
+            await page.locator('#class-parent').selectOption('c0');
+            await page.getByRole('button', { name: /^Problems \(/ }).click();
+            await page.locator('.problems-drawer .problem-row').filter({ hasText: 'classes[3].tier' }).first().getByRole('button').click();
+            assert.equal(await page.evaluate(() => document.activeElement.id), 'class-parent');
+            await checkAccessibility(page);
+            await page.getByRole('button', { name: 'Undo', exact: true }).click();
+
             const bytes = await download(page);
             assert.deepEqual(bytes, Buffer.from(exportPack(openPack(golden))));
             const reopened = openPack(bytes.toString('utf8'));
@@ -222,6 +235,33 @@ for (const theme of ['dark', 'light']) for (const width of [1280, 1024]) {
             const listId = await place.getAttribute('list');
             assert.ok((await page.locator('[id="' + listId + '"] option').evaluateAll(nodes => nodes.map(n => n.value))).includes('pack.fixture/haven'));
             assert.ok(await page.locator('.inspector-body select option[value="s00"]').count() > 0);
+            await place.fill('pack.fixture/mill'); await place.press('Tab');
+            assert.equal(await page.locator('.topbar button.primary').isEnabled(), true);
+            await checkAccessibility(page);
+
+            await navigate(page, 'Foes'); await closeInspector(page);
+            await page.locator('.record-card').first().click();
+            const level = page.locator("input[data-path='[\"content\",\"creatures\",0,\"level\"]']");
+            await level.fill('0'); await level.press('Tab');
+            assert.equal(await level.inputValue(), '1');
+            assert.match(await page.locator('.notice').textContent(), /^bad-value:/);
+            assert.equal(await page.locator('.topbar button.primary').isEnabled(), true);
+            await checkAccessibility(page);
+
+            await upload(page, golden);
+            await selectClass(page, 'c2');
+            await page.getByRole('button', { name: '+ Child class', exact: true }).click();
+            for (let n = 0; n < 3; n++) {
+                await page.getByRole('button', { name: '+ Skill', exact: true }).click();
+                await checkAccessibility(page);
+            }
+            assert.equal(await page.locator('.topbar button.primary').isEnabled(), true);
+            await page.getByRole('button', { name: 'Undo', exact: true }).click();
+            assert.equal(await page.locator('.topbar button.primary').isDisabled(), true);
+            await page.getByRole('button', { name: 'Redo', exact: true }).click();
+            assert.equal(await page.locator('.topbar button.primary').isEnabled(), true);
+            await page.getByRole('button', { name: 'Open new-skill in skills', exact: true }).click();
+            assert.equal(await page.locator('.path-node-gen').count(), 4);
             await checkAccessibility(page);
         });
     });
@@ -231,10 +271,12 @@ test('hostile packs stay literal and unsafe input preserves the current draft', 
     await withPage({}, async page => {
         const hostile = smallRulesPack();
         hostile.name = '<b>x</b>';
-        hostile.content.rules[0].classes[0].name = '<b>x</b>';
+        hostile.content.rules[0].classes[0].name = { toString: null };
+        hostile.content.rules[0].skills[0].name = { toString: null };
         hostile.content.rules[0].classes[0].slug = '<b>x</b>';
         await upload(page, hostile);
         assert.ok((await page.locator('.classes-screen').textContent()).includes('<b>x</b>'));
+        assert.ok((await page.locator('.classes-screen').textContent()).includes('{"toString":null}'));
         assert.equal(await page.locator('#studio b,#studio script,#studio iframe').count(), 0);
         assert.equal(await page.locator('.topbar button.primary').isDisabled(), true);
         await upload(page, '{"id":"fixture","__proto__":{"polluted":true}}');

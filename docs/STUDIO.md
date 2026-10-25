@@ -200,6 +200,15 @@ function add(model: object, kind: string, record: object): EditSuccess | EditRef
 - Prevents collisions with reserved or generated form IDs (`<skill>-base`, `<skill>-base-g`, `<skill>-base-a`, etc.).
 - Written branches require derived slug alignment matching `${fromForm}-${choice}`.
 
+#### `addClassSkill(model, classId)`
+
+Creates a skill named `[YOUR SKILL NAME]`, assigns it to the class, and returns one edit result with an undo
+closure restoring the original snapshot. Slugs use the same namespace and derived-form collision checks as `add`.
+A tier-3 skill also receives eight written branches named `[YOUR FORM NAME]`, including branches from the generated
+step-1 parent; generated forms remain checker output. Lower tiers receive only the base skill. Missing owners,
+malformed class containers, and classes already at the skill limit are refused without committing partial work.
+The class inspector's `+ Skill` action commits this result through history, so Undo/Redo includes the entire graph.
+
 #### `renameId(model, kind, id, nextId)`
 
 Renames a record and re-links all inbound typed references atomically.
@@ -605,3 +614,21 @@ npm run sync-sb -- --from /tmp/s1work/Story_block
   matrix 1
   ```
 - **Integrity Rule**: Files under `vendor/story-block/` are never edited manually.
+
+
+## Remaining shared-constant follow-ups
+
+The checker and rules schema remain authoritative. These local copies still need consolidation with upstream exports:
+
+- `src/edits.js`: the skill-slug limit `52` has no dedicated export. Safety fallbacks repeat depth `16`, array `1000`,
+  keys `200`, string `4000`, and pack bytes `512 * 1024`; normal execution uses `RULES_V2_LIMITS`.
+- `src/model.js` and `src/dev.js`: fallback safety limits remain beside the shared limits.
+- `src/screens/classes.js`: tier columns `0–3`, the three-skill UI count, four generated-path suffixes, and the
+  child-slug truncation length `54` remain local. `src/screens/skills.js` similarly carries the tier-3 check,
+  the fixed pathway layout and counts, cost bounds `0–999`, power bounds `1–1000`, and budget fallbacks `12 * (tier + 1)` and step increment `12`.
+- `src/form-schema.js`: host descriptors still repeat host name/slug/note lengths (`80`, `64`, `500`), slug patterns,
+  and host-specific field bounds. The rules-owned descriptors already resolve directly from the shared schema.
+
+The new skill operation uses `RULES_V2_PROGRESSION` for the skill count, maximum tier, pathway depth, and choices.
+Its minimal base effect and written transforms are authoring defaults; the shared checker validates their behavior
+and generated budget closure before export.

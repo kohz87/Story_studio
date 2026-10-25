@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { smallRulesPack } from './fixtures/smallRulesPack.js';
 
 import { openPack, exportPack } from '../src/model.js';
-import { add, renameId, remove, moveClass, setField } from '../src/edits.js';
+import { add, addClassSkill, renameId, remove, moveClass, setField } from '../src/edits.js';
 
 test('add operation is pure and appends record to kind collection', () => {
     const pack = smallRulesPack();
@@ -1544,4 +1544,23 @@ test('numeric-string paths enforce identity guards for records, collections and 
     assert.equal(exportPack(strings.model), exportPack(numeric.model));
     assert.equal(strings.model.rulesHash, numeric.model.rulesHash);
     assert.equal(strings.model.packHash, numeric.model.packHash);
+});
+
+
+test('addClassSkill creates lower-tier skills without branches and refuses full or missing owners', () => {
+    const original = openPack(smallRulesPack());
+    assert.equal(addClassSkill(original, 'missing').ok, false);
+    const full = addClassSkill(original, 'c0');
+    assert.equal(full.ok, false); assert.equal(full.model, original);
+    assert.equal(full.errors[0].code, 'class-skills');
+    const root = add(original, 'classes', { slug: 'new-skill', name: '[YOUR CLASS NAME]', tier: 0, parent: null, skills: [] }).model;
+    const created = addClassSkill(root, 'pack.fixture/new-skill');
+    assert.equal(created.ok, true);
+    assert.equal(created.undo(), root);
+    assert.equal(created.model.document.content.rules[0].branches.length, root.document.content.rules[0].branches.length);
+    const skill = created.model.document.content.rules[0].skills.at(-1);
+    assert.equal(skill.slug, 'new-skill-1', 'New skills respect the shared rules namespace');
+    assert.equal(skill.name, '[YOUR SKILL NAME]');
+    assert.deepEqual(created.model.document.content.rules[0].classes.at(-1).skills, [skill.slug]);
+    assert.deepEqual(root.document.content.rules[0].classes.at(-1).skills, [], 'The original snapshot is untouched');
 });

@@ -587,6 +587,64 @@ export function add(model, kind, record) {
     return commitSnapshot(newDoc, model);
 }
 
+/** Creates one owned skill and its authored pathways as a single undoable edit. */
+export function addClassSkill(model, classId) {
+    const refuse = (code, message) => ({ ok: false, model, errors: [{ code, path: 'content.rules.0.classes', message }] });
+    if (!model?.document) return refuse('bad-model', 'Open a pack first');
+    if (typeof classId !== 'string' || !classId) return refuse('bad-id', 'Choose a class ID');
+    const packId = getPackId(model.document);
+    const classes = readKindList(model.document, 'classes');
+    const index = Array.isArray(classes) ? classes.findIndex(cls => cls && normalizeId(cls.slug, packId) === normalizeId(classId, packId)) : -1;
+    if (index < 0) return refuse('not-found', 'Class not found');
+    const cls = classes[index];
+    if (!RULES_V2_PROGRESSION.tiers.includes(cls.tier) || !Array.isArray(cls.skills)) return refuse('bad-value', 'Repair the class tier and skills list first');
+    if (cls.skills.length >= RULES_V2_PROGRESSION.skillsPerClass) return refuse('class-skills', 'The class already has all its skills');
+    const skill = {
+        slug: 'new-skill',
+        name: '[YOUR SKILL NAME]',
+        base: {
+            type: 'physical', stat: 'STR', unit: null,
+            cost: { mp: 0, sp: 0, cooldown: 0 },
+            effects: [{ op: 'damage', target: 'one', power: 1, element: 'none', damageType: 'physical' }],
+        },
+    };
+    // Addition owns all namespace and derived-form collision checks.
+    const attempts = getAllExistingIdentities(model.document, packId).size + getAllReservedFormSlugs(model.document, packId).size + 1;
+    let result;
+    for (let n = 0; n <= attempts; n++) {
+        skill.slug = n ? `new-skill-${n}` : 'new-skill';
+        result = add(model, 'skills', skill);
+        if (result.ok || !result.errors.every(error => error.code === 'dup-id')) break;
+    }
+    if (!result.ok) return { ...result, model };
+    let next = result.model;
+    if (cls.tier === MAX_TIER) {
+        let parents = [`${skill.slug}-base`];
+        for (let step = 1; step <= PATHWAY_STEPS; step++) {
+            const children = [];
+            for (const parent of parents) {
+                for (const choice of WRITTEN_CHOICES) {
+                    const slug = `${parent}-${choice}`;
+                    result = add(next, 'branches', {
+                        slug, skill: skill.slug, fromForm: parent, step, choice,
+                        name: '[YOUR FORM NAME]',
+                        transforms: step === 1
+                            ? [{ op: 'set-element', at: 0, value: choice === WRITTEN_CHOICES[0] ? 'fire' : 'ice' }]
+                            : [choice === WRITTEN_CHOICES[0] ? { op: 'set-target', at: 0, value: 'all' } : { op: 'set-element', at: 0, value: 'lightning' }],
+                    });
+                    if (!result.ok) return { ...result, model };
+                    next = result.model;
+                    children.push(slug);
+                }
+                children.push(`${parent}-${GENERATED_CHOICE}`);
+            }
+            parents = children;
+        }
+    }
+    result = setField(next, ['content', 'rules', 0, 'classes', index, 'skills'], [...cls.skills, skill.slug]);
+    return result.ok ? { ...result, undo: () => model } : { ...result, model };
+}
+
 /**
  * Renames a record and all inbound typed references atomically.
  * Preserves literal note and name strings and rebases derived skill graphs.

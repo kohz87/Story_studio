@@ -426,3 +426,34 @@ test('T2-12: qualified skills remain selected, malformed skill arrays are repair
     assert.equal(ctx2.model.document.content.rules[0].classes.length, 5);
     assert.ok(ctx2.selection.id.length <= 64);
 });
+
+test('a child class can create three owned skills and written pathways with atomic undo and redo', () => {
+    const ctx = createTestContext(smallRulesPack()); ctx.onRender = () => renderClasses(ctx);
+    ctx.select('classes', 'c2');
+    ctx.inspector.querySelectorAll('button').find(node => node.textContent === '+ Child class').click();
+    const child = ctx.selection.id;
+    assert.equal(ctx.model.validation.ok, false);
+    const initial = ctx.model;
+    for (let n = 0; n < 3; n++) {
+        const before = ctx.model;
+        const add = ctx.inspector.querySelectorAll('button').find(node => node.textContent === '+ Skill');
+        assert.ok(add, 'The class inspector offers skill creation');
+        add.click();
+        const after = ctx.model;
+        const cls = after.document.content.rules[0].classes.find(record => record.slug === child);
+        assert.equal(cls.skills.length, n + 1);
+        const slug = cls.skills[n];
+        const skill = after.document.content.rules[0].skills.find(record => record.slug === slug);
+        assert.equal(skill.name, '[YOUR SKILL NAME]');
+        const branches = after.document.content.rules[0].branches.filter(record => record.skill === slug);
+        assert.equal(branches.length, 8);
+        assert.ok(branches.every(branch => ['a', 'b'].includes(branch.choice)), 'Generated forms stay generated');
+        assert.ok(branches.some(branch => branch.fromForm === `${slug}-base-g`));
+        ctx.history.undo(); ctx.changed(); assert.equal(ctx.model, before);
+        ctx.history.redo(); ctx.changed(); assert.equal(ctx.model, after);
+    }
+    assert.equal(ctx.model.validation.ok, true, JSON.stringify(ctx.model.validation.errors));
+    assert.equal(ctx.inspector.querySelectorAll('button').find(node => node.textContent === '+ Skill').disabled, true);
+    for (let n = 0; n < 3; n++) ctx.history.undo();
+    ctx.changed(); assert.equal(ctx.model, initial);
+});
