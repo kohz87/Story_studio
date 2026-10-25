@@ -289,6 +289,28 @@ for (const theme of ['dark', 'light']) for (const width of [1280, 1024]) {
             assert.equal(await page.evaluate(() => localStorage.getItem('story-studio-draft')), effectsSaved);
             assert.equal(await page.locator('.topbar button.primary').isEnabled(), true);
 
+            const eight = transform => JSON.stringify(Array.from({ length: 8 }, () => ({ ...transform })));
+            await page.locator('#form-transforms').evaluate(node => { node.closest('details').open = true; });
+            await change(page, '#form-transforms', eight({ op: 'set-element', at: 0, value: 'fire' }));
+            const quickEditSaved = await page.evaluate(() => localStorage.getItem('story-studio-draft'));
+            for (const [selector, value, stored] of [['#form-power', '2', '80'], ['#form-cost', '2', '1']]) {
+                await change(page, selector, value);
+                assert.equal(await page.locator(selector).inputValue(), stored);
+                assert.match(await page.locator('.notice').textContent(), /^bad-value:/);
+                assert.equal(await page.evaluate(() => localStorage.getItem('story-studio-draft')), quickEditSaved);
+                assert.equal(await page.locator('.topbar button.primary').isEnabled(), true);
+            }
+            await page.getByRole('button', { name: 'Undo', exact: true }).click();
+            assert.equal(await page.locator('#form-transforms').inputValue(), transformsBefore);
+            await page.locator('#form-transforms').evaluate(node => { node.closest('details').open = true; });
+            await change(page, '#form-transforms', eight({ op: 'set-stat', value: 'DEX' }));
+            const effectEditSaved = await page.evaluate(() => localStorage.getItem('story-studio-draft'));
+            await page.locator('#form-effect').selectOption('ice');
+            assert.equal(await page.locator('#form-effect').inputValue(), 'none');
+            assert.match(await page.locator('.notice').textContent(), /^bad-value:/);
+            assert.equal(await page.evaluate(() => localStorage.getItem('story-studio-draft')), effectEditSaved);
+            await page.getByRole('button', { name: 'Undo', exact: true }).click();
+
             await navigate(page, 'Quests'); await closeInspector(page);
             await page.locator('.record-card').first().click();
             await page.getByRole('button', { name: 'Add requirements item', exact: true }).click();
@@ -306,6 +328,24 @@ for (const theme of ['dark', 'light']) for (const width of [1280, 1024]) {
             await requiredPicker.getByRole('button', { name: 'Add', exact: true }).click();
             assert.equal(await requiredPicker.count(), 0);
             assert.equal(await page.locator('.topbar button.primary').isEnabled(), true);
+            await checkAccessibility(page);
+
+            const damagedSkills = smallRulesPack();
+            damagedSkills.content.rules[0].classes[1].skills = {};
+            await upload(page, damagedSkills);
+            await selectClass(page, 'c1');
+            const repair = page.getByRole('button', { name: 'Repair: reset skills list', exact: true });
+            await repair.click();
+            assert.equal(await repair.count(), 0);
+            assert.match(await page.locator('.skills-header').textContent(), /0 \/ 3/);
+            await page.getByRole('button', { name: '+ Skill', exact: true }).click();
+            assert.match(await page.locator('.skills-header').textContent(), /1 \/ 3/);
+            await page.getByRole('button', { name: 'Undo', exact: true }).click();
+            assert.match(await page.locator('.skills-header').textContent(), /0 \/ 3/);
+            await page.getByRole('button', { name: 'Undo', exact: true }).click();
+            assert.equal(await repair.isVisible(), true);
+            await page.getByRole('button', { name: 'Redo', exact: true }).click();
+            assert.equal(await repair.count(), 0);
             await checkAccessibility(page);
 
             await upload(page, golden);

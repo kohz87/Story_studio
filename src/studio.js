@@ -1,3 +1,4 @@
+import { applyEdit } from './apply-edit.js';
 import { openPack } from './model.js';
 import { setSchemaField as setField } from './edits.js';
 import { createHistory } from './history.js';
@@ -42,7 +43,7 @@ export function mountStudio(root) {
     brand.prepend(icon(doc, 'logo-mark'));
     const name = el(doc, 'input', '', { id: 'pack-name', placeholder: '[YOUR PACK NAME]', 'aria-label': 'Pack name' });
     name.addEventListener('change', () => {
-        if (!ctx.apply(setField(ctx.model, ['name'], name.value))) name.value = safeLabel(ctx.model?.document?.name ?? '');
+        applyEdit(ctx, setField(ctx.model, ['name'], name.value));
     });
     const fingerprint = el(doc, 'span', 'rules v2 · —', { class: 'fingerprint muted' });
     const undo = button(doc, '', () => {

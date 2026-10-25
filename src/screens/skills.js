@@ -1,3 +1,4 @@
+import { applyEdit } from '../apply-edit.js';
 import { safeLabel, el, field } from '../dom.js';
 import { records, localId } from '../records.js';
 import { validateField } from '../form-schema.js';
@@ -1006,7 +1007,7 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
         if (val !== (skill.name ?? '')) {
             const checked = validateField(rulesV2Schema.$defs.name, val);
             if (!checked.ok) { ctx.notify(`${checked.code}: ${checked.message}`); nameInput.value = safeLabel(skill.name ?? ''); return; }
-            if (!ctx.apply(setField(ctx.model, [...skillPath, 'name'], val))) {
+            if (!applyEdit(ctx, setField(ctx.model, [...skillPath, 'name'], val))) {
                 nameInput.value = safeLabel(skill.name ?? '');
             }
         }
@@ -1028,7 +1029,7 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
     mpInput.addEventListener('change', () => {
         const parsed = parseIntegerInput(mpInput.value, 0, 999);
         if (!parsed.ok) {
-            ctx.apply({
+            applyEdit(ctx, {
                 ok: false,
                 model: ctx.model,
                 errors: [{ code: 'bad-value', path: [...skillPath, 'base', 'cost', 'mp'].join('.'), message: parsed.error }],
@@ -1037,7 +1038,7 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
             return;
         }
         const curCost = typeof skill.base?.cost === 'object' && skill.base.cost !== null ? skill.base.cost : { mp: 0, sp: 0, cooldown: 0 };
-        ctx.apply(setField(ctx.model, [...skillPath, 'base', 'cost'], { ...curCost, mp: parsed.value }));
+        applyEdit(ctx, setField(ctx.model, [...skillPath, 'base', 'cost'], { ...curCost, mp: parsed.value }));
     });
     costGrid.append(field(doc, 'COST (MP)', mpInput));
 
@@ -1052,7 +1053,7 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
     spInput.addEventListener('change', () => {
         const parsed = parseIntegerInput(spInput.value, 0, 999);
         if (!parsed.ok) {
-            ctx.apply({
+            applyEdit(ctx, {
                 ok: false,
                 model: ctx.model,
                 errors: [{ code: 'bad-value', path: [...skillPath, 'base', 'cost', 'sp'].join('.'), message: parsed.error }],
@@ -1061,7 +1062,7 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
             return;
         }
         const curCost = typeof skill.base?.cost === 'object' && skill.base.cost !== null ? skill.base.cost : { mp: 0, sp: 0, cooldown: 0 };
-        ctx.apply(setField(ctx.model, [...skillPath, 'base', 'cost'], { ...curCost, sp: parsed.value }));
+        applyEdit(ctx, setField(ctx.model, [...skillPath, 'base', 'cost'], { ...curCost, sp: parsed.value }));
     });
     costGrid.append(field(doc, 'COST (SP)', spInput));
     ctx.inspector.append(costGrid);
@@ -1081,7 +1082,7 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
         typeSelect.append(current);
     }
     typeSelect.addEventListener('change', () => {
-        ctx.apply(setField(ctx.model, [...skillPath, 'base', 'type'], typeSelect.value));
+        applyEdit(ctx, setField(ctx.model, [...skillPath, 'base', 'type'], typeSelect.value));
     });
     ctx.inspector.append(field(doc, 'TYPE', typeSelect));
 
@@ -1100,7 +1101,7 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
         statSelect.append(current);
     }
     statSelect.addEventListener('change', () => {
-        ctx.apply(setField(ctx.model, [...skillPath, 'base', 'stat'], statSelect.value));
+        applyEdit(ctx, setField(ctx.model, [...skillPath, 'base', 'stat'], statSelect.value));
     });
     ctx.inspector.append(field(doc, 'STAT', statSelect));
 
@@ -1115,7 +1116,7 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
     effectsTextarea.addEventListener('change', () => {
         try {
             const parsed = JSON.parse(effectsTextarea.value);
-            if (!ctx.apply(setField(ctx.model, [...skillPath, 'base', 'effects'], parsed))) effectsTextarea.value = JSON.stringify(skill.base?.effects ?? [], null, 2);
+            if (!applyEdit(ctx, setField(ctx.model, [...skillPath, 'base', 'effects'], parsed))) effectsTextarea.value = JSON.stringify(skill.base?.effects ?? [], null, 2);
         } catch (err) {
             ctx.notify(`bad-value: Invalid JSON in effects: ${err.message}`);
             effectsTextarea.value = JSON.stringify(skill.base?.effects ?? [], null, 2);
@@ -1145,7 +1146,7 @@ function renderBranchControls(ctx, node) {
         if (val !== (branch.name ?? '')) {
             const checked = validateField(rulesV2Schema.$defs.name, val);
             if (!checked.ok) { ctx.notify(`${checked.code}: ${checked.message}`); nameInput.value = safeLabel(branch.name ?? ''); return; }
-            if (!ctx.apply(setField(ctx.model, [...branchPath, 'name'], val))) {
+            if (!applyEdit(ctx, setField(ctx.model, [...branchPath, 'name'], val))) {
                 nameInput.value = safeLabel(branch.name ?? '');
             }
         }
@@ -1173,7 +1174,7 @@ function renderBranchControls(ctx, node) {
     costInput.addEventListener('change', () => {
         const parsed = parseIntegerInput(costInput.value, 0, 999);
         if (!parsed.ok) {
-            ctx.apply({
+            applyEdit(ctx, {
                 ok: false,
                 model: ctx.model,
                 errors: [{ code: 'bad-value', path: [...branchPath, 'transforms'].join('.'), message: parsed.error }],
@@ -1192,7 +1193,7 @@ function renderBranchControls(ctx, node) {
         };
         const remaining = curTransforms.filter(t => !(t && typeof t === 'object' && t.op === 'set-cost'));
         remaining.push({ op: 'set-cost', value: newCost });
-        ctx.apply(setField(ctx.model, [...branchPath, 'transforms'], remaining));
+        applyEdit(ctx, setField(ctx.model, [...branchPath, 'transforms'], remaining));
     });
     costPowerGrid.append(field(doc, 'COST', costInput));
 
@@ -1208,7 +1209,7 @@ function renderBranchControls(ctx, node) {
     powerInput.addEventListener('change', () => {
         const parsed = parseIntegerInput(powerInput.value, 1, 1000);
         if (!parsed.ok) {
-            ctx.apply({
+            applyEdit(ctx, {
                 ok: false,
                 model: ctx.model,
                 errors: [{ code: 'bad-value', path: [...branchPath, 'transforms'].join('.'), message: parsed.error }],
@@ -1220,7 +1221,7 @@ function renderBranchControls(ctx, node) {
         const curTransforms = Array.isArray(branch.transforms) ? JSON.parse(JSON.stringify(branch.transforms)) : [];
         const remaining = curTransforms.filter(t => !(t && typeof t === 'object' && t.op === 'set-power' && (t.at === undefined || t.at === 0)));
         remaining.push({ op: 'set-power', at: 0, value: val });
-        ctx.apply(setField(ctx.model, [...branchPath, 'transforms'], remaining));
+        applyEdit(ctx, setField(ctx.model, [...branchPath, 'transforms'], remaining));
     });
     costPowerGrid.append(field(doc, 'POWER', powerInput));
     ctx.inspector.append(costPowerGrid);
@@ -1240,7 +1241,7 @@ function renderBranchControls(ctx, node) {
         const curTransforms = Array.isArray(branch.transforms) ? JSON.parse(JSON.stringify(branch.transforms)) : [];
         const remaining = curTransforms.filter(t => !(t && typeof t === 'object' && t.op === 'set-element' && (t.at === undefined || t.at === 0)));
         remaining.push({ op: 'set-element', at: 0, value: newElem });
-        ctx.apply(setField(ctx.model, [...branchPath, 'transforms'], remaining));
+        applyEdit(ctx, setField(ctx.model, [...branchPath, 'transforms'], remaining));
     });
     ctx.inspector.append(field(doc, 'EFFECT', effectSelect));
 
@@ -1255,7 +1256,7 @@ function renderBranchControls(ctx, node) {
     transformsTextarea.addEventListener('change', () => {
         try {
             const parsed = JSON.parse(transformsTextarea.value);
-            if (!ctx.apply(setField(ctx.model, [...branchPath, 'transforms'], parsed))) transformsTextarea.value = JSON.stringify(branch.transforms ?? [], null, 2);
+            if (!applyEdit(ctx, setField(ctx.model, [...branchPath, 'transforms'], parsed))) transformsTextarea.value = JSON.stringify(branch.transforms ?? [], null, 2);
         } catch (err) {
             ctx.notify(`bad-value: Invalid JSON in transforms: ${err.message}`);
             transformsTextarea.value = JSON.stringify(branch.transforms ?? [], null, 2);

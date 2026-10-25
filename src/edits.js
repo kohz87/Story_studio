@@ -588,6 +588,19 @@ export function add(model, kind, record) {
     return commitSnapshot(newDoc, model);
 }
 
+/** Resets a damaged skills container so skills can be added one at a time. */
+export function resetClassSkills(model, classId) {
+    const refuse = (code, message) => ({ ok: false, model, errors: [{ code, path: 'content.rules.0.classes', message }] });
+    if (!model?.document) return refuse('bad-model', 'Open a pack first');
+    if (typeof classId !== 'string' || !classId) return refuse('bad-id', 'Choose a class ID');
+    const packId = getPackId(model.document);
+    const classes = readKindList(model.document, 'classes');
+    const index = Array.isArray(classes) ? classes.findIndex(cls => cls && normalizeId(cls.slug, packId) === normalizeId(classId, packId)) : -1;
+    if (index < 0) return refuse('not-found', 'Class not found');
+    if (Array.isArray(classes[index].skills)) return refuse('bad-value', 'The skills list is already an array');
+    return setField(model, ['content', 'rules', 0, 'classes', index, 'skills'], []);
+}
+
 /** Creates one owned skill and its authored pathways as a single undoable edit. */
 export function addClassSkill(model, classId) {
     const refuse = (code, message) => ({ ok: false, model, errors: [{ code, path: 'content.rules.0.classes', message }] });

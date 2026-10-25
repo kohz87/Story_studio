@@ -1,6 +1,7 @@
+import { applyEdit } from '../apply-edit.js';
 import { safeLabel, el, button, field } from '../dom.js';
 import { KINDS, LABELS, records, identity, localId } from '../records.js';
-import { add, addClassSkill, renameId, remove, moveClass, setSchemaField as setField } from '../edits.js';
+import { add, addClassSkill, resetClassSkills, renameId, remove, moveClass, setSchemaField as setField } from '../edits.js';
 import { schemaForKind, validateField } from '../form-schema.js';
 import { validateRulesPack } from '../../vendor/story-block/src/v2/packs/rules-v2.js';
 
@@ -280,8 +281,7 @@ export function renderClasses(ctx) {
         };
         const result = add(ctx.model, 'classes', newRecord);
         if (result.ok) {
-            ctx.selection.id = slug;
-            if (ctx.apply(result)) {
+            if (applyEdit(ctx, result, { id: slug })) {
                 ctx.select('classes', slug);
             }
         } else {
@@ -392,7 +392,7 @@ export function renderClasses(ctx) {
         if (val !== (cls.name ?? '')) {
             const checked = validateField(schemaForKind('classes').properties.name, val);
             if (!checked.ok) { ctx.notify(`${checked.code}: ${checked.message}`); nameInput.value = safeLabel(cls.name ?? ''); return; }
-            if (!ctx.apply(setField(ctx.model, [...classPath, 'name'], val))) nameInput.value = safeLabel(cls.name ?? '');
+            applyEdit(ctx, setField(ctx.model, [...classPath, 'name'], val));
         }
     });
     const nameField = field(doc, 'NAME', nameInput);
@@ -408,12 +408,9 @@ export function renderClasses(ctx) {
             const result = renameId(ctx.model, 'classes', cls.slug, nextId);
             if (result.ok) {
                 const normId = localId(result.model || ctx.model, nextId);
-                ctx.selection.id = normId;
-                const ok = ctx.apply(result);
+                const ok = applyEdit(ctx, result, { id: normId });
                 if (ok) {
                     ctx.select('classes', normId);
-                } else {
-                    ctx.selection.id = cls.slug;
                 }
             } else {
                 slugInput.value = safeLabel(cls.slug ?? '');
@@ -459,7 +456,7 @@ export function renderClasses(ctx) {
     parentSelect.addEventListener('change', () => {
         const newParent = parentSelect.value || null;
         if (newParent !== (cls.parent || null)) {
-            if (!ctx.apply(moveClass(ctx.model, cls.slug, newParent))) parentSelect.value = safeLabel(localId(ctx.model, cls.parent) || '');
+            if (!applyEdit(ctx, moveClass(ctx.model, cls.slug, newParent))) parentSelect.value = safeLabel(localId(ctx.model, cls.parent) || '');
         }
     });
     const parentField = field(doc, 'PARENT', parentSelect);
@@ -478,6 +475,9 @@ export function renderClasses(ctx) {
     if (currentSkills.length !== 3) skillsCount.classList.add('warn-count');
     skillsHeader.append(skillsTitle, skillsCount);
     skillsGroup.append(skillsHeader);
+    if (!Array.isArray(cls.skills)) {
+        skillsGroup.append(button(doc, 'Repair: reset skills list', () => applyEdit(ctx, resetClassSkills(ctx.model, cls.slug))));
+    }
 
     const availableSkills = records(ctx.model, 'skills').filter(s => s && typeof s === 'object');
     const slotCount = Math.max(3, currentSkills.length);
@@ -525,7 +525,7 @@ export function renderClasses(ctx) {
                     nextSkills.push(picked);
                 }
             }
-            if (!ctx.apply(setField(ctx.model, [...classPath, 'skills'], nextSkills))) select.value = currentSlotSkill;
+            if (!applyEdit(ctx, setField(ctx.model, [...classPath, 'skills'], nextSkills))) select.value = currentSlotSkill;
         });
 
         const rowField = field(doc, `Skill ${slotIdx + 1}`, select);
@@ -541,7 +541,7 @@ export function renderClasses(ctx) {
         skillsGroup.append(row);
     }
 
-    const addSkill = button(doc, '+ Skill', () => ctx.apply(addClassSkill(ctx.model, cls.slug)));
+    const addSkill = button(doc, '+ Skill', () => applyEdit(ctx, addClassSkill(ctx.model, cls.slug)));
     addSkill.disabled = currentSkills.length >= 3;
     skillsGroup.append(addSkill);
 
@@ -564,8 +564,7 @@ export function renderClasses(ctx) {
         };
         const result = add(ctx.model, 'classes', newRecord);
         if (result.ok) {
-            ctx.selection.id = slug;
-            if (ctx.apply(result)) {
+            if (applyEdit(ctx, result, { id: slug })) {
                 ctx.select('classes', slug);
             }
         } else {
@@ -619,12 +618,9 @@ function openCascadeDialog(ctx, cls, invoker) {
     const btnRow = el(ctx.doc, 'div', '', { class: 'row' });
     const cancelBtn = button(ctx.doc, 'Keep it', () => closeDialog());
     const confirmBtn = button(ctx.doc, `Remove all ${changes.length}`, () => {
-        if (ctx.selection.id === cls.slug) {
-            ctx.selection.id = null;
-        }
         try { dialog.close?.(); } catch { /* ignore */ }
         dialog.remove();
-        ctx.apply(previewResult);
+        applyEdit(ctx, previewResult, ctx.selection.id === cls.slug ? { id: null } : undefined);
         if (ctx.doc.contains?.(invoker)) invoker.focus?.();
         else ctx.main.focus?.();
     }, { class: 'danger primary' });

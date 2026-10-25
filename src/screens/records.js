@@ -1,3 +1,4 @@
+import { applyEdit } from '../apply-edit.js';
 import { safeLabel, el, button } from '../dom.js';
 import { KINDS, LABELS, records, identity, localId, kindPath } from '../records.js';
 import { add, remove } from '../edits.js';
@@ -171,8 +172,7 @@ function renderAddForm(ctx, container, kind, schema, singularLabel) {
         if (res.ok) {
             const newId = identity(draft);
             const normId = localId(res.model, newId);
-            ctx.selection.id = normId;
-            if (ctx.apply(res)) {
+            if (applyEdit(ctx, res, { id: normId })) {
                 ctx.select(kind, normId);
             }
         } else {
@@ -188,8 +188,7 @@ function openRecordRemoveDialog(ctx, kind, record, invoker) {
     const id = identity(record);
     const previewRes = remove(ctx.model, kind, id, { cascade: false });
     if (previewRes.ok) {
-        ctx.selection.id = null;
-        ctx.apply(previewRes);
+        applyEdit(ctx, previewRes, { id: null });
         if (ctx.doc.contains?.(invoker)) invoker.focus?.();
         else ctx.main.focus?.();
         return;
@@ -229,9 +228,8 @@ function openRecordRemoveDialog(ctx, kind, record, invoker) {
     const btnRow = el(ctx.doc, 'div', '', { class: 'row' });
     const cancelBtn = button(ctx.doc, 'Keep it', () => closeDialog());
     const confirmBtn = button(ctx.doc, `Remove all ${changes.length}`, () => {
-        if (ctx.selection.id === localId(ctx.model, id)) ctx.selection.id = null;
         closeDialog();
-        ctx.apply(cascadePreview);
+        applyEdit(ctx, cascadePreview, ctx.selection.id === localId(ctx.model, id) ? { id: null } : undefined);
     }, { class: 'danger primary' });
 
     btnRow.append(cancelBtn, confirmBtn);

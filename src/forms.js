@@ -1,3 +1,4 @@
+import { applyEdit } from './apply-edit.js';
 import { safeLabel, el, button, field } from './dom.js';
 import { setSchemaField as setField, renameId } from './edits.js';
 import { records, identity, localId } from './records.js';
@@ -117,11 +118,11 @@ function mutate(ctx, path, value, options) {
                 let parent = list;
                 for (const part of path.slice(index, -1)) parent = parent[part];
                 parent[path.at(-1)] = value;
-                return ctx.apply(setField(ctx.model, listPath, list));
+                return applyEdit(ctx, setField(ctx.model, listPath, list));
             }
         }
     }
-    return ctx.apply(setField(ctx.model, path, value, options));
+    return applyEdit(ctx, setField(ctx.model, path, value, options));
 }
 function pathAttrs(path, options) { return { [options.isNew ? 'data-draft-path' : 'data-path']: JSON.stringify(path) }; }
 function titleFor(path) { return typeof path.at(-1) === 'number' ? `Item ${path.at(-1) + 1}` : String(path.at(-1) || 'Record'); }
@@ -311,8 +312,7 @@ export function renderForm(ctx, container, input, value, path, passed = {}) {
         if (idField && !options.isNew) {
             if (!accept(ctx, schema, next)) { control.value = display(value); return; }
             const result = renameId(ctx.model, options.kind, identity(options.record), next);
-            if (result.ok) { ctx.selection.id = localId(result.model, next); ctx.apply(result); }
-            else { ctx.apply(result); control.value = display(value); }
+            applyEdit(ctx, result, { id: localId(result.model, next) });
         } else if (!commit(next)) control.value = display(value);
     });
 }
