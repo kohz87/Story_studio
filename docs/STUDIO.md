@@ -19,7 +19,7 @@ Part 1 establishes the deterministic pack engine, immutable document model, and 
 - **Unstyled Developer UI**: Standard-compliant DOM interface and headless smoke test harness ([`src/dev.js`](../src/dev.js), [`src/dev.html`](../src/dev.html)).
 - **Test Fixtures**: Static and dynamic valid, invalid, and scenario packs ([`tests/fixtures/`](../tests/fixtures/)).
 
-Styled creator screens await visual mocks designed by the suite lead. Part 1 implements the concrete engine scope (model, pure edits, history controller, canonical export pipeline, and developer page) without introducing ad-hoc presentation dependencies.
+Part 2 adds the standalone local editor, built as one offline HTML file. See the [application guide](STUDIO_PART2.md) for screens, draft persistence, distribution, and browser verification. The engine and unstyled developer page described here remain available.
 
 ### 1.2 Progression Hierarchy and Pathway Graph
 
@@ -437,7 +437,6 @@ Story Studio enforces limits defined across Story Block and the Suite Contract:
 Editing imports slug and ID patterns from `rulesV2Schema`, slug limits from `RULES_V2_LIMITS`, and tiers, choices, and pathway steps from `RULES_V2_PROGRESSION`.
 The separate 52-character skill-slug limit is still private in Story Block. The lead needs to export it, for example as `RULES_V2_LIMITS.skillSlug`, before Studio can remove its remaining local constant. No vendored files are edited for this follow-up.
 
-
 | Metric | Boundary Limit | Scope / Details |
 |---|---|---|
 | Raw Pack Size | `512 KiB` (524,288 bytes) | Maximum byte size for raw JSON text or objects. |
@@ -571,7 +570,7 @@ Test fixtures in [`tests/fixtures/`](../tests/fixtures/) provide thorough verifi
 
 [`tests/dev-smoke.test.js`](../tests/dev-smoke.test.js) verifies [`src/dev.html`](../src/dev.html) in headless Chromium:
 
-- **Zero Package Dependencies**: Story Studio does not add Playwright to `package.json`. The runner searches for an available Playwright installation or skips gracefully if unconfigured and unavailable.
+- **Development Dependency**: Playwright is pinned in package.json. Run npm ci and npx playwright install --with-deps chromium. The older developer-page runner retains optional discovery and skips if unavailable; the built-application browser tests in studio-browser.test.js require a working browser and never skip.
 - **Environment Overrides**:
   - `STUDIO_PLAYWRIGHT_MODULE`: File path or file URL to the Playwright module entry file (e.g., `/path/to/playwright/index.mjs` or `file:///path/to/playwright/index.mjs`; must point to the module entry file, not a directory).
   - `STUDIO_CHROMIUM_PATH`: Executable path for Chromium (e.g., `/path/to/chromium` or `/usr/bin/chromium`).
