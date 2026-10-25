@@ -3,7 +3,7 @@ import { KINDS, LABELS, records, identity, localId, kindPath } from '../records.
 import { add, remove } from '../edits.js';
 import { cascadeChanges } from './classes.js';
 import { renderForm, createDefault } from '../forms.js';
-import { schemaForKind } from '../form-schema.js';
+import { schemaForKind, validateField } from '../form-schema.js';
 
 function getRecordProblems(model, kind, record, idx) {
     if (!model?.validation?.errors) return [];
@@ -164,6 +164,8 @@ function renderAddForm(ctx, container, kind, schema, singularLabel) {
     const actionsRow = el(doc, 'div', '', { class: 'row' });
     const cancelBtn = button(doc, 'Cancel', () => ctx.select(kind, null));
     const createBtn = button(doc, `Add ${singularLabel}`, () => {
+        const checked = validateField(schema, draft);
+        if (!checked.ok) { ctx.notify(`${checked.code}: ${checked.message}`); return; }
         const res = add(ctx.model, kind, draft);
         if (res.ok) {
             const newId = identity(draft);

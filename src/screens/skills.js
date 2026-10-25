@@ -1,5 +1,6 @@
 import { safeLabel, el, field } from '../dom.js';
 import { records, localId } from '../records.js';
+import { validateField } from '../form-schema.js';
 import { setField } from '../edits.js';
 import {
     validateRulesPack,
@@ -1003,6 +1004,8 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
     nameInput.addEventListener('change', () => {
         const val = nameInput.value;
         if (val !== (skill.name ?? '')) {
+            const checked = validateField(rulesV2Schema.$defs.name, val);
+            if (!checked.ok) { ctx.notify(`${checked.code}: ${checked.message}`); nameInput.value = safeLabel(skill.name ?? ''); return; }
             if (!ctx.apply(setField(ctx.model, [...skillPath, 'name'], val))) {
                 nameInput.value = safeLabel(skill.name ?? '');
             }
@@ -1142,6 +1145,8 @@ function renderBranchControls(ctx, node) {
     nameInput.addEventListener('change', () => {
         const val = nameInput.value;
         if (val !== (branch.name ?? '')) {
+            const checked = validateField(rulesV2Schema.$defs.name, val);
+            if (!checked.ok) { ctx.notify(`${checked.code}: ${checked.message}`); nameInput.value = safeLabel(branch.name ?? ''); return; }
             if (!ctx.apply(setField(ctx.model, [...branchPath, 'name'], val))) {
                 nameInput.value = safeLabel(branch.name ?? '');
             }

@@ -220,3 +220,46 @@ export function referenceTarget(kind, path, record) {
     if (last === 'class' || (prev === 'classes' && /^\d+$/.test(last))) return 'classes';
     return null;
 }
+
+export function validateField(input, value) {
+    const schema = resolveSchema(input) || {};
+    const refuse = message => ({ ok: false, code: 'bad-value', message });
+    if (schema.oneOf && !schema.oneOf.some(part => validateField(part, value).ok)) return refuse('Value does not match an allowed variant');
+    if (schema.const !== undefined && !Object.is(schema.const, value)) return refuse('Value must match the fixed value');
+    if (schema.enum && !schema.enum.some(entry => Object.is(entry, value))) return refuse('Choose an allowed value');
+    if (schema.type) {
+        const correct = schema.type === 'null' ? value === null
+            : schema.type === 'array' ? Array.isArray(value)
+                : schema.type === 'object' ? value !== null && typeof value === 'object' && !Array.isArray(value)
+                    : schema.type === 'integer' ? Number.isSafeInteger(value)
+                        : schema.type === 'number' ? typeof value === 'number' && Number.isFinite(value)
+                            : typeof value === schema.type;
+        if (!correct) return refuse(`Expected ${schema.type}`);
+    }
+    if (typeof value === 'number') {
+        if (value < (schema.minimum ?? -Infinity) || value > (schema.maximum ?? Infinity)) return refuse('Number is outside the allowed bounds');
+        if (schema.exclusiveMinimum !== undefined && value <= schema.exclusiveMinimum) return refuse('Number must exceed the lower bound');
+        if (schema.exclusiveMaximum !== undefined && value >= schema.exclusiveMaximum) return refuse('Number must be below the upper bound');
+    }
+    if (typeof value === 'string') {
+        const length = [...value].length;
+        if (length < (schema.minLength ?? 0) || length > (schema.maxLength ?? Infinity)) return refuse('Text is outside the allowed length');
+        if (schema.pattern && !new RegExp(schema.pattern, 'u').test(value)) return refuse('Text does not match the required pattern');
+    }
+    if (Array.isArray(value)) {
+        if (value.length < (schema.minItems ?? 0) || value.length > (schema.maxItems ?? Infinity)) return refuse('List is outside the allowed length');
+        if (schema.uniqueItems && new Set(value.map(entry => JSON.stringify(entry))).size !== value.length) return refuse('List entries must be unique');
+        for (const entry of value) {
+            const result = validateField(schema.items, entry);
+            if (!result.ok) return result;
+        }
+    } else if (value !== null && typeof value === 'object') {
+        for (const key of schema.required || []) if (!Object.hasOwn(value, key)) return refuse(`Missing required field: ${key}`);
+        for (const [key, entry] of Object.entries(value)) {
+            if (schema.additionalProperties === false && !Object.hasOwn(schema.properties || {}, key)) return refuse(`Unknown field: ${key}`);
+            const result = validateField(schema.properties?.[key], entry);
+            if (!result.ok) return result;
+        }
+    }
+    return { ok: true };
+}

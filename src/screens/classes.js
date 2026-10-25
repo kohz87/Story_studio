@@ -1,6 +1,7 @@
 import { safeLabel, el, button, field } from '../dom.js';
 import { KINDS, LABELS, records, identity, localId } from '../records.js';
 import { add, renameId, remove, moveClass, setField } from '../edits.js';
+import { schemaForKind, validateField } from '../form-schema.js';
 import { validateRulesPack } from '../../vendor/story-block/src/v2/packs/rules-v2.js';
 
 // Sets or replaces a field on a class record by slug.
@@ -389,6 +390,8 @@ export function renderClasses(ctx) {
     nameInput.addEventListener('change', () => {
         const val = nameInput.value;
         if (val !== (cls.name ?? '')) {
+            const checked = validateField(schemaForKind('classes').properties.name, val);
+            if (!checked.ok) { ctx.notify(`${checked.code}: ${checked.message}`); nameInput.value = safeLabel(cls.name ?? ''); return; }
             if (!ctx.apply(setField(ctx.model, [...classPath, 'name'], val))) nameInput.value = safeLabel(cls.name ?? '');
         }
     });

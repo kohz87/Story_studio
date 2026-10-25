@@ -117,7 +117,7 @@ test('T4-3: String and multiline note renderer types with textContent safety aga
     assert.equal(ctx.model.document.content.items[0].name, '<b>Hostile</b><script>alert(1)</script>');
 });
 
-test('T4-4: Numeric renderer refusals for empty, NaN, and fractional integers with bad-value code; finite schema-invalids permitted', () => {
+test('T4-4: Numeric renderer refusals for empty, NaN, and fractional integers with bad-value code; schema bounds enforced', () => {
     assert.equal(parseIntegerInput('').ok, false);
     assert.equal(parseIntegerInput('  ').ok, false);
     assert.equal(parseIntegerInput('xyz').ok, false);
@@ -159,8 +159,8 @@ test('T4-4: Numeric renderer refusals for empty, NaN, and fractional integers wi
 
     valueInput.value = '-999';
     valueInput.dispatchEvent({ type: 'change', target: valueInput });
-    assert.equal(ctx.model.document.content.items[0].value, -999);
-    assert.equal(ctx.history.canUndo, true);
+    assert.equal(ctx.model.document.content.items[0].value, 100);
+    assert.equal(ctx.history.canUndo, false);
 });
 
 test('T4-5: Boolean and Enum renderer types retain numeric and boolean types on change', () => {
@@ -278,9 +278,9 @@ test('T4-9: oneOf unions with kind/op discriminator switch variant and update st
         turnInPlace: null,
         requirements: [],
         objectives: [{
-            id: 'obj_1',
+            id: 'pack.fixture/objective',
             kind: 'visit',
-            place: 'haven',
+            place: 'pack.fixture/haven',
         }],
         reward: { coin: 50, xp: 100, items: [] },
         durationMinutes: null,
@@ -476,7 +476,7 @@ test('T4-15: Reference arrays and shop quantities edit leaves without replacing 
 });
 
 test('T4-16: Primitive unions, null, and invalid enums stay visible and can be repaired', () => {
-    const pack = smallRulesPack(); pack.content.items = [{ slug: 'gear', name: '[ITEM]', kind: 'unknown', slot: 'custom-slot' }];
+    const pack = smallRulesPack(); pack.content.items = [{ slug: 'gear', name: '[ITEM]', kind: 'unknown', rarity: 'common', slot: 'custom-slot' }];
     const ctx = createTestContext(pack); ctx.onRender = () => renderScreen(ctx); ctx.select('items', 'gear');
     const slot = controls(ctx, 'input', 'slot')[0];
     assert.equal(slot.value, 'custom-slot');
@@ -484,12 +484,12 @@ test('T4-16: Primitive unions, null, and invalid enums stay visible and can be r
     assert.equal(ctx.model.document.content.items[0].slot, 'offhand');
     const variant = controls(ctx, 'select', 'slot')[0]; variant.value = '0'; variant.dispatchEvent({ type: 'change' });
     assert.equal(ctx.model.document.content.items[0].slot, null);
-    ctx.inspector.querySelector('button[aria-label="Clear slot"]').click();
-    assert.equal(Object.hasOwn(ctx.model.document.content.items[0], 'slot'), false);
     const kind = controls(ctx, 'select', 'kind')[0];
     assert.match(kind.querySelectorAll('option').find(o => o.selected).textContent, /unknown.*invalid/);
     kind.value = 'goods'; kind.dispatchEvent({ type: 'change' });
     assert.equal(ctx.model.document.content.items[0].kind, 'goods');
+    ctx.inspector.querySelector('button[aria-label="Clear slot"]').click();
+    assert.equal(Object.hasOwn(ctx.model.document.content.items[0], 'slot'), false);
 });
 
 test('T4-17: Missing required containers initialize before nested typed edits', () => {
@@ -505,7 +505,7 @@ test('T4-17: Missing required containers initialize before nested typed edits', 
 });
 
 test('T4-18: Unknown fields remain visible through safe JSON repair without losing identity or order', () => {
-    const pack = smallRulesPack(); pack.content.items = [{ slug: 'entry', name: '[ITEM]', aliases: ['second', 'first'], extra: { value: 1 } }];
+    const pack = smallRulesPack(); pack.content.items = [{ slug: 'entry', name: '[ITEM]', kind: 'goods', rarity: 'common', aliases: ['second', 'first'], extra: { value: 1 } }];
     const ctx = createTestContext(pack); ctx.onRender = () => renderScreen(ctx); ctx.select('items', 'entry');
     const json = ctx.inspector.querySelector('textarea.json-textarea');
     const current = JSON.parse(json.value); assert.deepEqual(current.extra, { value: 1 });
@@ -576,4 +576,41 @@ test('reference suggestions and commits use the field schema ID format and keep 
         local.value = 'mill'; local.dispatchEvent({ type: 'change' });
         assert.equal(ctx.model.validation.ok, true, 'Typed local IDs use the same formatter as suggestions');
     }
+});
+
+test('schema constraints refuse edits with a code before history changes and retain previous values', () => {
+    const ctx = createTestContext(makeValidExtendedPack()); ctx.onRender = () => renderScreen(ctx);
+    const before = ctx.model;
+    for (const [kind, id, key, value] of [
+        ['creatures', 'goblin-scout', 'level', '0'],
+        ['creatures', 'goblin-scout', 'level', '101'],
+        ['items', 'greatsword', 'value', '-999'],
+        ['items', 'greatsword', 'name', ''],
+        ['items', 'greatsword', 'name', 'x'.repeat(81)],
+        ['items', 'greatsword', 'slug', 'bad_slug'],
+    ]) {
+        ctx.select(kind, id);
+        const input = controls(ctx, 'input', key)[0];
+        const previous = input.value;
+        input.value = value; input.dispatchEvent({ type: 'change' });
+        assert.equal(ctx.model, before, `${kind}.${key}=${value} must be refused`);
+        assert.equal(input.value, previous);
+        assert.match(ctx.notifications.at(-1), /^bad-value:/);
+        assert.equal(ctx.history.canUndo, false);
+    }
+    ctx.select('creatures', 'goblin-scout');
+    const level = controls(ctx, 'input', 'level')[0];
+    level.value = '2'; level.dispatchEvent({ type: 'change' });
+    assert.equal(ctx.model.document.content.creatures[0].level, 2);
+    assert.equal(ctx.model.validation.ok, true);
+    assert.equal(ctx.history.canUndo, true);
+    const damaged = makeValidExtendedPack(); damaged.content.items[0].extra = true;
+    const repair = createTestContext(damaged); repair.onRender = () => renderScreen(repair);
+    repair.select('items', 'greatsword');
+    const json = repair.inspector.querySelectorAll('textarea.json-textarea').at(-1);
+    const missing = JSON.parse(json.value); delete missing.extra; delete missing.name;
+    const previous = repair.model;
+    json.value = JSON.stringify(missing); json.dispatchEvent({ type: 'change' });
+    assert.equal(repair.model, previous, 'JSON edits cannot delete required fields');
+    assert.match(repair.notifications.at(-1), /^bad-value: Missing required field: name/);
 });

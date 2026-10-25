@@ -1,7 +1,7 @@
 import { safeLabel, el, button, field } from './dom.js';
 import { setField, renameId } from './edits.js';
 import { records, identity, localId } from './records.js';
-import { referenceTarget, resolveSchema } from './form-schema.js';
+import { referenceTarget, resolveSchema, validateField } from './form-schema.js';
 import { validateRulesPack, RULES_V2_LIMITS, RULES_V2_PROGRESSION } from '../vendor/story-block/src/v2/packs/rules-v2.js';
 
 export function parseNumberInput(raw) {
@@ -30,6 +30,10 @@ export function createDefault(input) {
     if (schema.type === 'object') return Object.fromEntries((schema.required || []).filter(k => schema.properties?.[k]).map(k => [k, createDefault(schema.properties[k])]));
     if (schema.type === 'boolean') return false;
     if (schema.type === 'number' || schema.type === 'integer') return schema.minimum ?? 0;
+    if (schema.minLength || schema.pattern) {
+        return ['[YOUR VALUE]', 'new-record', 'pack.pack/new-record', 'pl_00000001']
+            .find(value => validateField(schema, value).ok) ?? '';
+    }
     return '';
 }
 function display(value) { return safeLabel(value ?? ''); }
@@ -44,7 +48,13 @@ function matches(schema, value) {
     if (schema.type === 'integer') return Number.isInteger(value);
     return typeof value === schema.type;
 }
+function accept(ctx, schema, value) {
+    const result = validateField(schema, value);
+    if (!result.ok) ctx.notify(`${result.code}: ${result.message}`);
+    return result.ok;
+}
 function mutate(ctx, path, value, options) {
+    if (!accept(ctx, options.schema, value)) return false;
     if (options.isNew) { options.onChange(value, path); return true; }
     if (['id', 'slug'].includes(path.at(-1)) && path.length > options.rootPath.length + 1) {
         const index = path.findIndex((part, i) => i >= options.rootPath.length && typeof part === 'number');
@@ -88,7 +98,7 @@ export function formOptions(model) {
 
 export function renderForm(ctx, container, input, value, path, passed = {}) {
     const schema = resolveSchema(input) || {};
-    const options = { ...passed, rootPath: passed.rootPath || path };
+    const options = { ...passed, rootPath: passed.rootPath || path, schema };
     const doc = ctx.doc;
     const title = options.label || titleFor(path);
     const attrs = pathAttrs(path, options);
@@ -125,7 +135,7 @@ export function renderForm(ctx, container, input, value, path, passed = {}) {
             const next = createDefault(variant);
             if (next && typeof next === 'object' && value && typeof value === 'object') {
                 for (const [key, child] of Object.entries(variant.properties || {})) {
-                    if (child.const === undefined && Object.hasOwn(value, key) && matches(child, value[key])) next[key] = value[key];
+                    if (child.const === undefined && Object.hasOwn(value, key) && validateField(child, value[key]).ok) next[key] = value[key];
                 }
             }
             commit(next);
@@ -205,6 +215,7 @@ export function renderForm(ctx, container, input, value, path, passed = {}) {
             next = result.value;
         }
         if (idField && !options.isNew) {
+            if (!accept(ctx, schema, next)) { control.value = display(value); return; }
             const result = renameId(ctx.model, options.kind, identity(options.record), next);
             if (result.ok) { ctx.selection.id = localId(result.model, next); ctx.apply(result); }
             else { ctx.apply(result); control.value = display(value); }
