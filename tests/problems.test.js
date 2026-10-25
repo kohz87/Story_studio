@@ -152,3 +152,28 @@ test('legacy skill and envelope diagnostics focus their own fields', () => {
     assert.equal(ctx.doc.activeElement, name);
     assert.deepEqual(diagnosticPath('$.content.skills[0].name'), ['content', 'skills', 0, 'name']);
 });
+
+test('Go to maps reparented derived tiers and damaged branch fields to their repair controls', () => {
+    const ctx = createTestContext(smallRulesPack()); ctx.root = ctx.app;
+    ctx.onRender = () => renderScreen(ctx);
+    ctx.select('classes', 'c3');
+    const parent = ctx.inspector.querySelector('#class-parent');
+    parent.value = 'c0'; parent.dispatchEvent({ type: 'change' });
+    const issue = ctx.model.validation.errors.find(error => error.code === 'tier-chain' && error.path.endsWith('.tier'));
+    assert.ok(issue, 'Ordinary reparenting produces the derived-tier diagnostic');
+    goToProblem(ctx, issue);
+    assert.equal(ctx.doc.activeElement.id, 'class-parent');
+    assert.ok(ctx.app.classList.contains('inspector-open'));
+    for (const [field, value] of [['choice', 'x'], ['step', 9], ['skill', 'missing'], ['fromForm', 'missing']]) {
+        const pack = smallRulesPack(); pack.content.rules[0].branches[0][field] = value;
+        const repair = createTestContext(pack); repair.root = repair.app;
+        repair.onRender = () => renderScreen(repair);
+        const diagnostic = repair.model.validation.errors.find(error => error.path === `content.rules[0].branches[0].${field}`);
+        assert.ok(diagnostic, field);
+        goToProblem(repair, diagnostic);
+        assert.equal(repair.selection.kind, 'branches', field);
+        assert.notEqual(repair.doc.activeElement, repair.main, field);
+        assert.deepEqual(JSON.parse(repair.doc.activeElement.getAttribute('data-path')), ['content', 'rules', 0, 'branches', 0, field]);
+        assert.ok(repair.app.classList.contains('inspector-open'));
+    }
+});

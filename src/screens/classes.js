@@ -451,7 +451,7 @@ export function renderClasses(ctx) {
     }
 
     if (cls.parent && !validParents.some(c => localId(ctx.model, c.slug) === localId(ctx.model, cls.parent))) {
-        const opt = el(doc, 'option', `${safeLabel(cls.parent)} (invalid parent)`, { value: cls.parent });
+        const opt = el(doc, 'option', `${safeLabel(cls.parent)} (invalid parent)`, { value: cls.parent, disabled: '' });
         opt.selected = true;
         parentSelect.append(opt);
     }
@@ -506,7 +506,7 @@ export function renderClasses(ctx) {
         }
 
         if (currentSlotSkill && !foundCurrent) {
-            const missingOpt = el(doc, 'option', `${safeLabel(currentSlotSkill)} (missing)`, { value: currentSlotSkill });
+            const missingOpt = el(doc, 'option', `${safeLabel(currentSlotSkill)} (missing)`, { value: currentSlotSkill, disabled: '' });
             missingOpt.selected = true;
             select.append(missingOpt);
         }

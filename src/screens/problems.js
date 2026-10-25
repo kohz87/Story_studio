@@ -91,7 +91,9 @@ export function goToProblem(ctx, issue) {
         const branch = typeof idx === 'number' ? branchList[idx] : null;
         const owning = localId(ctx.model, branch?.skill) || branch?.skill || '';
         const bSlug = localId(ctx.model, identity(branch)) || identity(branch) || '';
-        if (owning) ctx.select('skills', owning, bSlug);
+        const inPathInspector = ['name', 'transforms', 'power', 'powerScore'].includes(rest[0]) || issue.code === 'budget-closure';
+        if (owning && inPathInspector) ctx.select('skills', owning, bSlug);
+        else if (bSlug) ctx.select('branches', bSlug);
     } else if (coll === 'skills') {
         const skillList = KINDS.includes('skills') ? records(ctx.model, 'skills') : [];
         const skill = typeof idx === 'number' ? skillList[idx] : null;
@@ -124,7 +126,7 @@ export function goToProblem(ctx, issue) {
         }
     } else if (coll === 'classes') {
         if (rest[0] === 'skills' && rest.length === 1) target = findControl(ctx, '#class-skills');
-        else if (rest[0] === 'parent') target = findControl(ctx, '#class-parent');
+        else if (rest[0] === 'parent' || rest[0] === 'tier') target = findControl(ctx, '#class-parent');
     }
 
     if (!target) {

@@ -151,7 +151,7 @@ export function renderForm(ctx, container, input, value, path, passed = {}) {
             option.selected = Object.is(choice, value); select.append(option);
         });
         if (!schema.enum.some(v => Object.is(v, value))) {
-            const current = el(doc, 'option', `${display(value)} (invalid)`, { value: '__current__' });
+            const current = el(doc, 'option', `${display(value)} (invalid)`, { value: '__current__', disabled: '' });
             current.selected = true; select.append(current);
         }
         select.addEventListener('change', () => { if (select.value !== '__current__') commit(schema.enum.find(v => String(v) === select.value)); });
