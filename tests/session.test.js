@@ -396,3 +396,39 @@ test('a bubbling drop opens its file exactly once', async () => {
     assert.equal(ctx.model.validation.ok, true);
     ctx.destroy();
 });
+
+test('hostile labels render safely and failed opens or renders preserve the previous draft', () => {
+    const { ctx, root, win } = setupStudio();
+    const hostile = smallRulesPack();
+    const label = { toString: null };
+    hostile.content.rules[0].classes[0].name = label;
+    hostile.content.rules[0].skills[0].name = label;
+    hostile.content.rules[0].skills[9].name = label;
+    hostile.content.rules[0].branches[0].name = label;
+    assert.doesNotThrow(() => ctx.loadText(hostile));
+    assert.match(root.textContent, /\{"toString":null\}/);
+    for (const [kind, id, form] of [['classes', 'c0'], ['skills', 's00'], ['skills', 's30'], ['skills', 's30', 's30-base-a']]) {
+        assert.doesNotThrow(() => ctx.select(kind, id, form));
+        assert.doesNotMatch(root.querySelector('.notice').textContent, /render-error/);
+        assert.match(root.textContent, /\{"toString":null\}/);
+    }
+    const previous = ctx.model;
+    const draft = win.localStorage.getItem(DRAFT_KEY);
+    const render = ctx.renderContent;
+    ctx.renderContent = () => {
+        assert.equal(win.localStorage.getItem(DRAFT_KEY), draft, 'Render runs before any draft write');
+        if (ctx.model !== previous) throw new Error('Cannot render this draft');
+        render();
+    };
+    assert.equal(ctx.loadText(smallRulesPack()), null);
+    assert.equal(ctx.model, previous);
+    assert.equal(win.localStorage.getItem(DRAFT_KEY), draft);
+    assert.match(root.querySelector('.notice').textContent, /render-error: Cannot render this draft/);
+    assert.equal(ctx.apply(setField(ctx.model, ['name'], '[BROKEN RENDER]')), false);
+    assert.equal(ctx.model, previous);
+    assert.equal(win.localStorage.getItem(DRAFT_KEY), draft);
+    ctx.loadText('{');
+    assert.equal(ctx.model, previous);
+    assert.equal(win.localStorage.getItem(DRAFT_KEY), draft);
+    ctx.destroy();
+});

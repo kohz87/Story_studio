@@ -1,4 +1,4 @@
-import { el, button } from '../dom.js';
+import { safeLabel, el, button } from '../dom.js';
 import { KINDS, LABELS, records, identity, localId, kindPath } from '../records.js';
 import { add, remove } from '../edits.js';
 import { cascadeChanges } from './classes.js';
@@ -16,7 +16,7 @@ function getRecordProblems(model, kind, record, idx) {
         const msg = err.message || '';
         const normalized = p.replace(/\[(\d+)\]/g, '.$1');
         if (normalized === prefix || normalized.startsWith(`${prefix}.`)) return true;
-        if (normId && (msg.includes(`"${normId}"`) || msg.includes(`'${normId}'`))) return true;
+        if (normId && (msg.includes(`"${safeLabel(normId)}"`) || msg.includes(`'${safeLabel(normId)}'`))) return true;
         return false;
     });
 }
@@ -66,7 +66,7 @@ export function renderRecords(ctx) {
             nameRow.append(el(doc, 'span', record.name || normId, { class: 'record-card-name' }));
             if (problems.length > 0) nameRow.append(el(doc, 'span', '', { class: 'problem-dot', 'aria-label': 'Has problems' }));
 
-            const metaText = normId !== record.name ? `${normId}${record.kind ? ` · ${record.kind}` : ''}` : (record.kind || '');
+            const metaText = normId !== record.name ? `${safeLabel(normId)}${record.kind ? ` · ${safeLabel(record.kind)}` : ''}` : (record.kind || '');
             card.append(nameRow);
             if (metaText) card.append(el(doc, 'span', metaText, { class: 'record-card-meta' }));
             listContainer.append(card);
@@ -109,7 +109,7 @@ function renderRecordsInspector(ctx, container, kind, schema, validRecords, sing
     container.append(titleRow);
 
     const packId = model?.document?.id || 'pack';
-    const fullId = `pack.${packId}/${normId}`;
+    const fullId = `pack.${safeLabel(packId)}/${safeLabel(normId)}`;
     const refs = (model?.references || []).filter(r => r.targetKind === kind && (r.targetId === fullId || r.targetId === normId));
     if (refs.length > 0) {
         container.append(el(doc, 'div', `Renaming the ID updates every reference to it (${refs.length} places).`, { class: 'muted' }));
@@ -199,7 +199,7 @@ function openRecordRemoveDialog(ctx, kind, record, invoker) {
     }
 
     const changes = cascadeChanges(ctx.model, cascadePreview.model, id);
-    const dialog = el(ctx.doc, 'dialog', '', { 'aria-label': `Remove ${record.name || id}` });
+    const dialog = el(ctx.doc, 'dialog', '', { 'aria-label': `Remove ${safeLabel(record.name || id)}` });
 
     const closeDialog = () => {
         try { dialog.close?.(); } catch { /* ignore */ }
@@ -214,7 +214,7 @@ function openRecordRemoveDialog(ctx, kind, record, invoker) {
     });
 
     dialog.append(
-        el(ctx.doc, 'h2', `Remove ${record.name || id}?`),
+        el(ctx.doc, 'h2', `Remove ${safeLabel(record.name || id)}?`),
         el(ctx.doc, 'p', 'Other parts of the pack use it. Removing it also removes:')
     );
 

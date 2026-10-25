@@ -1,4 +1,4 @@
-import { el, button, field, icon } from '../dom.js';
+import { safeLabel, el, button, field, icon } from '../dom.js';
 import { KINDS, RULES_KINDS, records, identity, localId } from '../records.js';
 
 import { formOptions } from '../forms.js';
@@ -96,7 +96,7 @@ export function goToProblem(ctx, issue) {
         const skillList = KINDS.includes('skills') ? records(ctx.model, 'skills') : [];
         const skill = typeof idx === 'number' ? skillList[idx] : null;
         const sSlug = localId(ctx.model, identity(skill)) || identity(skill) || '';
-        if (sSlug) ctx.select('skills', sSlug, `${sSlug}-base`);
+        if (sSlug) ctx.select('skills', sSlug, `${safeLabel(sSlug)}-base`);
     } else if (coll === 'classes') {
         const classList = KINDS.includes('classes') ? records(ctx.model, 'classes') : [];
         const cls = typeof idx === 'number' ? classList[idx] : null;
@@ -200,7 +200,7 @@ export function renderProblemGroups(ctx, container) {
             rowEl.append(
                 el(doc, 'span', r.text, { class: 'problem-msg' }),
                 el(doc, 'span', r.path, { class: 'problem-path mono muted' }),
-                button(doc, 'Go to', () => goToProblem(ctx, r), { class: 'btn-goto', 'aria-label': `Go to problem at ${r.path}` })
+                button(doc, 'Go to', () => goToProblem(ctx, r), { class: 'btn-goto', 'aria-label': `Go to problem at ${safeLabel(r.path)}` })
             );
             groupEl.append(rowEl);
         }

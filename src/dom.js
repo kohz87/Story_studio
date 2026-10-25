@@ -1,9 +1,18 @@
 import { DRAWINGS } from './assets/drawings.js';
 
+export function safeLabel(value) {
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (value === null || typeof value === 'object') {
+        try { return JSON.stringify(value) ?? '[invalid]'; } catch { /* Invalid labels remain visible. */ }
+    }
+    return '[invalid]';
+}
+
 export function el(doc, tag, text = '', attrs = {}) {
     const node = doc.createElement(tag);
-    if (text !== '') node.textContent = String(text);
-    for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value));
+    if (text !== '') node.textContent = safeLabel(text);
+    for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, safeLabel(value));
     return node;
 }
 export function button(doc, text, action, attrs = {}) {

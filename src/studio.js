@@ -1,7 +1,7 @@
 import { openPack } from './model.js';
 import { setField } from './edits.js';
 import { createHistory } from './history.js';
-import { el, button, field, icon } from './dom.js';
+import { safeLabel, el, button, field, icon } from './dom.js';
 import { KINDS, LABELS, records } from './records.js';
 import { renderScreen } from './screens/index.js';
 import { downloadPack } from './export.js';
@@ -47,14 +47,12 @@ export function mountStudio(root) {
         history.undo();
         ++seq;
         ctx.changed();
-        if (ctx.model?.document) writeDraft(win, ctx.model, ctx.dirty);
     }, { 'aria-label': 'Undo' });
     undo.append(icon(doc, 'undo'));
     const redo = button(doc, '', () => {
         history.redo();
         ++seq;
         ctx.changed();
-        if (ctx.model?.document) writeDraft(win, ctx.model, ctx.dirty);
     }, { 'aria-label': 'Redo' });
     redo.append(icon(doc, 'redo'));
     const file = el(doc, 'input', '', { type: 'file', accept: '.json,application/json', id: 'pack-file', hidden: '', 'aria-label': 'Open pack file' });
@@ -132,23 +130,25 @@ export function mountStudio(root) {
             }
             ++seq;
             notice.textContent = '';
-            ctx.changed();
-            if (history.current?.document) {
-                writeDraft(win, history.current, ctx.dirty);
+            if (!ctx.changed()) {
+                history.undo();
+                ctx.render();
+                return false;
             }
             return true;
         },
         changed() {
             if (destroyed) return;
             ++seq;
-            if (history.current?.document) writeDraft(win, history.current, ctx.dirty);
-            ctx.render();
+            if (!ctx.render()) return false;
             if (problemsHost.childNodes.length > 0) {
                 problemsHost.replaceChildren();
                 if (typeof renderProblemsDrawer === 'function') {
                     renderProblemsDrawer(ctx, problemsHost, () => ctx.closeProblems(true));
                 }
             }
+            if (history.current?.document) writeDraft(win, history.current, ctx.dirty);
+            return true;
         },
         notify(message) { notice.textContent = message; },
         select(kind, id = null, form = null) {
@@ -196,6 +196,7 @@ export function mountStudio(root) {
                 };
             }
             if (model?.document) {
+                const previous = { history, selection: { ...selection }, baseline: lastBaselineJson, filename: ctx.filename };
                 history = createHistory(model);
                 selection.kind = 'classes';
                 selection.id = null;
@@ -205,8 +206,15 @@ export function mountStudio(root) {
                 notice.textContent = '';
                 app.classList.remove('inspector-open');
                 ctx.closeProblems(false);
+                if (!ctx.render()) {
+                    history = previous.history;
+                    Object.assign(selection, previous.selection);
+                    lastBaselineJson = previous.baseline;
+                    ctx.filename = previous.filename;
+                    ctx.render();
+                    return null;
+                }
                 writeDraft(win, model, false);
-                ctx.render();
                 return model;
             }
             const errors = model?.validation?.errors || [{ code: 'no-document', message: 'No valid document' }];
@@ -236,10 +244,19 @@ export function mountStudio(root) {
             return ctx.loadText(text);
         },
         render() {
-            if (destroyed) return;
+            if (destroyed) return false;
+            try {
+                ctx.renderContent();
+                return true;
+            } catch (err) {
+                ctx.notify(`render-error: ${safeLabel(err?.message || 'Could not render pack')}`);
+                return false;
+            }
+        },
+        renderContent() {
             const model = ctx.model;
             const rawName = model?.document?.name;
-            name.value = typeof rawName === 'string' ? rawName : rawName === undefined ? '' : JSON.stringify(rawName);
+            name.value = safeLabel(rawName ?? '');
             name.disabled = !model?.document;
             fingerprint.textContent = `rules v2 · ${model?.rulesHash?.slice(0, 8) ?? '—'}`;
             fingerprint.title = model?.rulesHash ?? '';

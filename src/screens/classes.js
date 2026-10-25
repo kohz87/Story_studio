@@ -1,4 +1,4 @@
-import { el, button, field } from '../dom.js';
+import { safeLabel, el, button, field } from '../dom.js';
 import { KINDS, LABELS, records, identity, localId } from '../records.js';
 import { add, renameId, remove, moveClass, setField } from '../edits.js';
 import { validateRulesPack } from '../../vendor/story-block/src/v2/packs/rules-v2.js';
@@ -8,7 +8,7 @@ export function classField(model, classSlug, fieldName, value) {
     const list = records(model, 'classes');
     const idx = list.findIndex(c => c && typeof c === 'object' && localId(model, identity(c)) === localId(model, classSlug));
     if (idx === -1) {
-        return { ok: false, model, errors: [{ code: 'not-found', message: `Class ${classSlug} not found` }] };
+        return { ok: false, model, errors: [{ code: 'not-found', message: `Class ${safeLabel(classSlug)} not found` }] };
     }
     return setField(model, ['content', 'rules', 0, 'classes', idx, fieldName], value);
 }
@@ -42,7 +42,7 @@ export function cascadeChanges(beforeModel, previewModel, _targetSlug = null) {
                     kind,
                     id,
                     name,
-                    label: `${name} (${kindLabel})`,
+                    label: `${safeLabel(name)} (${kindLabel})`,
                 });
             }
         }
@@ -64,7 +64,7 @@ export function cascadeChanges(beforeModel, previewModel, _targetSlug = null) {
                 kind: 'startInventory',
                 id: norm,
                 name: norm,
-                label: `Start inventory: ${norm}`,
+                label: `Start inventory: ${safeLabel(norm)}`,
             });
         }
     }
@@ -96,7 +96,7 @@ export function cascadeChanges(beforeModel, previewModel, _targetSlug = null) {
                         kind: 'forms',
                         id: normFormId,
                         name: normFormId,
-                        label: `${normFormId} (Base form)`,
+                        label: `${safeLabel(normFormId)} (Base form)`,
                     });
                 }
             } else if (form.origin === 'generated') {
@@ -108,7 +108,7 @@ export function cascadeChanges(beforeModel, previewModel, _targetSlug = null) {
                         kind: 'forms',
                         id: normFormId,
                         name: normFormId,
-                        label: `${normFormId} (Generated form)`,
+                        label: `${safeLabel(normFormId)} (Generated form)`,
                     });
                 }
             }
@@ -118,7 +118,7 @@ export function cascadeChanges(beforeModel, previewModel, _targetSlug = null) {
         const beforeBranches = records(beforeModel, 'branches').filter(b => b && typeof b === 'object');
 
         for (const skillSlug of removedSkills) {
-            const baseSlug = `${skillSlug}-base`;
+            const baseSlug = `${safeLabel(skillSlug)}-base`;
             changes.push({
                 kind: 'forms',
                 id: baseSlug,
@@ -167,13 +167,13 @@ export function cascadeChanges(beforeModel, previewModel, _targetSlug = null) {
             const b = beforeBranches.find(r => r.slug && localId(beforeModel, r.slug) === branchId);
             if (b && b.skill && !removedSkills.has(localId(beforeModel, b.skill))) {
                 if (b.choice && (b.choice === 'a' || b.choice === 'b') && typeof b.fromForm === 'string' && b.fromForm.endsWith('-base')) {
-                    const genFormId = `${branchId}-g`;
+                    const genFormId = `${safeLabel(branchId)}-g`;
                     if (!changes.some(c => c.kind === 'forms' && c.id === genFormId)) {
                         changes.push({
                             kind: 'forms',
                             id: genFormId,
                             name: genFormId,
-                            label: `${genFormId} (Generated form)`,
+                            label: `${safeLabel(genFormId)} (Generated form)`,
                         });
                     }
                 }
@@ -197,7 +197,7 @@ function getClassProblems(model, cls, cIdx) {
         const msg = err.message || '';
         if (pathRegex.test(p)) {
             problems.push(err);
-        } else if (clsSlug && (msg.includes(`"${clsSlug}"`) || msg.includes(`'${clsSlug}'`))) {
+        } else if (clsSlug && (msg.includes(`"${safeLabel(clsSlug)}"`) || msg.includes(`'${safeLabel(clsSlug)}'`))) {
             problems.push(err);
         }
     }
@@ -342,13 +342,13 @@ export function renderClasses(ctx) {
             }
 
             const skillCount = Array.isArray(cls.skills) ? cls.skills.length : 0;
-            const meta = el(doc, 'span', `${cls.slug || ''} · ${skillCount}/3 skills`, { class: 'class-card-meta' });
+            const meta = el(doc, 'span', `${safeLabel(cls.slug || '')} · ${skillCount}/3 skills`, { class: 'class-card-meta' });
 
             let relText = '';
             if (cls.tier === 0) {
                 relText = `${childCount} ${childCount === 1 ? 'child' : 'children'}`;
             } else {
-                relText = `parent: ${cls.parent || 'none'}${childCount > 0 ? ` · ${childCount} ${childCount === 1 ? 'child' : 'children'}` : ''}`;
+                relText = `parent: ${safeLabel(cls.parent || 'none')}${childCount > 0 ? ` · ${childCount} ${childCount === 1 ? 'child' : 'children'}` : ''}`;
             }
             const relSpan = el(doc, 'span', relText, { class: 'class-card-meta' });
 
@@ -376,7 +376,7 @@ export function renderClasses(ctx) {
     const titleRow = el(doc, 'div', '', { class: 'inspector-title-row' });
     titleRow.append(
         el(doc, 'h2', cls.name || cls.slug || ''),
-        el(doc, 'span', `Tier ${cls.tier ?? 0}`, { class: 'chip' })
+        el(doc, 'span', `Tier ${safeLabel(cls.tier ?? 0)}`, { class: 'chip' })
     );
 
     const nameSlugGrid = el(doc, 'div', '', { class: 'inspector-grid' });
@@ -389,7 +389,7 @@ export function renderClasses(ctx) {
     nameInput.addEventListener('change', () => {
         const val = nameInput.value;
         if (val !== (cls.name ?? '')) {
-            if (!ctx.apply(setField(ctx.model, [...classPath, 'name'], val))) nameInput.value = cls.name ?? '';
+            if (!ctx.apply(setField(ctx.model, [...classPath, 'name'], val))) nameInput.value = safeLabel(cls.name ?? '');
         }
     });
     const nameField = field(doc, 'NAME', nameInput);
@@ -413,7 +413,7 @@ export function renderClasses(ctx) {
                     ctx.selection.id = cls.slug;
                 }
             } else {
-                slugInput.value = cls.slug ?? '';
+                slugInput.value = safeLabel(cls.slug ?? '');
                 ctx.notify((result.errors || [{ code: 'bad-id', message: 'Invalid slug' }]).map(e => `${e.code}: ${e.message}`).join('\n'));
             }
         }
@@ -421,7 +421,7 @@ export function renderClasses(ctx) {
     const slugField = field(doc, 'ID (SLUG)', slugInput);
     nameSlugGrid.append(nameField, slugField);
 
-    const fullId = `pack.${packId}/${cls.slug}`;
+    const fullId = `pack.${safeLabel(packId)}/${safeLabel(cls.slug)}`;
     const allRefs = ctx.model?.references || [];
     const inboundRefs = allRefs.filter(r => r.targetKind === 'classes' && (r.targetId === fullId || r.targetId === cls.slug));
     const refsByKind = new Map();
@@ -442,13 +442,13 @@ export function renderClasses(ctx) {
     const validParents = getValidParentCandidates(ctx.model, validClasses, cls);
     for (const cand of validParents) {
         const cSlug = localId(ctx.model, cand.slug);
-        const opt = el(doc, 'option', `${cand.name || cSlug} (${cSlug} · Tier ${cand.tier})`, { value: cSlug });
+        const opt = el(doc, 'option', `${safeLabel(cand.name || cSlug)} (${safeLabel(cSlug)} · Tier ${safeLabel(cand.tier)})`, { value: cSlug });
         if (cls.parent && localId(ctx.model, cls.parent) === cSlug) opt.selected = true;
         parentSelect.append(opt);
     }
 
     if (cls.parent && !validParents.some(c => localId(ctx.model, c.slug) === localId(ctx.model, cls.parent))) {
-        const opt = el(doc, 'option', `${cls.parent} (invalid parent)`, { value: cls.parent });
+        const opt = el(doc, 'option', `${safeLabel(cls.parent)} (invalid parent)`, { value: cls.parent });
         opt.selected = true;
         parentSelect.append(opt);
     }
@@ -456,7 +456,7 @@ export function renderClasses(ctx) {
     parentSelect.addEventListener('change', () => {
         const newParent = parentSelect.value || null;
         if (newParent !== (cls.parent || null)) {
-            if (!ctx.apply(moveClass(ctx.model, cls.slug, newParent))) parentSelect.value = localId(ctx.model, cls.parent) || '';
+            if (!ctx.apply(moveClass(ctx.model, cls.slug, newParent))) parentSelect.value = safeLabel(localId(ctx.model, cls.parent) || '');
         }
     });
     const parentField = field(doc, 'PARENT', parentSelect);
@@ -494,7 +494,7 @@ export function renderClasses(ctx) {
         let foundCurrent = false;
         for (const s of availableSkills) {
             const sSlug = localId(ctx.model, s.slug);
-            const opt = el(doc, 'option', `${s.name || sSlug} (${sSlug})`, { value: sSlug });
+            const opt = el(doc, 'option', `${safeLabel(s.name || sSlug)} (${safeLabel(sSlug)})`, { value: sSlug });
             if (sSlug === currentSlotSkill) {
                 opt.selected = true;
                 foundCurrent = true;
@@ -503,7 +503,7 @@ export function renderClasses(ctx) {
         }
 
         if (currentSlotSkill && !foundCurrent) {
-            const missingOpt = el(doc, 'option', `${currentSlotSkill} (missing)`, { value: currentSlotSkill });
+            const missingOpt = el(doc, 'option', `${safeLabel(currentSlotSkill)} (missing)`, { value: currentSlotSkill });
             missingOpt.selected = true;
             select.append(missingOpt);
         }
@@ -530,7 +530,7 @@ export function renderClasses(ctx) {
 
         if (currentSlotSkill) {
             const openSkillBtn = button(doc, 'Open', () => ctx.select('skills', currentSlotSkill), {
-                'aria-label': `Open ${currentSlotSkill} in skills`,
+                'aria-label': `Open ${safeLabel(currentSlotSkill)} in skills`,
             });
             row.append(openSkillBtn);
         }
@@ -547,7 +547,7 @@ export function renderClasses(ctx) {
 
     const actionsRow = el(doc, 'div', '', { class: 'row' });
     const childBtn = button(doc, '+ Child class', () => {
-        const slug = getUniqueClassSlug(ctx.model, `${cls.slug}-child`);
+        const slug = getUniqueClassSlug(ctx.model, `${safeLabel(cls.slug)}-child`);
         const newRecord = {
             slug,
             name: '[CLASS NAME]',
@@ -601,7 +601,7 @@ function openCascadeDialog(ctx, cls, invoker) {
         closeDialog();
     });
 
-    const title = el(ctx.doc, 'h2', `Remove ${cls.name || cls.slug}?`);
+    const title = el(ctx.doc, 'h2', `Remove ${safeLabel(cls.name || cls.slug)}?`);
     const desc = el(ctx.doc, 'p', 'Other parts of the pack use it. Removing it also removes:');
     const list = el(ctx.doc, 'ul');
     for (const c of changes) {

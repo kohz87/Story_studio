@@ -1,4 +1,4 @@
-import { el, button, field } from './dom.js';
+import { safeLabel, el, button, field } from './dom.js';
 import { setField, renameId } from './edits.js';
 import { records, identity, localId } from './records.js';
 import { referenceTarget, resolveSchema } from './form-schema.js';
@@ -32,7 +32,7 @@ export function createDefault(input) {
     if (schema.type === 'number' || schema.type === 'integer') return schema.minimum ?? 0;
     return '';
 }
-function display(value) { return value && typeof value === 'object' ? JSON.stringify(value) : String(value ?? ''); }
+function display(value) { return safeLabel(value ?? ''); }
 function matches(schema, value) {
     if (schema.oneOf) return schema.oneOf.some(s => matches(s, value));
     if (schema.const !== undefined) return Object.is(schema.const, value);
@@ -234,7 +234,7 @@ function renderReference(ctx, container, target, schema, value, path, options, t
     if (external) control.setAttribute('list', list.id);
     else { const empty = el(doc, 'option', '(none / clear)', { value: '' }); empty.selected = !current; list.append(empty); }
     for (const choice of choices) {
-        const option = el(doc, 'option', `${choice.name} (${choice.id})`, { value: choice.id });
+        const option = el(doc, 'option', `${safeLabel(choice.name)} (${safeLabel(choice.id)})`, { value: choice.id });
         option.selected = choice.id === current; list.append(option);
     }
     if (current && !choices.some(c => c.id === current)) {

@@ -1,4 +1,4 @@
-import { el, field } from '../dom.js';
+import { safeLabel, el, field } from '../dom.js';
 import { records, localId } from '../records.js';
 import { setField } from '../edits.js';
 import {
@@ -210,7 +210,7 @@ export function resolveSkillForms(model, skillSlug) {
 
     const packId = model?.document?.id || 'pack';
     const normSkill = localId(model, skillSlug);
-    const prefix = `pack.${packId}/`;
+    const prefix = `pack.${safeLabel(packId)}/`;
 
     let resolvedForms = null;
     try {
@@ -224,10 +224,10 @@ export function resolveSkillForms(model, skillSlug) {
         resolvedForms = null;
     }
 
-    const baseId = `${prefix}${normSkill}-base`;
+    const baseId = `${prefix}${safeLabel(normSkill)}-base`;
     const baseFormObj = {
         id: baseId,
-        skill: `${prefix}${normSkill}`,
+        skill: `${prefix}${safeLabel(normSkill)}`,
         name: skill.name || normSkill,
         note: skill.note ?? '',
         step: 0,
@@ -271,7 +271,7 @@ export function resolveSkillForms(model, skillSlug) {
     const baseNode = {
         key: 'base',
         id: baseId,
-        localId: `${normSkill}-base`,
+        localId: `${safeLabel(normSkill)}-base`,
         label: skill.name || normSkill,
         step: 0,
         stepLabel: 'base',
@@ -296,7 +296,7 @@ export function resolveSkillForms(model, skillSlug) {
     const step1Keys = ['a', 'g', 'b'];
     for (const key of step1Keys) {
         const id = `${baseId}-${key}`;
-        const local = `${normSkill}-base-${key}`;
+        const local = `${safeLabel(normSkill)}-base-${key}`;
         const gen = key === 'g';
         const step1Budget = budgetFor(3, 1);
 
@@ -310,7 +310,7 @@ export function resolveSkillForms(model, skillSlug) {
                     gForm = {
                         id,
                         skill: baseFormObj.skill,
-                        name: `${baseNode.label}+`,
+                        name: `${safeLabel(baseNode.label)}+`,
                         step: 1,
                         origin: 'generated',
                         fromForm: baseId,
@@ -328,7 +328,7 @@ export function resolveSkillForms(model, skillSlug) {
                 key: 'g',
                 id,
                 localId: local,
-                label: gForm.name || `${baseNode.label}+`,
+                label: gForm.name || `${safeLabel(baseNode.label)}+`,
                 step: 1,
                 stepLabel: 'step 1',
                 origin: 'generated',
@@ -345,7 +345,7 @@ export function resolveSkillForms(model, skillSlug) {
                 form: gForm,
             });
         } else {
-            const bItem = findBranch(`${normSkill}-base`, key, 1);
+            const bItem = findBranch(`${safeLabel(normSkill)}-base`, key, 1);
             const branch = bItem?.branch;
             const branchIdx = bItem?.idx ?? -1;
             let form = resolvedForms?.[id];
@@ -421,7 +421,7 @@ export function resolveSkillForms(model, skillSlug) {
         for (const cKey of ['a', 'g', 'b']) {
             const nodeKey = `${pKey}-${cKey}`;
             const id = `${baseId}-${nodeKey}`;
-            const local = `${normSkill}-base-${nodeKey}`;
+            const local = `${safeLabel(normSkill)}-base-${nodeKey}`;
             const gen = cKey === 'g';
 
             if (gen) {
@@ -435,7 +435,7 @@ export function resolveSkillForms(model, skillSlug) {
                             gForm = {
                                 id,
                                 skill: baseFormObj.skill,
-                                name: `${parentNode.label} II`,
+                                name: `${safeLabel(parentNode.label)} II`,
                                 step: 2,
                                 origin: 'generated',
                                 fromForm: parentNode.id,
@@ -451,7 +451,7 @@ export function resolveSkillForms(model, skillSlug) {
                         gForm = {
                             id,
                             skill: baseFormObj.skill,
-                            name: `${parentNode?.label || nodeKey} II`,
+                            name: `${safeLabel(parentNode?.label || nodeKey)} II`,
                             step: 2,
                             origin: 'generated',
                             fromForm: parentNode?.id,
@@ -470,7 +470,7 @@ export function resolveSkillForms(model, skillSlug) {
                     key: nodeKey,
                     id,
                     localId: local,
-                    label: gForm?.name || `${parentNode?.label || nodeKey} II`,
+                    label: gForm?.name || `${safeLabel(parentNode?.label || nodeKey)} II`,
                     step: 2,
                     stepLabel: 'step 2',
                     origin: 'generated',
@@ -488,7 +488,7 @@ export function resolveSkillForms(model, skillSlug) {
                 });
             } else {
                 // Written child of step 1 parent (contract wins: g-a, g-b written and editable!)
-                const bItem = findBranch(`${normSkill}-base-${pKey}`, cKey, 2);
+                const bItem = findBranch(`${safeLabel(normSkill)}-base-${pKey}`, cKey, 2);
                 const branch = bItem?.branch;
                 const branchIdx = bItem?.idx ?? -1;
                 let form = resolvedForms?.[id];
@@ -676,8 +676,8 @@ function renderLowerTierScreen(ctx, screen, skill, sIdx, ownerClass, tabSkills) 
     const section = el(doc, 'section', '', { 'aria-label': 'Lower tier skills' });
     const titleRow = el(doc, 'div', '', { class: 'skills-title-row' });
     titleRow.append(
-        el(doc, 'h1', `${ownerClass?.name || ownerClass?.slug || 'Starter'} · Skills`),
-        el(doc, 'span', `Tier ${tier} · simple list (starter/intermediate skills have no branching pathways)`, { class: 'skills-subtitle' })
+        el(doc, 'h1', `${safeLabel(ownerClass?.name || ownerClass?.slug || 'Starter')} · Skills`),
+        el(doc, 'span', `Tier ${safeLabel(tier)} · simple list (starter/intermediate skills have no branching pathways)`, { class: 'skills-subtitle' })
     );
     section.append(titleRow);
 
@@ -698,7 +698,7 @@ function renderLowerTierScreen(ctx, screen, skill, sIdx, ownerClass, tabSkills) 
         const headerRow = el(doc, 'div', '', { class: 'lower-tier-card-header' });
         headerRow.append(
             el(doc, 'span', ts.name, { class: 'lower-tier-card-name' }),
-            el(doc, 'span', `Tier ${tier}`, { class: 'chip' })
+            el(doc, 'span', `Tier ${safeLabel(tier)}`, { class: 'chip' })
         );
 
         const type = itemSkill?.base?.type || SCHEMA_TYPES[0];
@@ -709,7 +709,7 @@ function renderLowerTierScreen(ctx, screen, skill, sIdx, ownerClass, tabSkills) 
         const score = scoreResult.ok ? scoreResult.score : 'unavailable';
         const budget = budgetFor(tier, 0);
 
-        const metaRow = el(doc, 'div', `${ts.slug} · ${type} · ${stat} · MP: ${costMp}, SP: ${costSp} · Power: ${score} / ${budget}`, {
+        const metaRow = el(doc, 'div', `${safeLabel(ts.slug)} · ${safeLabel(type)} · ${safeLabel(stat)} · MP: ${safeLabel(costMp)}, SP: ${safeLabel(costSp)} · Power: ${score} / ${budget}`, {
             class: scoreResult.ok ? 'lower-tier-card-meta' : 'lower-tier-card-meta warn',
         });
 
@@ -735,7 +735,7 @@ function renderTier3Screen(ctx, screen, skill, sIdx, _ownerClass) {
 
     const titleRow = el(doc, 'div', '', { class: 'skills-title-row' });
     titleRow.append(
-        el(doc, 'h1', `${skill.name || normSkill} · paths`),
+        el(doc, 'h1', `${safeLabel(skill.name || normSkill)} · paths`),
         el(doc, 'span', '12 forms: 8 you write, 4 Story Block makes', { class: 'skills-subtitle' })
     );
 
@@ -821,7 +821,7 @@ function renderTier3Screen(ctx, screen, skill, sIdx, _ownerClass) {
     // Node Buttons
     for (const node of nodes) {
         const isSelected = node.key === selectedNode.key;
-        const ariaLabel = `${node.label}${node.gen ? ' (generated)' : ''}${node.previewUnavailable ? ', preview unavailable' : (node.isOverBudget ? ', over budget' : '')}, power ${node.previewUnavailable ? 'unavailable' : node.powerScore} of ${node.budget}`;
+        const ariaLabel = `${safeLabel(node.label)}${node.gen ? ' (generated)' : ''}${node.previewUnavailable ? ', preview unavailable' : (node.isOverBudget ? ', over budget' : '')}, power ${node.previewUnavailable ? 'unavailable' : node.powerScore} of ${safeLabel(node.budget)}`;
         const btn = el(doc, 'button', '', {
             type: 'button',
             class: `path-node ${node.gen ? 'path-node-gen' : 'path-node-written'}`,
@@ -865,7 +865,7 @@ function renderTier3Screen(ctx, screen, skill, sIdx, _ownerClass) {
         btn.append(el(doc, 'span', node.label, { class: 'path-node-label' }));
 
         // Visible power budget indication on every node
-        const badgeText = node.previewUnavailable ? `—/${node.budget}` : `${node.powerScore}/${node.budget}`;
+        const badgeText = node.previewUnavailable ? `—/${safeLabel(node.budget)}` : `${safeLabel(node.powerScore)}/${safeLabel(node.budget)}`;
         const badgeClass = (node.previewUnavailable || node.isOverBudget) ? 'path-node-budget warn' : 'path-node-budget good';
         btn.append(el(doc, 'span', badgeText, {
             class: badgeClass,
@@ -881,7 +881,7 @@ function renderTier3Screen(ctx, screen, skill, sIdx, _ownerClass) {
             'aria-valuenow': node.previewUnavailable ? '0' : String(Math.min(node.powerScore || 0, node.budget)),
             'aria-valuemin': '0',
             'aria-valuemax': String(node.budget),
-            'aria-valuetext': node.previewUnavailable ? 'Preview unavailable' : `${node.powerScore || 0} of ${node.budget}`,
+            'aria-valuetext': node.previewUnavailable ? 'Preview unavailable' : `${node.powerScore || 0} of ${safeLabel(node.budget)}`,
         });
         miniTrack.append(el(doc, 'span', '', {
             class: `node-budget-bar ${(node.previewUnavailable || node.isOverBudget) ? 'warn' : 'good'}`,
@@ -918,7 +918,7 @@ function renderFormInspector(ctx, node, skill, sIdx) {
         el(doc, 'span', node.kind, { class: node.gen ? 'chip chip-gen' : 'chip' })
     );
 
-    const prov = el(doc, 'div', `${node.localId} · from ${node.fromName}`, {
+    const prov = el(doc, 'div', `${safeLabel(node.localId)} · from ${safeLabel(node.fromName)}`, {
         class: 'inspector-provenance muted mono',
     });
 
@@ -938,7 +938,7 @@ function renderFormInspector(ctx, node, skill, sIdx) {
         const errorBox = el(doc, 'div', '', { role: 'status', class: 'warning preview-error' });
         errorBox.append(
             el(doc, 'span', 'preview-error', { class: 'mono' }),
-            doc.createTextNode(`: Preview unavailable — ${node.error || node.form?.error || 'malformed transforms'}`)
+            doc.createTextNode(`: Preview unavailable — ${safeLabel(node.error || node.form?.error || 'malformed transforms')}`)
         );
         ctx.inspector.append(errorBox);
     }
@@ -947,7 +947,7 @@ function renderFormInspector(ctx, node, skill, sIdx) {
     const budgetSection = el(doc, 'div', '', { class: 'budget-section' });
     const budgetHeader = el(doc, 'div', '', { class: 'budget-header' });
 
-    let ratioText = `${node.powerScore} / ${node.budget}`;
+    let ratioText = `${safeLabel(node.powerScore)} / ${safeLabel(node.budget)}`;
     let ratioClass = node.isOverBudget ? 'budget-ratio warn' : 'budget-ratio good';
     if (node.previewUnavailable) {
         ratioText = 'Preview unavailable';
@@ -967,7 +967,7 @@ function renderFormInspector(ctx, node, skill, sIdx) {
         'aria-valuenow': node.previewUnavailable ? '0' : String(Math.min(node.powerScore || 0, node.budget)),
         'aria-valuemin': '0',
         'aria-valuemax': String(node.budget),
-        'aria-valuetext': node.previewUnavailable ? 'Preview unavailable' : `${node.powerScore || 0} of ${node.budget}`,
+        'aria-valuetext': node.previewUnavailable ? 'Preview unavailable' : `${node.powerScore || 0} of ${safeLabel(node.budget)}`,
     });
     track.append(el(doc, 'div', '', {
         class: (node.previewUnavailable || node.isOverBudget) ? 'budget-bar warn' : 'budget-bar good',
@@ -1004,7 +1004,7 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
         const val = nameInput.value;
         if (val !== (skill.name ?? '')) {
             if (!ctx.apply(setField(ctx.model, [...skillPath, 'name'], val))) {
-                nameInput.value = skill.name ?? '';
+                nameInput.value = safeLabel(skill.name ?? '');
             }
         }
     });
@@ -1019,7 +1019,7 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
         type: 'number',
         min: '0',
         max: '999',
-        value: String(costMp),
+        value: safeLabel(costMp),
         'data-path': JSON.stringify([...skillPath, 'base', 'cost', 'mp']),
     });
     mpInput.addEventListener('change', () => {
@@ -1030,7 +1030,7 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
                 model: ctx.model,
                 errors: [{ code: 'bad-value', path: [...skillPath, 'base', 'cost', 'mp'].join('.'), message: parsed.error }],
             });
-            mpInput.value = String(costMp);
+            mpInput.value = safeLabel(costMp);
             return;
         }
         const curCost = typeof skill.base?.cost === 'object' && skill.base.cost !== null ? skill.base.cost : { mp: 0, sp: 0, cooldown: 0 };
@@ -1043,7 +1043,7 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
         type: 'number',
         min: '0',
         max: '999',
-        value: String(costSp),
+        value: safeLabel(costSp),
         'data-path': JSON.stringify([...skillPath, 'base', 'cost', 'sp']),
     });
     spInput.addEventListener('change', () => {
@@ -1054,7 +1054,7 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
                 model: ctx.model,
                 errors: [{ code: 'bad-value', path: [...skillPath, 'base', 'cost', 'sp'].join('.'), message: parsed.error }],
             });
-            spInput.value = String(costSp);
+            spInput.value = safeLabel(costSp);
             return;
         }
         const curCost = typeof skill.base?.cost === 'object' && skill.base.cost !== null ? skill.base.cost : { mp: 0, sp: 0, cooldown: 0 };
@@ -1143,7 +1143,7 @@ function renderBranchControls(ctx, node) {
         const val = nameInput.value;
         if (val !== (branch.name ?? '')) {
             if (!ctx.apply(setField(ctx.model, [...branchPath, 'name'], val))) {
-                nameInput.value = branch.name ?? '';
+                nameInput.value = safeLabel(branch.name ?? '');
             }
         }
     });
@@ -1163,7 +1163,7 @@ function renderBranchControls(ctx, node) {
         type: 'number',
         min: '0',
         max: '999',
-        value: String(curCostVal),
+        value: safeLabel(curCostVal),
         'aria-label': 'Cost',
         'data-path': JSON.stringify([...branchPath, 'transforms']),
     });
@@ -1175,7 +1175,7 @@ function renderBranchControls(ctx, node) {
                 model: ctx.model,
                 errors: [{ code: 'bad-value', path: [...branchPath, 'transforms'].join('.'), message: parsed.error }],
             });
-            costInput.value = String(curCostVal);
+            costInput.value = safeLabel(curCostVal);
             return;
         }
         const val = parsed.value;
@@ -1198,7 +1198,7 @@ function renderBranchControls(ctx, node) {
         type: 'number',
         min: '1',
         max: '1000',
-        value: String(curPower),
+        value: safeLabel(curPower),
         'aria-label': 'Power',
         'data-path': JSON.stringify([...branchPath, 'transforms']),
     });
@@ -1210,7 +1210,7 @@ function renderBranchControls(ctx, node) {
                 model: ctx.model,
                 errors: [{ code: 'bad-value', path: [...branchPath, 'transforms'].join('.'), message: parsed.error }],
             });
-            powerInput.value = String(curPower);
+            powerInput.value = safeLabel(curPower);
             return;
         }
         const val = parsed.value;
@@ -1228,7 +1228,7 @@ function renderBranchControls(ctx, node) {
         'data-path': JSON.stringify([...branchPath, 'transforms']),
     });
     for (const elem of SCHEMA_ELEMENTS) {
-        const opt = el(doc, 'option', `${primaryEffect.op || 'damage'} · ${elem}`, { value: elem });
+        const opt = el(doc, 'option', `${safeLabel(primaryEffect.op || 'damage')} · ${elem}`, { value: elem });
         if (elem === curElement) opt.selected = true;
         effectSelect.append(opt);
     }
@@ -1272,10 +1272,10 @@ function renderBaseSkillInspector(ctx, skill, sIdx, tier, step, stepLabel) {
     const titleRow = el(doc, 'div', '', { class: 'inspector-title-row' });
     titleRow.append(
         el(doc, 'h2', skill.name || normSkill),
-        el(doc, 'span', `Tier ${tier} Base Skill`, { class: 'chip' })
+        el(doc, 'span', `Tier ${safeLabel(tier)} Base Skill`, { class: 'chip' })
     );
 
-    const prov = el(doc, 'div', `${normSkill}-base · from —`, {
+    const prov = el(doc, 'div', `${safeLabel(normSkill)}-base · from —`, {
         class: 'inspector-provenance muted mono',
     });
 
@@ -1290,7 +1290,7 @@ function renderBaseSkillInspector(ctx, skill, sIdx, tier, step, stepLabel) {
     const budgetSection = el(doc, 'div', '', { class: 'budget-section' });
     const budgetHeader = el(doc, 'div', '', { class: 'budget-header' });
     budgetHeader.append(
-        el(doc, 'span', `POWER BUDGET · TIER ${tier}`),
+        el(doc, 'span', `POWER BUDGET · TIER ${safeLabel(tier)}`),
         el(doc, 'span', scoreResult.ok ? `${score} / ${budget}` : 'Preview unavailable', {
             class: isOverBudget || !scoreResult.ok ? 'budget-ratio warn' : 'budget-ratio good',
         })

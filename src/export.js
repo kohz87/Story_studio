@@ -1,3 +1,4 @@
+import { safeLabel } from './dom.js';
 import { exportPack } from './model.js';
 
 // The shared engine owns the downloaded bytes, including the final newline.
@@ -10,7 +11,7 @@ export function downloadPack(ctx, filename) {
         url = ctx.win.URL.createObjectURL(blob);
         link = ctx.doc.createElement('a');
         link.href = url;
-        const safeName = String(filename || 'pack.json').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-');
+        const safeName = safeLabel(filename || 'pack.json').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-');
         link.download = safeName.endsWith('.json') ? safeName : `${safeName}.json`;
         link.hidden = true;
         ctx.root.append(link);
