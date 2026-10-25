@@ -3,101 +3,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { smallRulesPack } from './fixtures/smallRulesPack.js';
+
 import { openPack, exportPack } from '../src/model.js';
-import { add, renameId, remove, moveClass, setField } from '../src/edits.js';
-
-/** Local smallRulesPack helper matching SPEC §10 golden seed tree. */
-function smallRulesPack(options = {}) {
-    const classes = [];
-    const skills = [];
-    const branches = [];
-
-    for (let tier = 0; tier < 4; tier++) {
-        const names = [0, 1, 2].map(n => `s${tier}${n}`);
-        classes.push({
-            slug: `c${tier}`,
-            name: `Class ${tier}`,
-            tier,
-            parent: tier ? `c${tier - 1}` : null,
-            skills: names,
-        });
-
-        for (const slug of names) {
-            skills.push({
-                slug,
-                name: slug,
-                base: {
-                    type: 'physical',
-                    stat: 'STR',
-                    unit: null,
-                    cost: { mp: 0, sp: 1, cooldown: 0 },
-                    effects: [{
-                        op: 'damage',
-                        target: 'one',
-                        power: 20 * (tier + 1),
-                        element: 'none',
-                        damageType: 'physical',
-                    }],
-                },
-            });
-
-            if (tier !== 3) continue;
-
-            const base = `${slug}-base`;
-            for (const parent of [base, ...['g', 'a', 'b'].map(c => `${base}-${c}`)]) {
-                const step = parent === base ? 1 : 2;
-                for (const choice of ['a', 'b']) {
-                    const transforms = step === 1
-                        ? [{ op: 'set-element', at: 0, value: choice === 'a' ? 'fire' : 'ice' }]
-                        : [choice === 'a' ? { op: 'set-target', at: 0, value: 'all' } : { op: 'set-element', at: 0, value: 'lightning' }];
-                    branches.push({
-                        slug: `${parent}-${choice}`,
-                        name: `${parent}-${choice}`,
-                        skill: slug,
-                        fromForm: parent,
-                        step,
-                        choice,
-                        transforms,
-                    });
-                }
-            }
-        }
-    }
-
-    return {
-        id: options.id ?? 'fixture',
-        version: options.version ?? '2.0.0',
-        name: options.name ?? 'Fixture',
-        requires: options.requires ?? { storyBlock: '^2', capabilities: ['rb-rules-v2'] },
-        content: {
-            rules: [{
-                slug: 'rules',
-                name: 'Fixture rules',
-                schema: 2,
-                classes: options.classes ?? classes,
-                skills: options.skills ?? skills,
-                branches: options.branches ?? branches,
-                itemRules: options.itemRules ?? [],
-                trainers: options.trainers ?? [],
-                statLabels: options.statLabels ?? {},
-            }],
-            items: options.items ?? [],
-            creatures: options.creatures ?? [],
-            shops: options.shops ?? [],
-            recipes: options.recipes ?? [],
-            quests: options.quests ?? [],
-            places: options.places ?? [
-                { slug: 'haven', name: 'Haven', x: 0, y: 0 },
-                { slug: 'mill', name: 'Mill', x: 1, y: 0 },
-            ],
-            routes: options.routes ?? [],
-            events: options.events ?? [],
-            races: options.races ?? [],
-            talents: options.talents ?? [],
-            presets: options.presets ?? [],
-        },
-    };
-}
+import { add, addClassSkill, renameId, remove, moveClass, setField } from '../src/edits.js';
 
 test('add operation is pure and appends record to kind collection', () => {
     const pack = smallRulesPack();
@@ -1248,7 +1157,7 @@ test('renameId allows 52-character skill slug and rejects 53-character skill slu
     assert.equal(res53.errors[0].code, 'numeric-range');
 });
 
-test('renameId refuses collision against another content kind and derived node, and accepts same-pack qualified input', () => {
+test('renameId allows host namespace sharing, refuses derived nodes, and accepts same-pack qualified input', () => {
     const pack = smallRulesPack({
         items: [{ slug: 'iron-bar', name: 'Iron Bar', kind: 'material', rarity: 'common', value: 10 }],
         itemRules: [{ def: 'iron-bar', allowedSlots: [], hands: 0, requires: {}, weight: 1 }],
@@ -1256,10 +1165,12 @@ test('renameId refuses collision against another content kind and derived node, 
     const model = openPack(pack);
     assert.equal(model.validation.ok, true, JSON.stringify(model.validation.errors));
 
-    // Collides with existing item iron-bar
+    // Host items have a separate namespace from rules classes.
     const kindColl = renameId(model, 'classes', 'c0', 'iron-bar');
-    assert.equal(kindColl.ok, false);
-    assert.equal(kindColl.errors[0].code, 'dup-id');
+    assert.equal(kindColl.ok, true);
+    assert.equal(kindColl.model.validation.ok, true);
+    assert.equal(kindColl.model.document.content.items[0].slug, 'iron-bar');
+    assert.equal(kindColl.model.document.content.rules[0].classes[1].parent, 'iron-bar');
 
     // Collides with derived node s30-base
     const derivedColl = renameId(model, 'classes', 'c0', 's30-base');
@@ -1325,6 +1236,105 @@ test('renameId on itemRules is refused with identity-field error', () => {
     const res = renameId(model, 'itemRules', 'potion', 'elixir');
     assert.equal(res.ok, false);
     assert.equal(res.errors[0].code, 'identity-field');
+});
+
+test('class rename accepts place slug with refs and undo, while shared rules and derived collisions are refused', () => {
+    const pack = smallRulesPack();
+    const model = openPack(pack);
+    assert.equal(model.validation.ok, true);
+
+    const dupClass = renameId(model, 'classes', 'c0', 'c1');
+    assert.equal(dupClass.ok, false);
+    assert.equal(dupClass.errors[0].code, 'dup-id');
+
+    const collSkill = renameId(model, 'classes', 'c0', 's00');
+    assert.equal(collSkill.ok, false);
+    assert.equal(collSkill.errors[0].code, 'dup-id');
+
+    const collRules = renameId(model, 'classes', 'c0', 'rules');
+    assert.equal(collRules.ok, false);
+    assert.equal(collRules.errors[0].code, 'dup-id');
+
+    const collDerived = renameId(model, 'classes', 'c0', 's30-base');
+    assert.equal(collDerived.ok, false);
+    assert.equal(collDerived.errors[0].code, 'dup-id');
+
+    assert.equal(add(model, 'classes', { ...pack.content.rules[0].classes[0], slug: 'haven' }).ok, true);
+    assert.equal(add(model, 'classes', { ...pack.content.rules[0].classes[0], slug: 's00' }).errors[0].code, 'dup-id');
+
+    const resRaw = renameId(model, 'classes', 'c0', 'haven');
+    assert.equal(resRaw.ok, true);
+    assert.equal(resRaw.model.validation.ok, true, JSON.stringify(resRaw.model.validation.errors));
+    assert.equal(resRaw.model.document.content.rules[0].classes[0].slug, 'haven');
+    assert.equal(resRaw.model.document.content.rules[0].classes[1].parent, 'haven');
+
+    const resQual = renameId(model, 'classes', 'c0', 'pack.fixture/haven');
+    assert.equal(resQual.ok, true);
+    assert.equal(resQual.model.validation.ok, true, JSON.stringify(resQual.model.validation.errors));
+    assert.equal(resQual.model.document.content.rules[0].classes[0].slug, 'haven');
+    assert.equal(resQual.model.document.content.rules[0].classes[1].parent, 'haven');
+
+    const reverted = resRaw.undo();
+    assert.equal(reverted, model);
+    assert.equal(reverted.document.content.rules[0].classes[0].slug, 'c0');
+    assert.equal(reverted.document.content.rules[0].classes[1].parent, 'c0');
+});
+
+test('advanced skill rename accepts place slug updating class refs and branch graph with undo, while shared collisions are refused', () => {
+    const pack = smallRulesPack();
+    const model = openPack(pack);
+    assert.equal(model.validation.ok, true);
+
+    const collClass = renameId(model, 'skills', 's30', 'c0');
+    assert.equal(collClass.ok, false);
+    assert.equal(collClass.errors[0].code, 'dup-id');
+
+    const collRules = renameId(model, 'skills', 's30', 'rules');
+    assert.equal(collRules.ok, false);
+    assert.equal(collRules.errors[0].code, 'dup-id');
+
+    const collOtherDerived = renameId(model, 'skills', 's30', 's00-base');
+    assert.equal(collOtherDerived.ok, false);
+    assert.equal(collOtherDerived.errors[0].code, 'dup-id');
+
+    assert.equal(add(model, 'skills', { ...pack.content.rules[0].skills[9], slug: 'haven' }).ok, true);
+    assert.equal(add(model, 'skills', { ...pack.content.rules[0].skills[9], slug: 'c0' }).errors[0].code, 'dup-id');
+    const qualified = renameId(model, 'skills', 'pack.fixture/s30', 'pack.fixture/haven');
+    assert.equal(qualified.ok, true);
+    assert.equal(qualified.model.validation.ok, true);
+    assert.equal(qualified.undo(), model);
+
+    const collisionPack = smallRulesPack();
+    collisionPack.content.places.push({ slug: 'haven-base', name: 'Reserved collision', x: 2, y: 0 });
+    const collisionModel = openPack(collisionPack);
+    const collision = renameId(collisionModel, 'skills', 's30', 'haven');
+    assert.equal(collision.ok, false);
+    assert.equal(collision.model, collisionModel);
+    assert.equal(collision.errors[0].code, 'dup-id');
+
+    const res = renameId(model, 'skills', 's30', 'haven');
+    assert.equal(res.ok, true);
+    assert.equal(res.model.validation.ok, true, JSON.stringify(res.model.validation.errors));
+
+    const rules = res.model.document.content.rules[0];
+    assert.ok(rules.skills.some(s => s.slug === 'haven'));
+    assert.ok(!rules.skills.some(s => s.slug === 's30'));
+
+    const c3 = rules.classes.find(c => c.slug === 'c3');
+    assert.ok(c3.skills.includes('haven'));
+    assert.ok(!c3.skills.includes('s30'));
+
+    const havenBranches = rules.branches.filter(b => b.skill === 'haven');
+    assert.ok(havenBranches.length > 0);
+    assert.ok(havenBranches.every(b => b.slug.startsWith('haven-base-')));
+    assert.ok(havenBranches.every(b => b.fromForm.startsWith('haven-base')));
+
+    const reverted = res.undo();
+    assert.equal(reverted, model);
+    const revRules = reverted.document.content.rules[0];
+    assert.ok(revRules.skills.some(s => s.slug === 's30'));
+    const revC3 = revRules.classes.find(c => c.slug === 'c3');
+    assert.ok(revC3.skills.includes('s30'));
 });
 
 test('add written branch repairs graph, restores golden export/hash, supports empty lists, and undos cleanly', () => {
@@ -1534,4 +1544,23 @@ test('numeric-string paths enforce identity guards for records, collections and 
     assert.equal(exportPack(strings.model), exportPack(numeric.model));
     assert.equal(strings.model.rulesHash, numeric.model.rulesHash);
     assert.equal(strings.model.packHash, numeric.model.packHash);
+});
+
+
+test('addClassSkill creates lower-tier skills without branches and refuses full or missing owners', () => {
+    const original = openPack(smallRulesPack());
+    assert.equal(addClassSkill(original, 'missing').ok, false);
+    const full = addClassSkill(original, 'c0');
+    assert.equal(full.ok, false); assert.equal(full.model, original);
+    assert.equal(full.errors[0].code, 'class-skills');
+    const root = add(original, 'classes', { slug: 'new-skill', name: '[YOUR CLASS NAME]', tier: 0, parent: null, skills: [] }).model;
+    const created = addClassSkill(root, 'pack.fixture/new-skill');
+    assert.equal(created.ok, true);
+    assert.equal(created.undo(), root);
+    assert.equal(created.model.document.content.rules[0].branches.length, root.document.content.rules[0].branches.length);
+    const skill = created.model.document.content.rules[0].skills.at(-1);
+    assert.equal(skill.slug, 'new-skill-1', 'New skills respect the shared rules namespace');
+    assert.equal(skill.name, '[YOUR SKILL NAME]');
+    assert.deepEqual(created.model.document.content.rules[0].classes.at(-1).skills, [skill.slug]);
+    assert.deepEqual(root.document.content.rules[0].classes.at(-1).skills, [], 'The original snapshot is untouched');
 });

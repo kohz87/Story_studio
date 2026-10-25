@@ -1,9 +1,11 @@
 // Pack edit operations: add, renameId, remove, moveClass, and setField (pure).
 
 import { openPack } from './model.js';
-import { RULES_V2_LIMITS } from '../vendor/story-block/src/v2/packs/rules-v2.js';
+import { schemaForKind, validateChange } from './form-schema.js';
+import { RULES_V2_LIMITS, RULES_V2_PROGRESSION, rulesV2Schema } from '../vendor/story-block/src/v2/packs/rules-v2.js';
 
 const RULES_KINDS = new Set(['classes', 'skills', 'branches', 'itemRules', 'trainers']);
+const SHARED_RULES_KINDS = new Set(['classes', 'skills', 'branches', 'trainers']);
 const SB_KINDS = new Set([
     'items', 'creatures', 'quests', 'shops', 'recipes',
     'places', 'events', 'routes', 'races', 'talents',
@@ -11,9 +13,14 @@ const SB_KINDS = new Set([
 ]);
 const ALL_KINDS = new Set([...RULES_KINDS, ...SB_KINDS]);
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const RECORD_ID_REGEX = /^[a-z][a-z0-9]*_[0-9a-z]{8}$/;
-const DEF_ID_REGEX = /^[a-z0-9]+(?:[._-][a-z0-9]+)*\/[a-z0-9]+(?:[_-][a-z0-9]+)*$/;
+const SLUG_REGEX = new RegExp(rulesV2Schema.$defs.slug.pattern);
+const ID_REGEX = new RegExp(rulesV2Schema.$defs.id.pattern);
+const MAX_SLUG = RULES_V2_LIMITS.slug;
+const MAX_TIER = Math.max(...RULES_V2_PROGRESSION.tiers);
+const WRITTEN_CHOICES = RULES_V2_PROGRESSION.writtenChoices;
+const GENERATED_CHOICE = RULES_V2_PROGRESSION.generatedChoice;
+const PATHWAY_STEPS = RULES_V2_PROGRESSION.pathwaySteps;
+const MAX_SKILL_SLUG = 52; // Awaiting a dedicated upstream limit export.
 
 const MAX_DEPTH = RULES_V2_LIMITS?.depth ?? 16;
 const MAX_ARRAY = RULES_V2_LIMITS?.array ?? 1000;
@@ -42,15 +49,39 @@ function isForeignId(id, packId) {
     return id.startsWith('pack.') && !id.startsWith(`pack.${packId}/`);
 }
 
-/** Validates raw slug format (1..64 chars, lowercase alphanumeric with single hyphens). */
+/** Validates raw slug format (1..max chars, lowercase alphanumeric with single hyphens). */
 function isValidRawSlug(slug) {
-    return typeof slug === 'string' && SLUG_REGEX.test(slug) && slug.length >= 1 && slug.length <= 64;
+    return typeof slug === 'string' && SLUG_REGEX.test(slug) && slug.length >= 1 && slug.length <= MAX_SLUG;
 }
 
 /** Validates identifier format (slug, record id, or def id). */
 function isValidIdentifier(id) {
     if (typeof id !== 'string' || !id) return false;
-    return isValidRawSlug(id) || RECORD_ID_REGEX.test(id) || DEF_ID_REGEX.test(id);
+    return isValidRawSlug(id) || ID_REGEX.test(id);
+}
+
+/** Returns all identities across shared rules collections (classes, skills, branches, trainers, and rule sets). */
+function getSharedRulesIdentities(document, packId, excludeKind = null, excludeNormId = null) {
+    const ids = new Set();
+    const rulesList = Array.isArray(document?.content?.rules) ? document.content.rules : [];
+    for (const r of rulesList) {
+        if (!r || typeof r !== 'object') continue;
+        const rSlug = normalizeId(r.slug || r.id, packId);
+        if (rSlug) ids.add(rSlug);
+        for (const rk of SHARED_RULES_KINDS) {
+            const list = r[rk];
+            if (!Array.isArray(list)) continue;
+            for (const item of list) {
+                if (!item || typeof item !== 'object') continue;
+                const itemId = normalizeId(getRecordIdentity(rk, item), packId);
+                if (itemId) {
+                    if (excludeKind === rk && itemId === excludeNormId) continue;
+                    ids.add(itemId);
+                }
+            }
+        }
+    }
+    return ids;
 }
 
 /**
@@ -255,19 +286,22 @@ function setValueAtPath(doc, path, value) {
     return true;
 }
 
-/** Computes all derived and base form slugs and full IDs for a skill. */
+/** Computes base and pathway form slugs using the shared progression structure. */
 function getSkillDerivedFormSlugs(skillSlug, isAdvanced = true) {
-    const slugs = new Set();
     const base = `${skillSlug}-base`;
-    slugs.add(base);
-    if (isAdvanced) {
-        const s1 = [`${base}-g`, `${base}-a`, `${base}-b`];
-        for (const p of s1) {
-            slugs.add(p);
-            for (const ch of ['g', 'a', 'b']) {
-                slugs.add(`${p}-${ch}`);
+    const slugs = new Set([base]);
+    const choices = [GENERATED_CHOICE, ...WRITTEN_CHOICES];
+    let parents = [base];
+    for (let step = 0; isAdvanced && step < PATHWAY_STEPS; step++) {
+        const children = [];
+        for (const parent of parents) {
+            for (const choice of choices) {
+                const slug = `${parent}-${choice}`;
+                slugs.add(slug);
+                children.push(slug);
             }
         }
+        parents = children;
     }
     return slugs;
 }
@@ -306,7 +340,7 @@ function getAllReservedFormSlugs(doc, packId, excludeSkill = null) {
         if (!normSkill || (excludeSkill && normSkill === excludeSkill)) continue;
         let isAdv = true;
         const owningClass = classes.find(c => c && typeof c === 'object' && Array.isArray(c.skills) && c.skills.some(s => typeof s === 'string' && normalizeId(s, packId) === normSkill));
-        if (owningClass && owningClass.tier < 3) {
+        if (owningClass && owningClass.tier < MAX_TIER) {
             isAdv = false;
         }
         for (const s of getSkillDerivedFormSlugs(normSkill, isAdv)) {
@@ -453,14 +487,25 @@ export function add(model, kind, record) {
     }
 
     const normId = normalizeId(rawId, packId);
-    const existingList = readKindList(model.document, kind) || [];
-    const isDup = existingList.some(item => item && typeof item === 'object' && normalizeId(getRecordIdentity(kind, item), packId) === normId);
-    if (isDup) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'dup-id', path: kind, message: `Duplicate ${kind} id: ${rawId}` }],
-        };
+    if (SHARED_RULES_KINDS.has(kind)) {
+        const sharedRulesIds = getSharedRulesIdentities(model.document, packId);
+        if (sharedRulesIds.has(normId)) {
+            return {
+                ok: false,
+                model,
+                errors: [{ code: 'dup-id', path: kind, message: `Duplicate ${kind} id: ${rawId}` }],
+            };
+        }
+    } else {
+        const existingList = readKindList(model.document, kind) || [];
+        const isDup = existingList.some(item => item && typeof item === 'object' && normalizeId(getRecordIdentity(kind, item), packId) === normId);
+        if (isDup) {
+            return {
+                ok: false,
+                model,
+                errors: [{ code: 'dup-id', path: kind, message: `Duplicate ${kind} id: ${rawId}` }],
+            };
+        }
     }
 
     let isLegitWrittenBranch = false;
@@ -480,7 +525,7 @@ export function add(model, kind, record) {
                 }],
             };
         }
-        if (normSkill && fromFormSlug && (fromFormSlug === `${normSkill}-base` || fromFormSlug.startsWith(`${normSkill}-base-`)) && (choice === 'a' || choice === 'b') && !normId.endsWith('-g') && !normId.endsWith('-base')) {
+        if (normSkill && fromFormSlug && (fromFormSlug === `${normSkill}-base` || fromFormSlug.startsWith(`${normSkill}-base-`)) && WRITTEN_CHOICES.includes(choice) && !normId.endsWith(`-${GENERATED_CHOICE}`) && !normId.endsWith('-base')) {
             isLegitWrittenBranch = true;
         }
     }
@@ -541,6 +586,77 @@ export function add(model, kind, record) {
     targetList.push(clonedRecord);
 
     return commitSnapshot(newDoc, model);
+}
+
+/** Resets a damaged skills container so skills can be added one at a time. */
+export function resetClassSkills(model, classId) {
+    const refuse = (code, message) => ({ ok: false, model, errors: [{ code, path: 'content.rules.0.classes', message }] });
+    if (!model?.document) return refuse('bad-model', 'Open a pack first');
+    if (typeof classId !== 'string' || !classId) return refuse('bad-id', 'Choose a class ID');
+    const packId = getPackId(model.document);
+    const classes = readKindList(model.document, 'classes');
+    const index = Array.isArray(classes) ? classes.findIndex(cls => cls && normalizeId(cls.slug, packId) === normalizeId(classId, packId)) : -1;
+    if (index < 0) return refuse('not-found', 'Class not found');
+    if (Array.isArray(classes[index].skills)) return refuse('bad-value', 'The skills list is already an array');
+    return setField(model, ['content', 'rules', 0, 'classes', index, 'skills'], []);
+}
+
+/** Creates one owned skill and its authored pathways as a single undoable edit. */
+export function addClassSkill(model, classId) {
+    const refuse = (code, message) => ({ ok: false, model, errors: [{ code, path: 'content.rules.0.classes', message }] });
+    if (!model?.document) return refuse('bad-model', 'Open a pack first');
+    if (typeof classId !== 'string' || !classId) return refuse('bad-id', 'Choose a class ID');
+    const packId = getPackId(model.document);
+    const classes = readKindList(model.document, 'classes');
+    const index = Array.isArray(classes) ? classes.findIndex(cls => cls && normalizeId(cls.slug, packId) === normalizeId(classId, packId)) : -1;
+    if (index < 0) return refuse('not-found', 'Class not found');
+    const cls = classes[index];
+    if (!RULES_V2_PROGRESSION.tiers.includes(cls.tier) || !Array.isArray(cls.skills)) return refuse('bad-value', 'Repair the class tier and skills list first');
+    if (cls.skills.length >= RULES_V2_PROGRESSION.skillsPerClass) return refuse('class-skills', 'The class already has all its skills');
+    const skill = {
+        slug: 'new-skill',
+        name: '[YOUR SKILL NAME]',
+        base: {
+            type: 'physical', stat: 'STR', unit: null,
+            cost: { mp: 0, sp: 0, cooldown: 0 },
+            effects: [{ op: 'damage', target: 'one', power: 1, element: 'none', damageType: 'physical' }],
+        },
+    };
+    // Addition owns all namespace and derived-form collision checks.
+    const attempts = getAllExistingIdentities(model.document, packId).size + getAllReservedFormSlugs(model.document, packId).size + 1;
+    let result;
+    for (let n = 0; n <= attempts; n++) {
+        skill.slug = n ? `new-skill-${n}` : 'new-skill';
+        result = add(model, 'skills', skill);
+        if (result.ok || !result.errors.every(error => error.code === 'dup-id')) break;
+    }
+    if (!result.ok) return { ...result, model };
+    let next = result.model;
+    if (cls.tier === MAX_TIER) {
+        let parents = [`${skill.slug}-base`];
+        for (let step = 1; step <= PATHWAY_STEPS; step++) {
+            const children = [];
+            for (const parent of parents) {
+                for (const choice of WRITTEN_CHOICES) {
+                    const slug = `${parent}-${choice}`;
+                    result = add(next, 'branches', {
+                        slug, skill: skill.slug, fromForm: parent, step, choice,
+                        name: '[YOUR FORM NAME]',
+                        transforms: step === 1
+                            ? [{ op: 'set-element', at: 0, value: choice === WRITTEN_CHOICES[0] ? 'fire' : 'ice' }]
+                            : [choice === WRITTEN_CHOICES[0] ? { op: 'set-target', at: 0, value: 'all' } : { op: 'set-element', at: 0, value: 'lightning' }],
+                    });
+                    if (!result.ok) return { ...result, model };
+                    next = result.model;
+                    children.push(slug);
+                }
+                children.push(`${parent}-${GENERATED_CHOICE}`);
+            }
+            parents = children;
+        }
+    }
+    result = setField(next, ['content', 'rules', 0, 'classes', index, 'skills'], [...cls.skills, skill.slug]);
+    return result.ok ? { ...result, undo: () => model } : { ...result, model };
 }
 
 /**
@@ -611,14 +727,14 @@ export function renameId(model, kind, id, nextId) {
     const normId = normalizeId(id, packId);
     const normNextId = normalizeId(nextId, packId);
 
-    if (kind === 'skills' && [...normNextId].length > 52) {
+    if (kind === 'skills' && [...normNextId].length > MAX_SKILL_SLUG) {
         return {
             ok: false,
             model,
             errors: [{
                 code: 'numeric-range',
                 path: 'content.rules.0.skills',
-                message: `Skill slug "${normNextId}" exceeds maximum length 52`,
+                message: `Skill slug "${normNextId}" exceeds maximum length ${MAX_SKILL_SLUG}`,
             }],
         };
     }
@@ -670,13 +786,24 @@ export function renameId(model, kind, id, nextId) {
     }
 
     if (normId !== normNextId) {
-        const existingIdentities = getAllExistingIdentities(model.document, packId);
-        if (existingIdentities.has(normNextId) || existingIdentities.has(`pack.${packId}/${normNextId}`)) {
-            return {
-                ok: false,
-                model,
-                errors: [{ code: 'dup-id', path: kind, message: `Duplicate id collision: ${nextId}` }],
-            };
+        if (SHARED_RULES_KINDS.has(kind)) {
+            const sharedRulesIds = getSharedRulesIdentities(model.document, packId, kind, normId);
+            if (sharedRulesIds.has(normNextId)) {
+                return {
+                    ok: false,
+                    model,
+                    errors: [{ code: 'dup-id', path: kind, message: `Duplicate id collision: ${nextId}` }],
+                };
+            }
+        } else {
+            const isDup = currentList.some(item => item && typeof item === 'object' && normalizeId(getRecordIdentity(kind, item), packId) === normNextId);
+            if (isDup) {
+                return {
+                    ok: false,
+                    model,
+                    errors: [{ code: 'dup-id', path: kind, message: `Duplicate id collision: ${nextId}` }],
+                };
+            }
         }
 
         const otherReservedForms = getAllReservedFormSlugs(model.document, packId, kind === 'skills' ? normId : null);
@@ -689,6 +816,7 @@ export function renameId(model, kind, id, nextId) {
         }
 
         if (kind === 'skills') {
+            const existingIdentities = getAllExistingIdentities(model.document, packId);
             const nextDerived = getSkillDerivedFormSlugs(normNextId, true);
             for (const dSlug of nextDerived) {
                 if (existingIdentities.has(dSlug) || existingIdentities.has(`pack.${packId}/${dSlug}`) || otherReservedForms.has(dSlug) || otherReservedForms.has(`pack.${packId}/${dSlug}`)) {
@@ -1144,7 +1272,7 @@ export function moveClass(model, id, parentId) {
             };
         }
 
-        if (typeof parentCls.tier !== 'number' || !Number.isInteger(parentCls.tier) || parentCls.tier < 0 || parentCls.tier > 2) {
+        if (typeof parentCls.tier !== 'number' || !Number.isInteger(parentCls.tier) || parentCls.tier < 0 || parentCls.tier >= MAX_TIER) {
             return {
                 ok: false,
                 model,
@@ -1169,11 +1297,11 @@ export function moveClass(model, id, parentId) {
         }
 
         newTier = parentCls.tier + 1;
-        if (newTier > 3) {
+        if (newTier > MAX_TIER) {
             return {
                 ok: false,
                 model,
-                errors: [{ code: 'tier-chain', path: 'content.rules.0.classes', message: `Class tier ${newTier} exceeds tier 3 limit` }],
+                errors: [{ code: 'tier-chain', path: 'content.rules.0.classes', message: `Class tier ${newTier} exceeds tier ${MAX_TIER} limit` }],
             };
         }
     }
@@ -1199,14 +1327,14 @@ export function moveClass(model, id, parentId) {
                 }
                 visitedDesc.add(cSlug);
                 const childTier = curTier + 1;
-                if (childTier > 3) {
+                if (childTier > MAX_TIER) {
                     return {
                         ok: false,
                         model,
                         errors: [{
                             code: 'tier-chain',
                             path: 'content.rules.0.classes',
-                            message: `Descendant class ${cSlug} tier ${childTier} exceeds tier 3 limit`,
+                            message: `Descendant class ${cSlug} tier ${childTier} exceeds tier ${MAX_TIER} limit`,
                         }],
                     };
                 }
@@ -1620,4 +1748,26 @@ export function setField(model, path, value) {
     }
 
     return commitSnapshot(newDoc, model);
+}
+
+/** Schema-driven edits share one guard; the pure engine still supports damaged drafts. */
+export function setSchemaField(model, path, value, scope) {
+    const safePath = validateAndCloneValue(path);
+    const safeValue = validateAndCloneValue(value);
+    if (!safePath.ok || !Array.isArray(safePath.value) || !safeValue.ok) return setField(model, path, value);
+    path = safePath.value;
+    if (path.some(key => typeof key === 'string' && UNSAFE_KEYS.has(key))) return setField(model, path, value);
+    let rootPath = scope?.rootPath;
+    let schema = scope?.rootSchema;
+    if (!rootPath) {
+        const rules = path[0] === 'content' && path[1] === 'rules' && RULES_KINDS.has(path[3]);
+        const kind = rules ? path[3] : path[1] === 'skills' ? 'legacySkills' : path[1];
+        rootPath = path[0] === 'content' && schemaForKind(kind) ? path.slice(0, rules ? 5 : 3) : [];
+        schema = rootPath.length ? schemaForKind(kind) : { type: 'object', properties: { name: { type: 'string', minLength: 1, maxLength: 80 } } };
+    }
+    let current = model?.document;
+    for (const key of rootPath) current = current?.[key];
+    const checked = validateChange(schema, current, path.slice(rootPath.length), safeValue.value);
+    if (!checked.ok) return { ok: false, model, errors: [{ ...checked, path: path.join('.') }] };
+    return setField(model, path, safeValue.value);
 }

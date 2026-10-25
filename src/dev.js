@@ -1,7 +1,7 @@
 // Pack development interface: unstyled DOM creator kit viewer and editor (SPEC §5).
 
 import { openPack, exportPack } from './model.js';
-import { setField } from './edits.js';
+import { setSchemaField as setField } from './edits.js';
 import { createHistory } from './history.js';
 import { RULES_V2_LIMITS } from '../vendor/story-block/src/v2/packs/rules-v2.js';
 
@@ -266,6 +266,7 @@ export function mountDev(root) {
         const newName = packNameInput.value;
         const result = setField(model, ['name'], newName);
         if (!result.ok) {
+            packNameInput.value = typeof model.document.name === 'string' ? model.document.name : '';
             renderErrors(result.errors || [{
                 code: 'refused-edit',
                 path: 'name',

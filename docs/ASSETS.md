@@ -70,3 +70,7 @@ Phosphor is MIT licensed, copyright (c) 2023 Phosphor Icons. Story Block keeps t
 not part of the vendored copy. The single-file build inlines these icons, so the build's notices need to carry that licence.
 Note too that Phosphor's icons are 256-unit filled outlines while Studio's are 1.8-stroke lines, so the two look slightly
 different side by side in the left rail.
+
+The complete Phosphor MIT notice is in [`src/credits.txt`](../src/credits.txt) and the built file's expandable credits.
+The build converts the trusted SVG sources to `src/assets/drawings.js`; the app draws those descriptors using
+`createElementNS`, including the selected Phosphor paths. There is no runtime markup parser or external asset request.

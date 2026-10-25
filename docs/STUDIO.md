@@ -19,7 +19,7 @@ Part 1 establishes the deterministic pack engine, immutable document model, and 
 - **Unstyled Developer UI**: Standard-compliant DOM interface and headless smoke test harness ([`src/dev.js`](../src/dev.js), [`src/dev.html`](../src/dev.html)).
 - **Test Fixtures**: Static and dynamic valid, invalid, and scenario packs ([`tests/fixtures/`](../tests/fixtures/)).
 
-Styled creator screens await visual mocks designed by the suite lead. Part 1 implements the concrete engine scope (model, pure edits, history controller, canonical export pipeline, and developer page) without introducing ad-hoc presentation dependencies.
+Part 2 adds the standalone local editor, built as one offline HTML file. See the [application guide](STUDIO_PART2.md) for screens, draft persistence, distribution, and browser verification. The engine and unstyled developer page described here remain available.
 
 ### 1.2 Progression Hierarchy and Pathway Graph
 
@@ -49,7 +49,7 @@ Story Studio guarantees stable, deterministic pack serialization:
 - **Key Sorting**: Object keys are normalized to Unicode NFC and sorted alphabetically at every level.
 - **Formatting**: Output is UTF-8 encoded with 2-space indentation and a terminating newline. Timestamps, machine-generated identifiers, expanded forms, and self-hashes are excluded from export.
 - **Dual Hash Structure**:
-  - `rulesHash`: The contract's $H$. A SHA-256 hash computed over the normalized authored rules manifest (`content.rules[0]`), owned definitions (`creatures`, `quests`, `shops`, `recipes`, etc.), the frozen schema, and engine constants. Modifying pack envelope metadata (e.g., pack name or description) preserves `rulesHash`.
+  - `rulesHash`: The contract's H (rules fingerprint). A SHA-256 hash computed over the normalized authored rules manifest (`content.rules[0]`), owned definitions (`creatures`, `quests`, `shops`, `recipes`, etc.), the frozen schema, and engine constants. Modifying pack envelope metadata (e.g., pack name or description) preserves `rulesHash`.
   - `packHash`: A SHA-256 hash computed over the entire canonical pack document (envelope, currency, manifests, and content) alongside schema and constants. Changing the pack envelope name updates `packHash` while keeping `rulesHash` unchanged.
   - Neither hash uses a `.hash` alias. Both hashes evaluate to `null` if the pack is invalid.
 
@@ -196,9 +196,18 @@ function add(model: object, kind: string, record: object): EditSuccess | EditRef
 
 - Accepts local slugs or fully qualified IDs (`pack.<packId>/<slug>`).
 - Validates the record as plain, bounded JSON without accessors or symbols.
-- Rejects duplicate IDs within the collection or across the pack's unified identifier namespace.
+- Rejects duplicate IDs within a collection. Classes, skills, branches, trainers, and the rules manifest share a namespace; host kinds such as places have separate namespaces. A class or skill may share a host record's slug.
 - Prevents collisions with reserved or generated form IDs (`<skill>-base`, `<skill>-base-g`, `<skill>-base-a`, etc.).
 - Written branches require derived slug alignment matching `${fromForm}-${choice}`.
+
+#### `addClassSkill(model, classId)`
+
+Creates a skill named `[YOUR SKILL NAME]`, assigns it to the class, and returns one edit result with an undo
+closure restoring the original snapshot. Slugs use the same namespace and derived-form collision checks as `add`.
+A tier-3 skill also receives eight written branches named `[YOUR FORM NAME]`, including branches from the generated
+step-1 parent; generated forms remain checker output. Lower tiers receive only the base skill. Missing owners,
+malformed class containers, and classes already at the skill limit are refused without committing partial work.
+The class inspector's `+ Skill` action commits this result through history, so Undo/Redo includes the entire graph.
 
 #### `renameId(model, kind, id, nextId)`
 
@@ -209,7 +218,7 @@ Renames a record and re-links all inbound typed references atomically.
 function renameId(model: object, kind: string, id: string, nextId: string): EditSuccess | EditRefusal;
 ```
 
-- Accepts raw slugs or qualified same-pack IDs. Foreign IDs are rejected.
+- Accepts raw slugs or qualified same-pack IDs. Foreign IDs are rejected. Renames use the same namespaces as additions; reserved form IDs remain protected across all kinds.
 - Skill renames rebase the entire skill graph: derived base form IDs, generated power-ups, written branch slugs, branch `fromForm` properties, and all inbound typed references across classes, trainers, and creatures.
 - Enforces the 52-character slug length limit for skills before mutating.
 - Branch renames must conform to parent and choice constraints (`${fromForm}-${choice}`).
@@ -370,7 +379,7 @@ Exported from `vendor/story-block/src/v2/packs/rules-v2.js`:
 | `unsafe-markup` | Text contains `<` or `>`, character reference equivalents, unsafe script-like HTML tags, or forbidden URI schemes (`javascript:`, non-raster `data:`). Raster `data:image/...` URLs pass shared safety checks. |
 | `unsafe-key` | Object contains prototype-polluting or reserved keys (`__proto__`, `constructor`, `prototype`). |
 | `control-character` | Text contains unescaped ASCII control characters (excluding accepted normalized linebreaks `\n`, `\r` and tabs `\t`), or an object key contains any ASCII control character. |
-| `dup-id` | Duplicate identifier collision within a collection, across definition namespaces, or against reserved form IDs. |
+| `dup-id` | Duplicate identifier collision within a collection or the shared rules namespace, or against reserved form IDs. |
 | `tier-chain` | Violation of class progression rules: Tier 0 with parent, Tier > 0 without parent, non-consecutive tier steps, cycles, or non-Tier-3 leaves. |
 | `class-skills` | Class does not define exactly 3 unique skills, or a skill is orphaned or assigned to multiple classes. |
 | `branch-graph` | Branch count mismatch, incorrect step-1/step-2 choice structure, or `fromForm` not referencing the exact parent form. |
@@ -419,9 +428,23 @@ Returned by functions in `src/edits.js`:
 > [!NOTE]
 > Underlying Story Block host validation uppercase error codes (such as `BAD_FIELD`, `UNKNOWN_KIND`, `UNKNOWN_FIELD`, `UNKNOWN_REF`, `MISSING_CAPABILITY`) may be returned when validating legacy envelope sections. Story Studio preserves these codes as reported by the checker without lowercasing or translation.
 
-### 3.3 Boundary Limits
+### 3.3 Developer Page Status Codes
+
+The developer page preserves engine diagnostics and uses these fallback codes:
+
+| Error Code | Meaning / Cause |
+|---|---|
+| `file-read-error` | Reading the selected file failed. |
+| `no-document` | A name edit was attempted without an open document. |
+| `refused-edit` | An edit was refused without specific engine errors. |
+| `export-error` | Export threw without specific engine errors. |
+
+### 3.4 Boundary Limits
 
 Story Studio enforces limits defined across Story Block and the Suite Contract:
+
+Editing imports slug and ID patterns from `rulesV2Schema`, slug limits from `RULES_V2_LIMITS`, and tiers, choices, and pathway steps from `RULES_V2_PROGRESSION`.
+The separate 52-character skill-slug limit is still private in Story Block. The lead needs to export it, for example as `RULES_V2_LIMITS.skillSlug`, before Studio can remove its remaining local constant. No vendored files are edited for this follow-up.
 
 | Metric | Boundary Limit | Scope / Details |
 |---|---|---|
@@ -556,7 +579,7 @@ Test fixtures in [`tests/fixtures/`](../tests/fixtures/) provide thorough verifi
 
 [`tests/dev-smoke.test.js`](../tests/dev-smoke.test.js) verifies [`src/dev.html`](../src/dev.html) in headless Chromium:
 
-- **Zero Package Dependencies**: Story Studio does not add Playwright to `package.json`. The runner searches for an available Playwright installation or skips gracefully if unconfigured and unavailable.
+- **Development Dependency**: Playwright is pinned in package.json. Run npm ci and npx playwright install --with-deps chromium. The older developer-page runner retains optional discovery and skips if unavailable; the built-application browser tests in studio-browser.test.js require a working browser and never skip.
 - **Environment Overrides**:
   - `STUDIO_PLAYWRIGHT_MODULE`: File path or file URL to the Playwright module entry file (e.g., `/path/to/playwright/index.mjs` or `file:///path/to/playwright/index.mjs`; must point to the module entry file, not a directory).
   - `STUDIO_CHROMIUM_PATH`: Executable path for Chromium (e.g., `/path/to/chromium` or `/usr/bin/chromium`).
@@ -591,3 +614,21 @@ npm run sync-sb -- --from /tmp/s1work/Story_block
   matrix 1
   ```
 - **Integrity Rule**: Files under `vendor/story-block/` are never edited manually.
+
+
+## Remaining shared-constant follow-ups
+
+The checker and rules schema remain authoritative. These local copies still need consolidation with upstream exports:
+
+- `src/edits.js`: the skill-slug limit `52` has no dedicated export. Safety fallbacks repeat depth `16`, array `1000`,
+  keys `200`, string `4000`, and pack bytes `512 * 1024`; normal execution uses `RULES_V2_LIMITS`.
+- `src/model.js` and `src/dev.js`: fallback safety limits remain beside the shared limits.
+- `src/screens/classes.js`: tier columns `0–3`, the three-skill UI count, four generated-path suffixes, and the
+  child-slug truncation length `54` remain local. `src/screens/skills.js` similarly carries the tier-3 check,
+  the fixed pathway layout and counts, cost bounds `0–999`, power bounds `1–1000`, and budget fallbacks `12 * (tier + 1)` and step increment `12`.
+- `src/form-schema.js`: host descriptors still repeat host name/slug/note lengths (`80`, `64`, `500`), slug patterns,
+  and host-specific field bounds. The rules-owned descriptors already resolve directly from the shared schema.
+
+The new skill operation uses `RULES_V2_PROGRESSION` for the skill count, maximum tier, pathway depth, and choices.
+Its minimal base effect and written transforms are authoring defaults; the shared checker validates their behavior
+and generated budget closure before export.

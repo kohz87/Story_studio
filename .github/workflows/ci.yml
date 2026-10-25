@@ -3,7 +3,7 @@ name: Story Studio CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, studio-2]
 
 permissions:
   contents: read
@@ -28,7 +28,17 @@ jobs:
             BASE="$(git hash-object -t tree /dev/null)"
           fi
           git diff --check "$BASE" HEAD
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
       - name: Syntax check
         run: npm run check
       - name: Behavioral tests
         run: npm test
+      - name: Build distribution
+        run: npm run build
+      - name: Verify committed build artifact
+        run: git diff --exit-code -- dist/story-studio.html src/assets/drawings.js
+      - name: Built-file safety scan
+        run: node --test tests/build.test.js
