@@ -83,6 +83,7 @@ export function smallRulesPack(options = {}) {
                 { slug: 'haven', name: 'Haven', x: 0, y: 0 },
                 { slug: 'mill', name: 'Mill', x: 1, y: 0 },
             ],
+            ...(options.routes !== undefined ? { routes: options.routes } : {}),
         },
     };
 

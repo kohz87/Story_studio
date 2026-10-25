@@ -3,96 +3,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { smallRulesPack } from './fixtures/smallRulesPack.js';
+
 import { openPack } from '../src/model.js';
 import { add, setField } from '../src/edits.js';
 import { createHistory } from '../src/history.js';
-
-/** Complete golden 4-tier tree helper matching SPEC §10. */
-function smallRulesPack(options = {}) {
-    const classes = [];
-    const skills = [];
-    const branches = [];
-
-    for (let tier = 0; tier < 4; tier++) {
-        const names = [0, 1, 2].map(n => `s${tier}${n}`);
-        classes.push({
-            slug: `c${tier}`,
-            name: `Class ${tier}`,
-            tier,
-            parent: tier ? `c${tier - 1}` : null,
-            skills: names,
-        });
-
-        for (const slug of names) {
-            skills.push({
-                slug,
-                name: slug,
-                base: {
-                    type: 'physical',
-                    stat: 'STR',
-                    unit: null,
-                    cost: { mp: 0, sp: 1, cooldown: 0 },
-                    effects: [{
-                        op: 'damage',
-                        target: 'one',
-                        power: 20 * (tier + 1),
-                        element: 'none',
-                        damageType: 'physical',
-                    }],
-                },
-            });
-
-            if (tier !== 3) continue;
-
-            const base = `${slug}-base`;
-            for (const parent of [base, ...['g', 'a', 'b'].map(c => `${base}-${c}`)]) {
-                const step = parent === base ? 1 : 2;
-                for (const choice of ['a', 'b']) {
-                    const transforms = step === 1
-                        ? [{ op: 'set-element', at: 0, value: choice === 'a' ? 'fire' : 'ice' }]
-                        : [choice === 'a' ? { op: 'set-target', at: 0, value: 'all' } : { op: 'set-element', at: 0, value: 'lightning' }];
-                    branches.push({
-                        slug: `${parent}-${choice}`,
-                        name: `${parent}-${choice}`,
-                        skill: slug,
-                        fromForm: parent,
-                        step,
-                        choice,
-                        transforms,
-                    });
-                }
-            }
-        }
-    }
-
-    return {
-        id: options.id ?? 'fixture',
-        version: options.version ?? '2.0.0',
-        name: options.name ?? 'Fixture',
-        requires: options.requires ?? { storyBlock: '^2', capabilities: ['rb-rules-v2'] },
-        content: {
-            rules: [{
-                slug: 'rules',
-                name: 'Fixture rules',
-                schema: 2,
-                classes: options.classes ?? classes,
-                skills: options.skills ?? skills,
-                branches: options.branches ?? branches,
-                itemRules: options.itemRules ?? [],
-                trainers: options.trainers ?? [],
-                statLabels: options.statLabels ?? {},
-            }],
-            items: options.items ?? [],
-            creatures: options.creatures ?? [],
-            shops: options.shops ?? [],
-            recipes: options.recipes ?? [],
-            quests: options.quests ?? [],
-            places: options.places ?? [
-                { slug: 'haven', name: 'Haven', x: 0, y: 0 },
-            ],
-        },
-    };
-}
 
 test('initial history state has current model and empty undo/redo stacks', () => {
     const pack = smallRulesPack();
@@ -114,7 +29,7 @@ test('initial history state has current model and empty undo/redo stacks', () =>
 });
 
 test('successful commit updates current model, records undo, and clears redo', () => {
-    const pack = smallRulesPack();
+    const pack = smallRulesPack({ statLabels: {}, places: [{ slug: 'haven', name: 'Haven', x: 0, y: 0 }] });
     const model0 = openPack(pack);
     assert.equal(model0.validation.ok, true, JSON.stringify(model0.validation.errors));
     assert.ok(typeof model0.rulesHash === 'string' && model0.rulesHash.length === 64);
@@ -143,7 +58,7 @@ test('successful commit updates current model, records undo, and clears redo', (
 });
 
 test('undo and redo restore exact model snapshots across multiple edits', () => {
-    const pack = smallRulesPack();
+    const pack = smallRulesPack({ statLabels: {}, places: [{ slug: 'haven', name: 'Haven', x: 0, y: 0 }] });
     const m0 = openPack(pack);
     assert.equal(m0.validation.ok, true, JSON.stringify(m0.validation.errors));
     assert.ok(typeof m0.rulesHash === 'string' && m0.rulesHash.length === 64);

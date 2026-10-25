@@ -49,7 +49,7 @@ Story Studio guarantees stable, deterministic pack serialization:
 - **Key Sorting**: Object keys are normalized to Unicode NFC and sorted alphabetically at every level.
 - **Formatting**: Output is UTF-8 encoded with 2-space indentation and a terminating newline. Timestamps, machine-generated identifiers, expanded forms, and self-hashes are excluded from export.
 - **Dual Hash Structure**:
-  - `rulesHash`: The contract's $H$. A SHA-256 hash computed over the normalized authored rules manifest (`content.rules[0]`), owned definitions (`creatures`, `quests`, `shops`, `recipes`, etc.), the frozen schema, and engine constants. Modifying pack envelope metadata (e.g., pack name or description) preserves `rulesHash`.
+  - `rulesHash`: The contract's H (rules fingerprint). A SHA-256 hash computed over the normalized authored rules manifest (`content.rules[0]`), owned definitions (`creatures`, `quests`, `shops`, `recipes`, etc.), the frozen schema, and engine constants. Modifying pack envelope metadata (e.g., pack name or description) preserves `rulesHash`.
   - `packHash`: A SHA-256 hash computed over the entire canonical pack document (envelope, currency, manifests, and content) alongside schema and constants. Changing the pack envelope name updates `packHash` while keeping `rulesHash` unchanged.
   - Neither hash uses a `.hash` alias. Both hashes evaluate to `null` if the pack is invalid.
 
@@ -196,7 +196,7 @@ function add(model: object, kind: string, record: object): EditSuccess | EditRef
 
 - Accepts local slugs or fully qualified IDs (`pack.<packId>/<slug>`).
 - Validates the record as plain, bounded JSON without accessors or symbols.
-- Rejects duplicate IDs within the collection or across the pack's unified identifier namespace.
+- Rejects duplicate IDs within a collection. Classes, skills, branches, trainers, and the rules manifest share a namespace; host kinds such as places have separate namespaces. A class or skill may share a host record's slug.
 - Prevents collisions with reserved or generated form IDs (`<skill>-base`, `<skill>-base-g`, `<skill>-base-a`, etc.).
 - Written branches require derived slug alignment matching `${fromForm}-${choice}`.
 
@@ -209,7 +209,7 @@ Renames a record and re-links all inbound typed references atomically.
 function renameId(model: object, kind: string, id: string, nextId: string): EditSuccess | EditRefusal;
 ```
 
-- Accepts raw slugs or qualified same-pack IDs. Foreign IDs are rejected.
+- Accepts raw slugs or qualified same-pack IDs. Foreign IDs are rejected. Renames use the same namespaces as additions; reserved form IDs remain protected across all kinds.
 - Skill renames rebase the entire skill graph: derived base form IDs, generated power-ups, written branch slugs, branch `fromForm` properties, and all inbound typed references across classes, trainers, and creatures.
 - Enforces the 52-character slug length limit for skills before mutating.
 - Branch renames must conform to parent and choice constraints (`${fromForm}-${choice}`).
@@ -370,7 +370,7 @@ Exported from `vendor/story-block/src/v2/packs/rules-v2.js`:
 | `unsafe-markup` | Text contains `<` or `>`, character reference equivalents, unsafe script-like HTML tags, or forbidden URI schemes (`javascript:`, non-raster `data:`). Raster `data:image/...` URLs pass shared safety checks. |
 | `unsafe-key` | Object contains prototype-polluting or reserved keys (`__proto__`, `constructor`, `prototype`). |
 | `control-character` | Text contains unescaped ASCII control characters (excluding accepted normalized linebreaks `\n`, `\r` and tabs `\t`), or an object key contains any ASCII control character. |
-| `dup-id` | Duplicate identifier collision within a collection, across definition namespaces, or against reserved form IDs. |
+| `dup-id` | Duplicate identifier collision within a collection or the shared rules namespace, or against reserved form IDs. |
 | `tier-chain` | Violation of class progression rules: Tier 0 with parent, Tier > 0 without parent, non-consecutive tier steps, cycles, or non-Tier-3 leaves. |
 | `class-skills` | Class does not define exactly 3 unique skills, or a skill is orphaned or assigned to multiple classes. |
 | `branch-graph` | Branch count mismatch, incorrect step-1/step-2 choice structure, or `fromForm` not referencing the exact parent form. |
@@ -419,9 +419,24 @@ Returned by functions in `src/edits.js`:
 > [!NOTE]
 > Underlying Story Block host validation uppercase error codes (such as `BAD_FIELD`, `UNKNOWN_KIND`, `UNKNOWN_FIELD`, `UNKNOWN_REF`, `MISSING_CAPABILITY`) may be returned when validating legacy envelope sections. Story Studio preserves these codes as reported by the checker without lowercasing or translation.
 
-### 3.3 Boundary Limits
+### 3.3 Developer Page Status Codes
+
+The developer page preserves engine diagnostics and uses these fallback codes:
+
+| Error Code | Meaning / Cause |
+|---|---|
+| `file-read-error` | Reading the selected file failed. |
+| `no-document` | A name edit was attempted without an open document. |
+| `refused-edit` | An edit was refused without specific engine errors. |
+| `export-error` | Export threw without specific engine errors. |
+
+### 3.4 Boundary Limits
 
 Story Studio enforces limits defined across Story Block and the Suite Contract:
+
+Editing imports slug and ID patterns from `rulesV2Schema`, slug limits from `RULES_V2_LIMITS`, and tiers, choices, and pathway steps from `RULES_V2_PROGRESSION`.
+The separate 52-character skill-slug limit is still private in Story Block. The lead needs to export it, for example as `RULES_V2_LIMITS.skillSlug`, before Studio can remove its remaining local constant. No vendored files are edited for this follow-up.
+
 
 | Metric | Boundary Limit | Scope / Details |
 |---|---|---|
