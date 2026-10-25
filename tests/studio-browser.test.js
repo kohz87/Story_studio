@@ -234,6 +234,7 @@ for (const theme of ['dark', 'light']) for (const width of [1280, 1024]) {
 
             const extended = makeValidExtendedPack();
             extended.name = '[EXTENDED FIXTURE]';
+            extended.content.rules[0].trainers[0].skills.push('s00');
             await upload(page, extended);
             await navigate(page, 'Trainers');
             await closeInspector(page);
@@ -244,6 +245,15 @@ for (const theme of ['dark', 'light']) for (const width of [1280, 1024]) {
             assert.ok(await page.locator('.inspector-body select option[value="s00"]').count() > 0);
             await place.fill('pack.fixture/mill'); await place.press('Tab');
             assert.equal(await page.locator('.topbar button.primary').isEnabled(), true);
+            const saved = await page.evaluate(() => localStorage.getItem('story-studio-draft'));
+            const trainerSkill = page.locator("select[data-path='[\"content\",\"rules\",0,\"trainers\",0,\"skills\",1]']");
+            await trainerSkill.selectOption('s30');
+            assert.equal(await trainerSkill.inputValue(), 's00');
+            assert.match(await page.locator('.notice').textContent(), /^bad-value:/);
+            assert.equal(await page.evaluate(() => localStorage.getItem('story-studio-draft')), saved);
+            await page.getByRole('button', { name: 'Undo', exact: true }).click();
+            assert.equal(await place.inputValue(), 'pack.fixture/haven', 'Refused edits never enter history');
+            await page.getByRole('button', { name: 'Redo', exact: true }).click();
             await checkAccessibility(page);
 
             await navigate(page, 'Foes'); await closeInspector(page);
@@ -252,6 +262,49 @@ for (const theme of ['dark', 'light']) for (const width of [1280, 1024]) {
             await level.fill('0'); await level.press('Tab');
             assert.equal(await level.inputValue(), '1');
             assert.match(await page.locator('.notice').textContent(), /^bad-value:/);
+            assert.equal(await page.locator('.topbar button.primary').isEnabled(), true);
+            await checkAccessibility(page);
+
+            await selectClass(page, 'c0');
+            await page.getByRole('button', { name: 'Open s00 in skills', exact: true }).click();
+            await page.locator('#form-effects').evaluate(node => { node.closest('details').open = true; });
+            const effectsBefore = await page.locator('#form-effects').inputValue();
+            const effects = JSON.parse(effectsBefore); effects[0].power = 1001;
+            const effectsSaved = await page.evaluate(() => localStorage.getItem('story-studio-draft'));
+            await change(page, '#form-effects', JSON.stringify(effects));
+            assert.equal(await page.locator('#form-effects').inputValue(), effectsBefore);
+            assert.match(await page.locator('.notice').textContent(), /^bad-value:/);
+            assert.equal(await page.evaluate(() => localStorage.getItem('story-studio-draft')), effectsSaved);
+            assert.equal(await page.locator('.topbar button.primary').isEnabled(), true);
+
+            await selectClass(page, 'c3');
+            await page.getByRole('button', { name: 'Open s30 in skills', exact: true }).click();
+            await closeInspector(page);
+            await page.locator('.path-node[data-form-id="pack.fixture/s30-base-a"]').click();
+            await page.locator('#form-transforms').evaluate(node => { node.closest('details').open = true; });
+            const transformsBefore = await page.locator('#form-transforms').inputValue();
+            await change(page, '#form-transforms', JSON.stringify([{ op: 'set-power', at: 0, value: 1001 }]));
+            assert.equal(await page.locator('#form-transforms').inputValue(), transformsBefore);
+            assert.match(await page.locator('.notice').textContent(), /^bad-value:/);
+            assert.equal(await page.evaluate(() => localStorage.getItem('story-studio-draft')), effectsSaved);
+            assert.equal(await page.locator('.topbar button.primary').isEnabled(), true);
+
+            await navigate(page, 'Quests'); await closeInspector(page);
+            await page.locator('.record-card').first().click();
+            await page.getByRole('button', { name: 'Add requirements item', exact: true }).click();
+            const requirement = page.locator("select[data-path='[\"content\",\"quests\",0,\"requirements\",0]']");
+            await requirement.selectOption({ label: 'class' });
+            const classPicker = page.locator("select[data-path='[\"content\",\"quests\",0,\"requirements\",0,\"classes\",0]']");
+            assert.equal(await classPicker.inputValue(), 'c0');
+            assert.equal(await page.locator('.topbar button.primary').isEnabled(), true);
+            await requirement.selectOption({ label: 'thread' });
+            const requiredPicker = page.getByRole('dialog', { name: 'Choose required values', exact: true });
+            assert.equal(await requiredPicker.isVisible(), true);
+            await checkAccessibility(page);
+            await requiredPicker.locator('input[list]').fill('th_00000001');
+            await requiredPicker.locator('input[list]').press('Tab');
+            await requiredPicker.getByRole('button', { name: 'Add', exact: true }).click();
+            assert.equal(await requiredPicker.count(), 0);
             assert.equal(await page.locator('.topbar button.primary').isEnabled(), true);
             await checkAccessibility(page);
 

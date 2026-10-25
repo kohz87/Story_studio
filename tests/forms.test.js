@@ -269,7 +269,7 @@ test('T4-8: Array rows with add/remove preserve order and mutate via history', (
 });
 
 test('T4-9: oneOf unions with kind/op discriminator switch variant and update structure', () => {
-    const pack = smallRulesPack();
+    const pack = makeValidExtendedPack();
     pack.content.quests = [{
         slug: 'hunt',
         name: 'Hunt',

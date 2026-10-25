@@ -19,22 +19,70 @@ export function parseJsonInput(raw) {
         return { ok: true, value: JSON.parse(raw) };
     } catch (err) { return { ok: false, error: err.message }; }
 }
-export function createDefault(input) {
+export function createDefault(input, options = {}) {
     const schema = resolveSchema(input) || {};
-    if (schema.default !== undefined) return JSON.parse(JSON.stringify(schema.default));
-    if (schema.const !== undefined) return schema.const;
-    if (schema.enum) return schema.enum[0];
-    if (schema.oneOf) return createDefault(schema.oneOf.find(s => s.type !== 'null') || { type: 'null' });
-    if (schema.type === 'null') return null;
-    if (schema.type === 'array') return [];
-    if (schema.type === 'object') return Object.fromEntries((schema.required || []).filter(k => schema.properties?.[k]).map(k => [k, createDefault(schema.properties[k])]));
-    if (schema.type === 'boolean') return false;
-    if (schema.type === 'number' || schema.type === 'integer') return schema.minimum ?? 0;
-    if (schema.minLength || schema.pattern) {
-        return ['[YOUR VALUE]', 'new-record', 'pack.pack/new-record', 'pl_00000001']
-            .find(value => validateField(schema, value).ok) ?? '';
+    const { model, kind, path = [], used = [], partial = false } = options;
+    const identities = model && ['id', 'slug'].includes(path.at(-1)) ? records(model, kind).map(record => localId(model, identity(record))) : [];
+    const accepts = value => value !== undefined && validateField(schema, value).ok
+        && !identities.includes(value) && !used.some(entry => JSON.stringify(entry) === JSON.stringify(value));
+    if (schema.default !== undefined && accepts(schema.default)) return JSON.parse(JSON.stringify(schema.default));
+    const target = referenceTarget(kind, path);
+    if (schema.oneOf) {
+        for (const part of schema.oneOf) {
+            const value = createDefault(part, options);
+            if (accepts(value)) return value;
+        }
+        return partial ? createDefault(schema.oneOf.find(part => part.type !== 'null'), { ...options, partial: true }) : undefined;
     }
-    return '';
+    if (schema.type === 'null') return accepts(null) ? null : undefined;
+    if (target && model && schema.type !== 'array' && schema.type !== 'object') {
+        const entries = target === 'forms' ? formOptions(model) : records(model, target).map(identity);
+        return entries.map(id => referenceId(model, schema, id)).find(accepts);
+    }
+    const candidates = [];
+    if (schema.default !== undefined) candidates.push(schema.default);
+    if (schema.const !== undefined) candidates.push(schema.const);
+    if (schema.enum) candidates.push(...schema.enum);
+    if (schema.type === 'array') {
+        const value = [];
+        for (let i = 0; i < (schema.minItems ?? 0); i++) {
+            value.push(createDefault(schema.items, { ...options, path: [...path, i], used: schema.uniqueItems ? value : [] }));
+        }
+        if (partial || accepts(value)) return value;
+    } else if (schema.type === 'object') {
+        const value = Object.fromEntries((schema.required || []).map(key => [key, createDefault(schema.properties?.[key], { ...options, path: [...path, key], used: [] })]));
+        if (kind === 'branches' && model && schema.properties?.fromForm && schema.properties?.choice) {
+            const advanced = records(model, 'classes').filter(record => record?.tier === Math.max(...RULES_V2_PROGRESSION.tiers))
+                .flatMap(record => Array.isArray(record.skills) ? record.skills.map(id => localId(model, id)) : []);
+            const taken = new Set(records(model, 'branches').map(record => localId(model, identity(record))));
+            const owner = id => advanced.filter(skill => id === `${skill}-base` || id.startsWith(`${skill}-base-`)).sort((a, b) => b.length - a.length)[0];
+            const parent = formOptions(model).find(id => {
+                const skill = owner(id);
+                return skill && id.slice(`${skill}-base`.length).split('-').filter(Boolean).length < RULES_V2_PROGRESSION.pathwaySteps
+                    && RULES_V2_PROGRESSION.writtenChoices.some(choice => !taken.has(`${id}-${choice}`));
+            });
+            if (parent) {
+                value.skill = owner(parent);
+                value.fromForm = parent;
+                value.choice = RULES_V2_PROGRESSION.writtenChoices.find(choice => !taken.has(`${parent}-${choice}`));
+                value.step = parent === `${value.skill}-base` ? 1 : 2;
+                value.slug = `${parent}-${value.choice}`;
+            } else if (!partial) return undefined;
+        }
+        if (partial || accepts(value)) return value;
+    } else if (schema.type === 'boolean') candidates.push(false, true);
+    else if (schema.type === 'number' || schema.type === 'integer') {
+        const step = schema.multipleOf ?? 1;
+        const lower = schema.minimum ?? (schema.exclusiveMinimum !== undefined ? schema.exclusiveMinimum + step : Math.min(0, schema.maximum ?? (schema.exclusiveMaximum !== undefined ? schema.exclusiveMaximum - step : 0)));
+        const start = Math.ceil(lower / step) * step;
+        for (let i = 0; i <= used.length + 1; i++) candidates.push(start + i * step);
+    } else {
+        if (['id', 'slug'].includes(path.at(-1))) candidates.push('new-record');
+        candidates.push('', '[YOUR VALUE]', 'new-record', 'pack.pack/new-record', 'pl_00000001', 'STR', 'x'.repeat(schema.minLength ?? 0));
+        for (let i = 1; i <= used.length + identities.length + 1; i++) candidates.push(`new-record-${i}`, `pack.pack/new-record-${i}`);
+    }
+    const value = candidates.find(accepts);
+    return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 }
 function display(value) { return safeLabel(value ?? ''); }
 function matches(schema, value) {
@@ -54,7 +102,8 @@ function accept(ctx, schema, value) {
     return result.ok;
 }
 function mutate(ctx, path, value, options) {
-    const checked = validateChange(options.rootSchema, options.rootValue, path.slice(options.rootPath.length), value);
+    const checked = options.pending ? validateField(options.schema, value)
+        : validateChange(options.rootSchema, options.rootValue, path.slice(options.rootPath.length), value);
     if (!checked.ok) { ctx.notify(`${checked.code}: ${checked.message}`); return false; }
     if (options.isNew) { options.onChange(value, path); return true; }
     if (['id', 'slug'].includes(path.at(-1)) && path.length > options.rootPath.length + 1) {
@@ -76,6 +125,43 @@ function mutate(ctx, path, value, options) {
 }
 function pathAttrs(path, options) { return { [options.isNew ? 'data-draft-path' : 'data-path']: JSON.stringify(path) }; }
 function titleFor(path) { return typeof path.at(-1) === 'number' ? `Item ${path.at(-1) + 1}` : String(path.at(-1) || 'Record'); }
+
+function withDefault(ctx, container, schema, path, options, commit, used = []) {
+    const settings = { model: ctx.model, kind: options.kind, path, used };
+    const value = createDefault(schema, settings);
+    if (value !== undefined) return commit(value);
+    const dialog = el(ctx.doc, 'dialog', '', { class: 'default-picker', 'aria-label': 'Choose required values' });
+    const body = el(ctx.doc, 'div');
+    const actions = el(ctx.doc, 'div', '', { class: 'row' });
+    let draft = createDefault(schema, { ...settings, partial: true });
+    const render = () => {
+        body.replaceChildren();
+        renderForm(ctx, body, schema, draft, path, {
+            kind: options.kind, isNew: true, pending: true,
+            onChange(next, changedPath) {
+                const relative = changedPath.slice(path.length);
+                if (!relative.length) draft = next;
+                else {
+                    const copy = JSON.parse(JSON.stringify(draft));
+                    let parent = copy;
+                    for (const key of relative.slice(0, -1)) parent = parent[key];
+                    parent[relative.at(-1)] = next;
+                    draft = copy;
+                }
+                render();
+            },
+        });
+    };
+    const close = () => { dialog.close(); dialog.remove(); };
+    dialog.addEventListener('close', () => dialog.remove());
+    actions.append(button(ctx.doc, 'Cancel', close), button(ctx.doc, 'Add', () => {
+        if (accept(ctx, schema, draft) && commit(draft)) close();
+    }, { class: 'primary' }));
+    dialog.append(el(ctx.doc, 'p', 'Choose the required values before adding.'), body, actions);
+    (ctx.overlays || container).append(dialog);
+    render(); dialog.showModal();
+    return false;
+}
 
 export function formOptions(model) {
     const checked = validateRulesPack(model.document);
@@ -133,13 +219,15 @@ export function renderForm(ctx, container, input, value, path, passed = {}) {
         select.addEventListener('change', () => {
             if (select.value === '') return;
             const variant = schema.oneOf[Number(select.value)];
-            const next = createDefault(variant);
-            if (next && typeof next === 'object' && value && typeof value === 'object') {
-                for (const [key, child] of Object.entries(variant.properties || {})) {
-                    if (child.const === undefined && Object.hasOwn(value, key) && validateField(child, value[key]).ok) next[key] = value[key];
+            const changed = withDefault(ctx, container, variant, path, options, next => {
+                if (next && typeof next === 'object' && value && typeof value === 'object') {
+                    for (const [key, child] of Object.entries(variant.properties || {})) {
+                        if (child.const === undefined && Object.hasOwn(value, key) && validateField(child, value[key]).ok) next[key] = value[key];
+                    }
                 }
-            }
-            commit(next);
+                return commit(next);
+            });
+            if (!changed) select.value = active < 0 ? '' : String(active);
         });
         if (active >= 0 && schema.oneOf[active].type !== 'null') renderForm(ctx, group, schema.oneOf[active], value, path, { ...options, label: title });
         else if (active < 0 && value !== undefined) renderJson(ctx, group, value, path, options, `${title} current value`);
@@ -155,14 +243,16 @@ export function renderForm(ctx, container, input, value, path, passed = {}) {
             const current = el(doc, 'option', `${display(value)} (invalid)`, { value: '__current__', disabled: '' });
             current.selected = true; select.append(current);
         }
-        select.addEventListener('change', () => { if (select.value !== '__current__') commit(schema.enum.find(v => String(v) === select.value)); });
+        select.addEventListener('change', () => {
+            if (select.value !== '__current__' && !commit(schema.enum.find(v => String(v) === select.value))) select.value = schema.enum.some(v => Object.is(v, value)) ? String(value) : '__current__';
+        });
         return;
     }
     if (schema.type === 'object' || schema.type === 'array') {
         const correct = schema.type === 'array' ? Array.isArray(value) : value !== null && typeof value === 'object' && !Array.isArray(value);
         if (!correct) {
             if (value !== undefined) renderJson(ctx, container, value, path, options, `${title} current value`);
-            container.append(button(doc, `Initialize ${title}`, () => commit(createDefault(schema)), attrs)); return;
+            container.append(button(doc, `Initialize ${title}`, () => withDefault(ctx, container, schema, path, options, commit), attrs)); return;
         }
         if (schema.type === 'array') {
             const group = el(doc, 'fieldset', '', { class: 'array-group', ...attrs });
@@ -174,7 +264,10 @@ export function renderForm(ctx, container, input, value, path, passed = {}) {
                 row.append(body, button(doc, 'Remove', () => commit(value.filter((_, index) => index !== i)), { class: 'danger', 'aria-label': `Remove ${title} ${i + 1}` }));
                 group.append(row);
             });
-            group.append(button(doc, '+ Add item', () => commit([...value, createDefault(schema.items)]), { class: 'array-add-btn', 'aria-label': `Add ${title} item` }));
+            const add = button(doc, '+ Add item', () => withDefault(ctx, container, schema.items, [...path, value.length], options,
+                next => commit([...value, next]), schema.uniqueItems ? value : []), { class: 'array-add-btn', 'aria-label': `Add ${title} item` });
+            add.disabled = value.length >= (schema.maxItems ?? Infinity);
+            group.append(add);
             container.append(group); return;
         }
         if (!schema.properties) { renderJson(ctx, container, value, path, options, title); return; }
@@ -187,8 +280,8 @@ export function renderForm(ctx, container, input, value, path, passed = {}) {
             if (present || required) renderForm(ctx, row, childSchema, value[key], [...path, key], { ...options, label: key });
             if (!required) row.append(button(doc, present ? 'Clear' : `Enable ${key}`, () => {
                 const next = { ...value };
-                if (present) delete next[key]; else next[key] = createDefault(childSchema);
-                commit(next);
+                if (present) { delete next[key]; commit(next); }
+                else withDefault(ctx, container, childSchema, [...path, key], options, entry => commit({ ...value, [key]: entry }));
             }, { class: present ? 'clear-btn' : 'enable-btn', 'aria-label': `${present ? 'Clear' : 'Enable'} ${key}` }));
             group.append(row);
         }

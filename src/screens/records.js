@@ -132,18 +132,19 @@ function renderRecordsInspector(ctx, container, kind, schema, validRecords, sing
 
 function renderAddForm(ctx, container, kind, schema, singularLabel) {
     const doc = ctx.doc;
-    let draft = createDefault(schema);
+    const draftPath = [...kindPath(kind), 'draft'];
+    const defaults = { model: ctx.model, kind, path: draftPath };
+    let draft = createDefault(schema, defaults) ?? createDefault(schema, { ...defaults, partial: true });
 
     const titleRow = el(doc, 'div', '', { class: 'inspector-title-row' });
     titleRow.append(el(doc, 'h2', `+ Add ${singularLabel}`));
     container.append(titleRow);
 
     const formBody = el(doc, 'div', '', { class: 'inspector-form-body' });
-    const draftPath = [...kindPath(kind), 'draft'];
     const renderDraft = () => {
         formBody.replaceChildren();
         renderForm(ctx, formBody, schema, draft, draftPath, {
-            kind, isNew: true, record: draft,
+            kind, isNew: true, pending: true, record: draft,
             onChange(next, path) {
                 const relative = path.slice(draftPath.length);
                 if (!relative.length) draft = next;

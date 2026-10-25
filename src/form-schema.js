@@ -174,6 +174,12 @@ export function referenceTarget(kind, path, record) {
     const last = segs[segs.length - 1];
     const prev = segs[segs.length - 2];
 
+    if (kind === 'classes') {
+        if (last === 'parent') return 'classes';
+        if (prev === 'skills' && /^\d+$/.test(last)) return 'skills';
+    }
+    if (kind === 'skills' && last === 'replaces') return 'skills';
+
     if (kind === 'presets') {
         if (last === 'race') return 'races';
         if (prev === 'talents' && /^\d+$/.test(last)) return 'talents';

@@ -129,8 +129,8 @@ button.danger.primary{background:color-mix(in srgb,var(--danger) 78%,#000);color
 .enable-btn{color:var(--text)}
 .fieldset-unset{font-size:13px;padding:4px 0}
 .array-group{display:flex;flex-direction:column;gap:8px;border:1px dashed var(--border);border-radius:12px;padding:10px;background:var(--tile);min-width:0}
-.array-row{display:flex;align-items:center;gap:8px;width:100%;min-width:0}
-.array-row-control{flex:1;min-width:0}
+.array-row{display:flex;align-items:center;gap:8px;width:100%;min-width:0;flex-wrap:wrap}
+.array-row-control{flex:1 1 140px;min-width:0}
 .array-add-btn{width:100%;border-style:dashed}
 .union-group{display:flex;flex-direction:column;gap:8px;border:1px solid var(--border);border-radius:12px;padding:10px;background:var(--tile);min-width:0}
 .json-textarea{min-height:120px;font-size:12px;line-height:1.4}
