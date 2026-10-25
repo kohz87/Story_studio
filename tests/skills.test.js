@@ -465,7 +465,7 @@ test('T3-10: Refused unsafe edits and malformed input handling', () => {
 
     // Must notify error and not commit malformed value to model
     assert.ok(ctx.notifications.length > 0);
-    assert.match(ctx.notifications.at(-1), /Transforms must be an array/);
+    assert.match(ctx.notifications.at(-1), /bad-value: Expected array/);
     assert.equal(Array.isArray(ctx.model.document.content.rules[0].branches.find(b => b.slug === 's30-base-a').transforms), true);
 
     // Enter syntax error JSON

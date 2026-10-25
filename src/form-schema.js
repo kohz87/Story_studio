@@ -227,6 +227,7 @@ export function validateField(input, value) {
     if (schema.oneOf && !schema.oneOf.some(part => validateField(part, value).ok)) return refuse('Value does not match an allowed variant');
     if (schema.const !== undefined && !Object.is(schema.const, value)) return refuse('Value must match the fixed value');
     if (schema.enum && !schema.enum.some(entry => Object.is(entry, value))) return refuse('Choose an allowed value');
+    if (schema.not && validateField(schema.not, value).ok) return refuse('Value is excluded by the schema');
     if (schema.type) {
         const correct = schema.type === 'null' ? value === null
             : schema.type === 'array' ? Array.isArray(value)
@@ -240,6 +241,7 @@ export function validateField(input, value) {
         if (value < (schema.minimum ?? -Infinity) || value > (schema.maximum ?? Infinity)) return refuse('Number is outside the allowed bounds');
         if (schema.exclusiveMinimum !== undefined && value <= schema.exclusiveMinimum) return refuse('Number must exceed the lower bound');
         if (schema.exclusiveMaximum !== undefined && value >= schema.exclusiveMaximum) return refuse('Number must be below the upper bound');
+        if (schema.multipleOf !== undefined && !Number.isInteger(value / schema.multipleOf)) return refuse('Number must be an allowed multiple');
     }
     if (typeof value === 'string') {
         const length = [...value].length;
@@ -262,4 +264,30 @@ export function validateField(input, value) {
         }
     }
     return { ok: true };
+}
+
+/** Validates a replacement and its enclosing lists before any edit or draft change. */
+export function validateChange(input, current, path, value) {
+    const schema = resolveSchema(input) || {};
+    if (!path.length) return validateField(schema, value);
+    if (schema.oneOf) {
+        const next = JSON.parse(JSON.stringify(current));
+        let parent = next;
+        for (const part of path.slice(0, -1)) parent = parent?.[part];
+        if (!parent || typeof parent !== 'object') return { ok: false, code: 'bad-value', message: 'Initialize the variant first' };
+        parent[path.at(-1)] = value;
+        return validateField(schema, next);
+    }
+    const [key, ...rest] = path;
+    const child = schema.type === 'array' ? schema.items : schema.properties?.[key];
+    const checked = validateChange(child, current?.[key], rest, value);
+    if (!checked.ok) return checked;
+    if (schema.type === 'array') {
+        const next = JSON.parse(JSON.stringify(current));
+        let parent = next;
+        for (const part of path.slice(0, -1)) parent = parent[part];
+        parent[path.at(-1)] = value;
+        return validateField(schema, next);
+    }
+    return checked;
 }

@@ -432,3 +432,50 @@ test('hostile labels render safely and failed opens or renders preserve the prev
     assert.equal(win.localStorage.getItem(DRAFT_KEY), draft);
     ctx.destroy();
 });
+
+test('schema refusals preserve the model, history, redo, dirty state and autosave', async () => {
+    const { ctx, win, root } = setupStudio();
+    const { makeValidExtendedPack } = await import('./fixtures/builders.js');
+    const pack = makeValidExtendedPack();
+    pack.content.rules[0].trainers[0].skills.push('s00');
+    await ctx.openFile(createMockFile('fixture.json', pack));
+    ctx.apply(setField(ctx.model, ['name'], '[EDIT]'));
+    ctx.history.undo(); ctx.changed();
+    const before = ctx.model;
+    const saved = win.localStorage.getItem(DRAFT_KEY);
+    let saves = 0;
+    const save = win.localStorage.setItem;
+    win.localStorage.setItem = (...args) => { saves++; save(...args); };
+    const cases = [
+        ['skills', 's00', null, '#form-effects', JSON.stringify([{ op: 'damage', target: 'one', power: 1001, element: 'none', damageType: 'physical' }])],
+        ['skills', 's00', null, '#form-effects', '[]'],
+        ['skills', 's30', 's30-base-a', '#form-transforms', JSON.stringify([{ op: 'set-power', at: 0, value: 1001 }])],
+        ['skills', 's30', 's30-base-a', '#form-transforms', JSON.stringify([{ op: 'replace-effect', at: 0, value: { op: 'damage', target: 'one', power: 1001, element: 'none', damageType: 'physical' } }])],
+        ['skills', 's30', 's30-base-a', '#form-transforms', '[]'],
+    ];
+    for (const [kind, id, form, selector, value] of cases) {
+        ctx.select(kind, id, form);
+        const control = ctx.inspector.querySelector(selector);
+        const previous = control.value;
+        control.value = value; control.dispatchEvent({ type: 'change' });
+        assert.equal(ctx.model, before);
+        assert.equal(control.value, previous);
+        assert.match(root.querySelector('.notice').textContent, /^bad-value:/);
+    }
+    ctx.select('trainers', 'weapon-master');
+    const skill = ctx.inspector.querySelectorAll('select').find(control => {
+        const path = JSON.parse(control.getAttribute('data-path'));
+        return path.at(-2) === 'skills' && path.at(-1) === 1;
+    });
+    assert.equal(skill.value, 's00');
+    skill.value = 's30'; skill.dispatchEvent({ type: 'change' });
+    assert.equal(skill.value, 's00');
+    assert.equal(ctx.model, before);
+    assert.match(root.querySelector('.notice').textContent, /^bad-value:/);
+    assert.equal(ctx.history.canUndo, false);
+    assert.equal(ctx.history.canRedo, true);
+    assert.equal(ctx.dirty, false);
+    assert.equal(saves, 0);
+    assert.equal(win.localStorage.getItem(DRAFT_KEY), saved);
+    assert.equal(ctx.model.validation.ok, true);
+});

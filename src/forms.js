@@ -1,7 +1,7 @@
 import { safeLabel, el, button, field } from './dom.js';
-import { setField, renameId } from './edits.js';
+import { setSchemaField as setField, renameId } from './edits.js';
 import { records, identity, localId } from './records.js';
-import { referenceTarget, resolveSchema, validateField } from './form-schema.js';
+import { referenceTarget, resolveSchema, validateField, validateChange } from './form-schema.js';
 import { validateRulesPack, RULES_V2_LIMITS, RULES_V2_PROGRESSION } from '../vendor/story-block/src/v2/packs/rules-v2.js';
 
 export function parseNumberInput(raw) {
@@ -54,7 +54,8 @@ function accept(ctx, schema, value) {
     return result.ok;
 }
 function mutate(ctx, path, value, options) {
-    if (!accept(ctx, options.schema, value)) return false;
+    const checked = validateChange(options.rootSchema, options.rootValue, path.slice(options.rootPath.length), value);
+    if (!checked.ok) { ctx.notify(`${checked.code}: ${checked.message}`); return false; }
     if (options.isNew) { options.onChange(value, path); return true; }
     if (['id', 'slug'].includes(path.at(-1)) && path.length > options.rootPath.length + 1) {
         const index = path.findIndex((part, i) => i >= options.rootPath.length && typeof part === 'number');
@@ -71,7 +72,7 @@ function mutate(ctx, path, value, options) {
             }
         }
     }
-    return ctx.apply(setField(ctx.model, path, value));
+    return ctx.apply(setField(ctx.model, path, value, options));
 }
 function pathAttrs(path, options) { return { [options.isNew ? 'data-draft-path' : 'data-path']: JSON.stringify(path) }; }
 function titleFor(path) { return typeof path.at(-1) === 'number' ? `Item ${path.at(-1) + 1}` : String(path.at(-1) || 'Record'); }
@@ -98,7 +99,7 @@ export function formOptions(model) {
 
 export function renderForm(ctx, container, input, value, path, passed = {}) {
     const schema = resolveSchema(input) || {};
-    const options = { ...passed, rootPath: passed.rootPath || path, schema };
+    const options = { ...passed, rootPath: passed.rootPath || path, rootSchema: passed.rootSchema || schema, rootValue: passed.rootPath ? passed.rootValue : value, schema };
     const doc = ctx.doc;
     const title = options.label || titleFor(path);
     const attrs = pathAttrs(path, options);

@@ -272,7 +272,7 @@ test('valid apply updates export/name and history undo/redo', () => {
     dev.destroy();
 });
 
-test('invalid edit disables export and displays validation error', () => {
+test('invalid edit preserves export and history and displays a refusal code', () => {
     const { root, byId } = createFakeDOM();
     const dev = mountDev(root);
 
@@ -280,21 +280,19 @@ test('invalid edit disables export and displays validation error', () => {
     assert.equal(byId('export-pack').disabled, false);
     assert.equal(byId('errors').children.length, 0);
 
-    // Set name exceeding SB validator limit of 80 chars ('x'.repeat(81) is <= 4000 so edit accepted, BAD_FIELD name)
+    // Names outside the schema bounds are refused before committing.
     byId('pack-name').value = 'x'.repeat(81);
     byId('apply-name').click();
 
-    assert.equal(byId('export-pack').disabled, true, 'Invalid pack must disable export');
+    assert.equal(byId('export-pack').disabled, false, 'Refusal keeps the valid pack exportable');
     assert.ok(byId('errors').children.length > 0, 'Validation errors must be displayed');
 
     const err = byId('errors').children[0];
-    assert.equal(err.dataset.code, 'BAD_FIELD');
+    assert.equal(err.dataset.code, 'bad-value');
     assert.equal(err.dataset.path, 'name');
 
-    // Undo should restore valid state and re-enable export
-    byId('undo').click();
     assert.equal(byId('pack-name').value, 'Fixture');
-    assert.equal(byId('errors').children.length, 0);
+    assert.equal(byId('undo').disabled, true);
     assert.equal(byId('export-pack').disabled, false);
 
     dev.destroy();

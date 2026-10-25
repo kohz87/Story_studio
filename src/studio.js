@@ -1,5 +1,5 @@
 import { openPack } from './model.js';
-import { setField } from './edits.js';
+import { setSchemaField as setField } from './edits.js';
 import { createHistory } from './history.js';
 import { safeLabel, el, button, field, icon } from './dom.js';
 import { KINDS, LABELS, records } from './records.js';
@@ -41,7 +41,9 @@ export function mountStudio(root) {
     const brand = el(doc, 'strong', 'Story Studio', { class: 'brand' });
     brand.prepend(icon(doc, 'logo-mark'));
     const name = el(doc, 'input', '', { id: 'pack-name', placeholder: '[YOUR PACK NAME]', 'aria-label': 'Pack name' });
-    name.addEventListener('change', () => ctx.apply(setField(ctx.model, ['name'], name.value)));
+    name.addEventListener('change', () => {
+        if (!ctx.apply(setField(ctx.model, ['name'], name.value))) name.value = safeLabel(ctx.model?.document?.name ?? '');
+    });
     const fingerprint = el(doc, 'span', 'rules v2 · —', { class: 'fingerprint muted' });
     const undo = button(doc, '', () => {
         history.undo();

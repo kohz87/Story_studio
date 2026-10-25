@@ -548,7 +548,7 @@ test('T4-20: Qualified current and external references are labelled and retained
 
 test('T4-21: Nested objective identifiers are authored through their list while quest identity stays intact', () => {
     const pack = smallRulesPack();
-    pack.content.quests = [{ slug: 'visit', name: '[QUEST]', objectives: [{ id: 'old', kind: 'visit', place: 'haven' }] }];
+    pack.content.quests = [{ slug: 'visit', name: '[QUEST]', objectives: [{ id: 'old', kind: 'visit', place: 'pack.fixture/haven' }] }];
     const ctx = createTestContext(pack); ctx.onRender = () => renderScreen(ctx); ctx.select('quests', 'visit');
     const id = controls(ctx, 'input', 'id')[0]; id.value = 'objective_00000001'; id.dispatchEvent({ type: 'change' });
     assert.equal(ctx.model.document.content.quests[0].objectives[0].id, 'objective_00000001');

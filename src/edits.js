@@ -1,6 +1,7 @@
 // Pack edit operations: add, renameId, remove, moveClass, and setField (pure).
 
 import { openPack } from './model.js';
+import { schemaForKind, validateChange } from './form-schema.js';
 import { RULES_V2_LIMITS, RULES_V2_PROGRESSION, rulesV2Schema } from '../vendor/story-block/src/v2/packs/rules-v2.js';
 
 const RULES_KINDS = new Set(['classes', 'skills', 'branches', 'itemRules', 'trainers']);
@@ -1734,4 +1735,26 @@ export function setField(model, path, value) {
     }
 
     return commitSnapshot(newDoc, model);
+}
+
+/** Schema-driven edits share one guard; the pure engine still supports damaged drafts. */
+export function setSchemaField(model, path, value, scope) {
+    const safePath = validateAndCloneValue(path);
+    const safeValue = validateAndCloneValue(value);
+    if (!safePath.ok || !Array.isArray(safePath.value) || !safeValue.ok) return setField(model, path, value);
+    path = safePath.value;
+    if (path.some(key => typeof key === 'string' && UNSAFE_KEYS.has(key))) return setField(model, path, value);
+    let rootPath = scope?.rootPath;
+    let schema = scope?.rootSchema;
+    if (!rootPath) {
+        const rules = path[0] === 'content' && path[1] === 'rules' && RULES_KINDS.has(path[3]);
+        const kind = rules ? path[3] : path[1] === 'skills' ? 'legacySkills' : path[1];
+        rootPath = path[0] === 'content' && schemaForKind(kind) ? path.slice(0, rules ? 5 : 3) : [];
+        schema = rootPath.length ? schemaForKind(kind) : { type: 'object', properties: { name: { type: 'string', minLength: 1, maxLength: 80 } } };
+    }
+    let current = model?.document;
+    for (const key of rootPath) current = current?.[key];
+    const checked = validateChange(schema, current, path.slice(rootPath.length), safeValue.value);
+    if (!checked.ok) return { ok: false, model, errors: [{ ...checked, path: path.join('.') }] };
+    return setField(model, path, safeValue.value);
 }

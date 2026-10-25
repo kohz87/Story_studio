@@ -1,7 +1,7 @@
 import { safeLabel, el, field } from '../dom.js';
 import { records, localId } from '../records.js';
 import { validateField } from '../form-schema.js';
-import { setField } from '../edits.js';
+import { setSchemaField as setField } from '../edits.js';
 import {
     validateRulesPack,
     powerScore,
@@ -1111,16 +1111,14 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
         id: 'form-effects',
         'data-path': JSON.stringify([...skillPath, 'base', 'effects']),
     });
+    effectsTextarea.value = JSON.stringify(skill.base?.effects ?? [], null, 2);
     effectsTextarea.addEventListener('change', () => {
         try {
             const parsed = JSON.parse(effectsTextarea.value);
-            if (!Array.isArray(parsed)) {
-                ctx.notify('Effects must be an array of effect objects');
-                return;
-            }
-            ctx.apply(setField(ctx.model, [...skillPath, 'base', 'effects'], parsed));
+            if (!ctx.apply(setField(ctx.model, [...skillPath, 'base', 'effects'], parsed))) effectsTextarea.value = JSON.stringify(skill.base?.effects ?? [], null, 2);
         } catch (err) {
-            ctx.notify(`Invalid JSON in effects: ${err.message}`);
+            ctx.notify(`bad-value: Invalid JSON in effects: ${err.message}`);
+            effectsTextarea.value = JSON.stringify(skill.base?.effects ?? [], null, 2);
         }
     });
     details.append(field(doc, 'EFFECTS (JSON)', effectsTextarea));
@@ -1253,16 +1251,14 @@ function renderBranchControls(ctx, node) {
         id: 'form-transforms',
         'data-path': JSON.stringify([...branchPath, 'transforms']),
     });
+    transformsTextarea.value = JSON.stringify(branch.transforms ?? [], null, 2);
     transformsTextarea.addEventListener('change', () => {
         try {
             const parsed = JSON.parse(transformsTextarea.value);
-            if (!Array.isArray(parsed)) {
-                ctx.notify('Transforms must be an array of transform objects');
-                return;
-            }
-            ctx.apply(setField(ctx.model, [...branchPath, 'transforms'], parsed));
+            if (!ctx.apply(setField(ctx.model, [...branchPath, 'transforms'], parsed))) transformsTextarea.value = JSON.stringify(branch.transforms ?? [], null, 2);
         } catch (err) {
-            ctx.notify(`Invalid JSON in transforms: ${err.message}`);
+            ctx.notify(`bad-value: Invalid JSON in transforms: ${err.message}`);
+            transformsTextarea.value = JSON.stringify(branch.transforms ?? [], null, 2);
         }
     });
     details.append(field(doc, 'TRANSFORMS (JSON)', transformsTextarea));

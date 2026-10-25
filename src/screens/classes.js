@@ -1,6 +1,6 @@
 import { safeLabel, el, button, field } from '../dom.js';
 import { KINDS, LABELS, records, identity, localId } from '../records.js';
-import { add, addClassSkill, renameId, remove, moveClass, setField } from '../edits.js';
+import { add, addClassSkill, renameId, remove, moveClass, setSchemaField as setField } from '../edits.js';
 import { schemaForKind, validateField } from '../form-schema.js';
 import { validateRulesPack } from '../../vendor/story-block/src/v2/packs/rules-v2.js';
 
@@ -525,7 +525,7 @@ export function renderClasses(ctx) {
                     nextSkills.push(picked);
                 }
             }
-            ctx.apply(setField(ctx.model, [...classPath, 'skills'], nextSkills));
+            if (!ctx.apply(setField(ctx.model, [...classPath, 'skills'], nextSkills))) select.value = currentSlotSkill;
         });
 
         const rowField = field(doc, `Skill ${slotIdx + 1}`, select);

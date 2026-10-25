@@ -128,7 +128,7 @@ test('T2-4: Parent select => moveClass with root option and authoritative candid
     assert.equal(movedC3.tier, 1);
 });
 
-test('T2-5: Clearing and fixing skills invalid then valid; safe path mapping prevents classes[1] matching classes[10]; skill count displayed', () => {
+test('T2-5: Clearing required skills is refused; safe path mapping prevents classes[1] matching classes[10]; skill count displayed', () => {
     const pack = smallRulesPack();
     const ctx = createTestContext(pack);
     ctx.onRender = () => renderClasses(ctx);
@@ -157,18 +157,20 @@ test('T2-5: Clearing and fixing skills invalid then valid; safe path mapping pre
 
     ctx.select('classes', 'c0');
 
-    // Clear slot 3 => array of 2
+    // Clearing slot 3 would violate minItems.
     const slot3SelectRe = ctx.inspector.querySelectorAll('.skill-row select')[2];
     slot3SelectRe.value = '';
     slot3SelectRe.dispatchEvent({ type: 'change', target: slot3SelectRe });
 
     const c0Skills = ctx.model.document.content.rules[0].classes[0].skills;
-    assert.equal(c0Skills.length, 2);
-    assert.deepEqual(c0Skills, ['s00', 's01']);
+    assert.deepEqual(c0Skills, ['s00', 's01', 's02']);
+    assert.equal(slot3SelectRe.value, 's02');
+    assert.equal(ctx.history.canUndo, false);
+    assert.match(ctx.notifications.at(-1), /^bad-value:/);
 
     const newCountSpan = ctx.inspector.querySelector('#class-skills .skills-header span:last-child');
-    assert.equal(newCountSpan.textContent, '2 / 3');
-    assert.ok(newCountSpan.classList.contains('warn-count'));
+    assert.equal(newCountSpan.textContent, '3 / 3');
+    assert.equal(newCountSpan.classList.contains('warn-count'), false);
 
     // Safe path mapping check: error on classes.10 must not match classes.1
     const mockModel = openPack(pack);
@@ -388,8 +390,9 @@ test('T2-11: Pure helper classField directly edits class fields and tolerates nu
     assert.equal(res1.model.document.content.rules[0].classes[1].name, 'Updated Class');
 
     const res2 = classField(res1.model, 'c1', 'skills', ['s10', 's11']);
-    assert.ok(res2.ok);
-    assert.deepEqual(res2.model.document.content.rules[0].classes[1].skills, ['s10', 's11']);
+    assert.equal(res2.ok, false);
+    assert.equal(res2.model, res1.model);
+    assert.equal(res2.errors[0].code, 'bad-value');
 
     const res3 = classField(model, 'non-existent', 'name', 'X');
     assert.ok(!res3.ok);
@@ -416,7 +419,10 @@ test('T2-12: qualified skills remain selected, malformed skill arrays are repair
     const select = ctx.inspector.querySelector('.skill-row select');
     select.value = 's10';
     select.dispatchEvent({ type: 'change' });
-    assert.deepEqual(ctx.model.document.content.rules[0].classes[1].skills, ['s10']);
+    assert.deepEqual(ctx.model.document.content.rules[0].classes[1].skills, {});
+    assert.match(ctx.notifications.at(-1), /^bad-value:/);
+    assert.equal(ctx.apply(classField(ctx.model, 'c1', 'skills', ['s10', 's11', 's12'])), true);
+    assert.deepEqual(ctx.model.document.content.rules[0].classes[1].skills, ['s10', 's11', 's12']);
     const longPack = smallRulesPack();
     longPack.content.rules[0].classes[0].slug = 'x'.repeat(64);
     const ctx2 = createTestContext(longPack);

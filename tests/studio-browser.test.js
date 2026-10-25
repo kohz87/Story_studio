@@ -176,6 +176,13 @@ for (const theme of ['dark', 'light']) for (const width of [1280, 1024]) {
 
             await selectClass(page, 'c0');
             await page.locator('#class-skills select').nth(2).selectOption('');
+            assert.equal(await page.locator('#class-skills select').nth(2).inputValue(), 's02');
+            assert.match(await page.locator('.notice').textContent(), /^bad-value:/);
+            assert.equal(await page.locator('.topbar button.primary').isEnabled(), true);
+            const damaged = smallRulesPack();
+            damaged.content.rules[0].classes[0].skills.pop();
+            await upload(page, damaged);
+            await page.waitForFunction(() => document.querySelector('.topbar button.primary').disabled);
             assert.equal(await page.locator('.topbar button.primary').isDisabled(), true);
             await page.getByRole('button', { name: /^Problems \(/ }).click();
             const drawer = page.getByRole('region', { name: 'Problems', exact: true });
