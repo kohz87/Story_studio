@@ -222,28 +222,55 @@ function renderJson(ctx, container, value, path, options, title) {
     });
     container.append(field(ctx.doc, title, control));
 }
+export function referenceId(model, input, id) {
+    if (typeof id !== 'string') return null;
+    const schema = resolveSchema(input) || {};
+    const accepts = (s, value) => s.oneOf ? s.oneOf.some(part => accepts(part, value))
+        : s.type !== 'null' && (!s.pattern || new RegExp(s.pattern, 'u').test(value))
+            && value.length >= (s.minLength ?? 0) && value.length <= (s.maxLength ?? Infinity);
+    const local = localId(model, id);
+    const qualified = `pack.${safeLabel(model?.document?.id)}/${local}`;
+    return [id, local, qualified].find(value => accepts(schema, value)) ?? null;
+}
+
 let referenceSequence = 0;
 function renderReference(ctx, container, target, schema, value, path, options, title) {
     const doc = ctx.doc;
     const current = display(value);
     const entries = target === 'forms' ? formOptions(ctx.model).map(id => ({ slug: id })) : records(ctx.model, target);
-    const choices = entries.filter(r => typeof identity(r) === 'string').map(r => ({ id: localId(ctx.model, identity(r)), name: typeof r.name === 'string' ? r.name : identity(r) }));
+    const choices = entries.filter(r => typeof identity(r) === 'string').map(r => {
+        const same = localId(ctx.model, identity(r)) === localId(ctx.model, current);
+        const id = referenceId(ctx.model, schema, same ? current : identity(r));
+        return { id, name: safeLabel(r.name ?? identity(r)) };
+    }).filter(choice => choice.id !== null);
     const external = ['places', 'npcs', 'threads'].includes(target);
     const control = el(doc, external ? 'input' : 'select', '', pathAttrs(path, options));
     const list = external ? el(doc, 'datalist', '', { id: `reference-${++referenceSequence}` }) : control;
     if (external) control.setAttribute('list', list.id);
     else { const empty = el(doc, 'option', '(none / clear)', { value: '' }); empty.selected = !current; list.append(empty); }
     for (const choice of choices) {
-        const option = el(doc, 'option', `${safeLabel(choice.name)} (${safeLabel(choice.id)})`, { value: choice.id });
+        const option = el(doc, 'option', `${choice.name} (${choice.id})`, { value: choice.id });
         option.selected = choice.id === current; list.append(option);
     }
     if (current && !choices.some(c => c.id === current)) {
-        const option = el(doc, 'option', `${current} (current)`, { value: current }); option.selected = true; list.append(option);
+        const isExternal = external && !current.startsWith(`pack.${safeLabel(ctx.model?.document?.id)}/`)
+            && (current.includes('/') || /^[a-z]+_[0-9a-z]{8}$/.test(current));
+        const caption = `${current} (${isExternal ? 'external' : 'missing'})`;
+        if (external) container.append(el(doc, 'p', caption, { class: 'muted' }));
+        else {
+            const option = el(doc, 'option', caption, { value: current, disabled: '' });
+            option.selected = true; list.append(option);
+        }
     }
     if (external) control.value = current;
     control.addEventListener('change', () => {
-        const next = control.value || (schema.oneOf?.some(s => s.type === 'null') ? null : '');
-        if (!mutate(ctx, path, next, options)) control.value = current;
+        const next = control.value ? referenceId(ctx.model, schema, control.value)
+            : (schema.oneOf?.some(s => s.type === 'null') ? null : '');
+        const known = external || choices.some(choice => choice.id === next) || !control.value;
+        if ((next === null && control.value) || !known) {
+            ctx.notify('bad-ref: Choose an existing ID or a valid external reference');
+            control.value = current;
+        } else if (!mutate(ctx, path, next, options)) control.value = current;
     });
     container.append(field(doc, title, control));
     if (external) container.append(list);

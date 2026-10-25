@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { makeValidExtendedPack } from './fixtures/builders.js';
 import { smallRulesPack } from './fixtures/smallRulesPack.js';
 import { openPack } from '../src/model.js';
 import { setField, add } from '../src/edits.js';
@@ -329,7 +330,7 @@ test('T4-10: Bounded JSON textarea refuses malformed syntax with bad-value and p
     assert.deepEqual(ctx.model.document.content.items[0].effect, { heal: 30 });
 });
 
-test('T4-11: Reference pickers list existing records and preserve missing current values', () => {
+test('T4-11: Reference pickers list existing records and label missing current values without offering them', () => {
     const pack = smallRulesPack();
     pack.content.shops = [{
         slug: 'haven-shop',
@@ -346,12 +347,11 @@ test('T4-11: Reference pickers list existing records and preserve missing curren
     assert.ok(placeSelect);
     const options = ctx.inspector.querySelector('datalist').querySelectorAll('option');
     const optionValues = options.map(o => o.value);
-    assert.ok(optionValues.includes('haven'));
-    assert.ok(optionValues.includes('mill'));
-    assert.ok(optionValues.includes('ghost-town'));
+    assert.ok(optionValues.includes('pack.fixture/haven'));
+    assert.ok(optionValues.includes('pack.fixture/mill'));
+    assert.equal(optionValues.includes('ghost-town'), false);
 
-    const missingOpt = options.find(o => o.value === 'ghost-town');
-    assert.ok(missingOpt.textContent.includes('(current)'));
+    assert.match(ctx.inspector.textContent, /ghost-town \(missing\)/);
     assert.equal(placeSelect.value, 'ghost-town');
 });
 
@@ -555,4 +555,25 @@ test('T4-21: Nested objective identifiers are authored through their list while 
     assert.equal(ctx.model.document.content.quests[0].slug, 'visit');
     ctx.history.undo();
     assert.equal(ctx.model.document.content.quests[0].objectives[0].id, 'old');
+});
+
+test('reference suggestions and commits use the field schema ID format and keep export valid', () => {
+    const ctx = createTestContext(makeValidExtendedPack());
+    ctx.onRender = () => renderScreen(ctx);
+    assert.equal(ctx.model.validation.ok, true);
+    for (const [kind, id, key] of [['trainers', 'weapon-master', 'place'], ['shops', 'haven-armory', 'place'], ['quests', 'scout-threat', 'turnInPlace']]) {
+        ctx.select(kind, id);
+        const control = controls(ctx, 'input', key)[0];
+        assert.ok(control, `${kind}.${key} picker`);
+        const choices = ctx.inspector.querySelector(`[id="${control.getAttribute('list')}"]`).querySelectorAll('option');
+        assert.ok(choices.some(option => option.value === 'pack.fixture/mill'));
+        control.value = 'pack.fixture/mill'; control.dispatchEvent({ type: 'change' });
+        const list = kind === 'trainers' ? ctx.model.document.content.rules[0].trainers : ctx.model.document.content[kind];
+        assert.equal(list.find(record => record.slug === id)[key], 'pack.fixture/mill');
+        assert.equal(ctx.model.validation.ok, true, JSON.stringify(ctx.model.validation.errors));
+        ctx.history.undo(); ctx.changed();
+        const local = controls(ctx, 'input', key)[0];
+        local.value = 'mill'; local.dispatchEvent({ type: 'change' });
+        assert.equal(ctx.model.validation.ok, true, 'Typed local IDs use the same formatter as suggestions');
+    }
 });

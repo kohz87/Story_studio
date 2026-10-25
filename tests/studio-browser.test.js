@@ -220,7 +220,7 @@ for (const theme of ['dark', 'light']) for (const width of [1280, 1024]) {
             await page.locator('.record-card').first().click();
             const place = page.locator('.inspector-body input[list]').first();
             const listId = await place.getAttribute('list');
-            assert.ok((await page.locator('[id="' + listId + '"] option').evaluateAll(nodes => nodes.map(n => n.value))).includes('haven'));
+            assert.ok((await page.locator('[id="' + listId + '"] option').evaluateAll(nodes => nodes.map(n => n.value))).includes('pack.fixture/haven'));
             assert.ok(await page.locator('.inspector-body select option[value="s00"]').count() > 0);
             await checkAccessibility(page);
         });
