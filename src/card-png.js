@@ -11,7 +11,7 @@ function word(value) {
     new DataView(result.buffer).setUint32(0, value);
     return result;
 }
-function crc32(data) {
+export function crc32(data) {
     let crc = 0xffffffff;
     for (const value of data) {
         crc ^= value;
