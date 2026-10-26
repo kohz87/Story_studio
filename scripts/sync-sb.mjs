@@ -4,6 +4,7 @@
 // into vendor/story-block/, using Story Block's own scripts/sync-testkit.mjs so both copy the same files the same way.
 // Studio imports Story Block only from vendor/story-block/. VERSION there names the commit it was copied from.
 // The folder is replaced as a whole. Plain Node, no dependencies. `--from` defaults to $STORY_BLOCK.
+// It then runs sync-kit.mjs (the authoring kit), which can also be run alone: npm run sync-kit -- --from <checkout>.
 
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
@@ -33,6 +34,9 @@ try {
     rmSync(resolve('vendor', 'story-block-fixtures'), { recursive: true, force: true });
     if (existsSync(fixtures)) cpSync(fixtures, fixtureTarget, { recursive: true });
     console.log(`sync-sb: vendor/story-block from ${from}`);
+    // The authoring kit travels with Story Block's code: its checker runs against the copy that was just made.
+    if (existsSync(join(from, 'authoring-kit', 'check.mjs'))) execFileSync(process.execPath, [join('scripts', 'sync-kit.mjs'), '--from', from], { stdio: 'inherit' });
+    else console.log('sync-sb: that checkout has no authoring-kit; authoring-kit/ is left as it is');
 } finally {
     rmSync(scratch, { recursive: true, force: true });
 }

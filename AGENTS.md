@@ -7,6 +7,9 @@ RPG Battle; Story Director; NPC State Delta). It edits and checks packs and expo
 - Story Block is used only through `vendor/story-block/` (`npm run sync-sb -- --from <Story Block checkout>`); never edit
   the vendored copy, and never copy Story Block code by hand. The pack checker is Story Block's, so Studio and the game
   can never disagree on what a valid pack is.
+- `authoring-kit/` is a synchronized copy of Story Block's kit (`npm run sync-kit -- --from <Story Block checkout>`, or `sync-sb`, which runs
+  it); never edit it by hand. Its README names the agent tools it works with; that is intended and the one exception to the rule on tool
+  names below.
 - DOM through createElement / createElementNS and textContent only: no innerHTML, insertAdjacentHTML, outerHTML,
   DOMParser, eval or new Function.
 - Tests with `node:test` under `tests/`; `npm run -s check` and `npm run -s test:dot` pass before every commit.

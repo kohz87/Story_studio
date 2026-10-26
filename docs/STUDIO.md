@@ -616,6 +616,9 @@ npm run sync-sb -- --from /tmp/s1work/Story_block
   matrix 2
   ```
 - **Integrity Rule**: Files under `vendor/story-block/` are never edited manually.
+- **The authoring kit** is synced the same way: `npm run sync-sb` ends by running `npm run sync-kit -- --from <Story Block checkout>`
+  (also usable alone), which copies Story Block's committed `authoring-kit/` into `authoring-kit/`. See
+  [Draft with your own AI](#draft-with-your-own-ai-the-authoring-kit).
 
 
 ## Part 2.5: release parity and lossless files
@@ -1083,3 +1086,26 @@ deterministic (build twice, same hash), the page makes no requests, and every pi
 - Setup (enable, attach, migrate) and the replay engine are Story Block's; Studio authors definitions only.
 - There is no undo inside an unapplied draft; *Discard draft* drops all of it, and Undo after Apply reverses the whole edit.
 - Screens in a module are copies. Editing the pack screen afterwards does not update the module's copy.
+
+## Draft with your own AI (the authoring kit)
+
+Studio has no AI page, takes no keys and makes no requests. A creator who wants an AI to draft a pack from their lore uses
+their own coding agent or chat with the **authoring kit** in `authoring-kit/`: prompts for each step of a rules pack and of a
+data module, standing instructions for the agent (`AGENTS.md`), the format references, and a checker. Start at
+[`authoring-kit/README.md`](../authoring-kit/README.md). A pack the kit's checker accepts opens in Studio, and a pack Studio
+accepts passes the kit's checker: both run Story Block's own `validatePack`.
+
+- **Where it comes from.** The kit lives in Story Block (`authoring-kit/`) and is copied here by `npm run sync-kit`. Nothing in it
+  is edited by hand. `authoring-kit/VERSION` names the Story Block commit and lists the SHA-256 of every file; the copy is exactly
+  the files Story Block has committed in that folder. `authoring-kit/work/` is the creator's (lore and drafts): the sync never
+  removes or overwrites anything in it and copies nothing from Story Block's `work/` except its README.
+- **One rewritten line.** The kit's scripts find Story Block's code through `authoring-kit/scripts/sb-root.mjs`. In Story Block that
+  is the repository's `src/v2/`; the sync rewrites that one line so the copy here runs against `vendor/story-block/`, the same code
+  Studio checks with. `authoring-kit/check.mjs` therefore agrees with Studio's Problems list by construction.
+- **In the page.** The empty editor and Pack settings each show one line of text, "Draft with your own AI: see
+  authoring-kit/README.md in this download or repository." It is plain text (`src/draft-hint.js`): no link, no request.
+- **Tests.** [`authoring-kit`](../tests/authoring-kit.test.js) fails when the copy drifts from its stamp (a changed, added or
+  removed file), when the stamp is not a commit, when the checker disagrees with Studio's own verdict on the kit's example
+  packs, when `reference/LIMITS.md` or the schema differs from the vendored Story Block, or when the hint is missing or
+  not offline. Story Block's own test checks the original (prompts quote Story Block's current numbers, the references equal
+  what it ships).

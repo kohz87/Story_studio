@@ -10,6 +10,7 @@
     "test": "node --test --test-reporter=dot \"tests/**/*.test.js\"",
     "test:dot": "node --test --test-reporter=dot \"tests/**/*.test.js\"",
     "sync-sb": "node scripts/sync-sb.mjs",
+    "sync-kit": "node scripts/sync-kit.mjs",
     "build": "node scripts/build.mjs",
     "start": "node scripts/serve.mjs"
   },
