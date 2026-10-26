@@ -2104,3 +2104,14 @@ and no file outside its list changed.
 3. **One field per module.** The starter has one whole-number field, one line, one command, one query. *Recommended:*
    keep it for 5b (the golden stays small and the tests exact); grow to several fields in a later part, after authors
    have used it.
+
+### Decisions (approved 26 Oct)
+
+- The mockups in `docs/mockups/part5b/` are approved as drawn.
+- All three answers above are accepted as recommended: the single file grows to about 4.6 MB; the zip carries Story
+  Block's testkit with its AGPL licence and the Phosphor notice and leaves the module's licence to the author; the
+  starter keeps one field, one line, one command and one query.
+- Part 5a is merged (`2549e00`); this branch starts from Studio `main` with this spec merged in.
+- **M0 re-syncs to Story Block `main` at `a482fd0` (2.2.0)**, the current release, not `076764b`. Wherever this spec
+  names the baseline stamp (M0's VERSION check, M4's `SB_STAMP`), expect `2.2.0` and `a482fd0…`, and the file counts
+  the generator reports at that commit (record them in the M4 commit message if they differ from 125 / 128).
