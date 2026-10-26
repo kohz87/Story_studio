@@ -308,6 +308,8 @@ inserted before the inline pass, so their own placeholders are filled. `blocks` 
 Byte-exact copies are in `docs/part5b/templates/`. Each ends with exactly one line break and has no trailing spaces,
 except the block snippet `screen-const.js.tmpl`, which ends with `};` and then two line breaks (`"};\n\n"`): that blank
 line is the gap the golden part file shows between the screen constant and `export const part = {`.
+The root `.gitattributes` sets `whitespace=-blank-at-eof` for files named `screen-const.js.tmpl` only, so `git diff
+--check` (milestone gate and CI) accepts that one blank line while every other whitespace rule still applies to it.
 
 #### `gitignore.tmpl` → `.gitignore`
 
