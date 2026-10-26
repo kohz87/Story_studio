@@ -101,8 +101,13 @@ export function drawEffects(doc, host, effects, ctx) {
         const options = [...new Set([...allowed, ...(typeof effect.op === 'string' ? [effect.op] : [])])];
         selectControl(doc, header, `Effect ${index + 1} operation`, options.map(op => [op, own(EFFECTS, op) && EFFECTS[op].v11 ? `${op} (${V11_MESSAGE})` : !allowed.includes(op) ? `${op} (not allowed here)` : op]), effect.op, next => {
             const fresh = newEffect(next, ctx.draft);
-            for (const key of Object.keys(effect)) delete effect[key];
-            Object.assign(effect, fresh);
+            const known = new Set(['op', ...Object.values(EFFECTS).flatMap(item => [...item.fields, ...item.optional])]);
+            for (const key of known) {
+                if (!Object.hasOwn(fresh, key) && !EFFECTS[next]?.optional.includes(key)) delete effect[key];
+                else if (key === 'op' || !Object.hasOwn(effect, key)) {
+                    if (Object.hasOwn(fresh, key)) effect[key] = fresh[key];
+                }
+            }
             ctx.redraw();
         });
         header.append(button(doc, 'Up', () => { if (move(effects, index, index - 1)) ctx.redraw(); }, { 'aria-label': `Move effect ${index + 1} up` }),

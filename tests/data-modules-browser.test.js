@@ -624,3 +624,38 @@ test('simulator controls: Continue claims once, Re-read, Swipe and Reload report
         await page.locator('#dm-sim-output').waitFor();
     });
 });
+
+test('review 116: changing a field type and effect operation keeps authored unknown keys until removed', { timeout: 60000 }, async () => {
+    await withPage(SHIPPED, {}, async page => {
+        await upload(page, factionsText());
+        await openDataModules(page);
+        await page.getByRole('button', { name: /^1\./ }).click();
+        await section(page, 'Record JSON');
+        const record = JSON.parse(await page.locator('#dm-json').inputValue());
+        const authorNote = { keep: ['authored', { text: 'until I remove it' }] };
+        record.state.memo = { type: 'enum', values: ['none', 'other'], default: 'none', authorNote };
+        record.kinds.loss.effects[0].authorNote = authorNote;
+        const path = record.kinds.loss.effects[0].path;
+        await page.locator('#dm-json').fill(JSON.stringify(record));
+        await page.getByRole('button', { name: 'Use record JSON', exact: true }).click();
+        await section(page, 'Fields');
+        await choose(page.locator('[data-field="memo"]'), 'Type', 'text');
+        await section(page, 'Kinds');
+        await choose(page.locator('[data-kind="loss"]'), 'Effect 1 operation', 'set');
+        await section(page, 'Record JSON');
+        const changed = JSON.parse(await page.locator('#dm-json').inputValue());
+        assert.deepEqual(changed.state.memo, { type: 'text', max: 80, default: 'none', authorNote });
+        assert.deepEqual(changed.kinds.loss.effects[0], { op: 'set', path, value: -5, authorNote });
+        assert.match(await verdict(page), /Unknown field "authorNote"/);
+        await page.locator('#dm-apply').click();
+        assert.equal((await exportedPack(page)).toString('utf8'), factionsText());
+        delete changed.state.memo.authorNote;
+        delete changed.kinds.loss.effects[0].authorNote;
+        await openDataModules(page);
+        await page.getByRole('button', { name: /^1\./ }).click();
+        await section(page, 'Record JSON');
+        await page.locator('#dm-json').fill(JSON.stringify(changed));
+        await page.getByRole('button', { name: 'Use record JSON', exact: true }).click();
+        await waitAccepted(page);
+    });
+});

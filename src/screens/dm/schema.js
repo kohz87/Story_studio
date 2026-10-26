@@ -11,8 +11,14 @@ export function schemaControls(doc, host, schema, ctx, { labelMode = false, scal
     const types = labelMode ? LABEL_TYPES : scalarOnly ? SCALAR_TYPES : FIELD_TYPES;
     selectControl(doc, host, 'Type', [...types], schema.type, next => {
         const fresh = labelMode ? newLabel(next) : defaultSchema(next);
-        for (const key of Object.keys(schema)) delete schema[key];
-        Object.assign(schema, fresh);
+        const known = ['type', 'min', 'max', 'default', 'values', 'keys'];
+        for (const key of known) {
+            if (!Object.hasOwn(fresh, key)) delete schema[key];
+            else if (key === 'type' || typeof schema[key] !== typeof fresh[key] || Array.isArray(schema[key]) !== Array.isArray(fresh[key])) schema[key] = fresh[key];
+        }
+        // A default only carries across types when it still fits the new schema.
+        if (next === 'enum' && !schema.values.includes(schema.default) && !labelMode) schema.default = fresh.default;
+        if (next === 'text' && typeof schema.default === 'string' && schema.default.length > schema.max) schema.default = fresh.default;
         ctx.redraw();
     });
     switch (schema.type) {

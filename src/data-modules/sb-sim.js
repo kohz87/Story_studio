@@ -19,6 +19,7 @@ import { createCommandBus } from '../../vendor/story-block/src/v2/commands.js';
 import { validatePack } from '../../vendor/story-block/src/v2/packs/validate.js';
 import { parseChanges, extractBlock } from '../../vendor/story-block/src/v2/capture.js';
 import { refusedFrom } from '../../vendor/story-block/src/v2/reply-notes.js';
+import { readRecord } from '../../vendor/story-block/src/v2/persist.js';
 import { grammarFor } from '../../vendor/story-block/src/v2/data-modules/part.js';
 import { dataModuleHash } from '../../vendor/story-block/src/v2/data-modules/check.js';
 import { sampleActors, sampleDirector } from './sim-director.js';
@@ -52,19 +53,56 @@ export function grammar(pack, module) {
 async function createSimulationHost({ modules, storeOptions = null }) {
     const st = createFakeContext({ extensionSettings: {} });
     st.notices = [];
+    // Observe capture results by their parsed occurrence, including refusals (which have no receipt).
+    // A Re-read may plan several passes; the last result for each occurrence is the settled one.
+    let captured = new Map();
+    let captureProblems = [];
+    const outcomes = new Map();
     const runtime = createRuntime({
         ctx: st.ctx, core: true, modules,
         createStore: storeOptions ? options => createStore({ ...options, ...storeOptions }) : createStore,
-        createCommandBus, callModel: null, timelineFaults: null, onBlocked: null,
+        createCommandBus: options => {
+            const bus = createCommandBus(options);
+            const run = bus.run;
+            bus.run = (type, payload, opts) => {
+                const result = run(type, payload, opts);
+                if (opts?.capture && Number.isInteger(payload?.index)) captured.set(payload.index, result);
+                return result;
+            };
+            return bus;
+        },
+        callModel: null, timelineFaults: null, onBlocked: null,
         notify: (reason, moduleId) => st.notices.push({ reason, moduleId }),
     });
     const { store, sdk, turn, markReady, registry, settings } = runtime;
+    runtime.events.on('turn', done => { captureProblems = done.problems ?? []; });
     turn.install({ globalName: null });
     st.interceptor = turn.interceptor;
     await turn.onChatChanged();
     markReady();
     return {
-        st, ctx: st.ctx, store, sdk, turn, registry, settings, packs: runtime.packs,
+        st, ctx: st.ctx, store, sdk, turn, registry, settings, packs: runtime.packs, outcomes,
+        beginCapture() { captured = new Map(); captureProblems = []; },
+        endCapture(index, text, append = false) {
+            const source = store.sourceAt(index);
+            const key = sourceKey(source);
+            const previous = append ? outcomes.get(key) : null;
+            const unknown = captureProblems.filter(item => item.code === 'UNKNOWN_KIND');
+            const lines = parseChanges(extractBlock(text) ?? '').lines.map(line => {
+                const result = captured.get(line.index);
+                const problem = result ? null : unknown.shift();
+                return {
+                    source: result?.block?.source ?? source, receipt: result?.receipt?.id ?? null,
+                    refusal: result && !result.ok ? { code: result.code, path: '', message: result.message } :
+                        problem ? { code: problem.code, path: '', message: refusedFrom([problem], index)[0]?.reason || problem.message } : null,
+                    note: result?.problem,
+                };
+            });
+            outcomes.set(key, {
+                lines: [...(previous?.lines ?? []), ...lines],
+                problems: [...(previous?.problems ?? []), ...captureProblems.filter(item => !item.line || ['CUT_OFF', 'STRAY'].includes(item.code))],
+            });
+        },
         send: (text, reply = '') => st.send(text, { reply }),
         swipe: (reply = '') => st.generate('swipe', { reply }),
         cont: (reply = '') => st.generate('continue', { reply }),
@@ -112,25 +150,77 @@ function messageIndex(host, step) {
     return host.ctx.chat.findIndex(message => !message.is_user && String(message.mes ?? '').startsWith(TEXT(step)));
 }
 
-function linesOf(host, text, chatIndex) {
-    const block = extractBlock(text) ?? '';
-    const parsed = parseChanges(block).lines;
-    const problems = host.turn.problems().filter(item => item.index === chatIndex);
-    return parsed.map(line => {
-        const found = problems.find(item => item.line === line.raw);
-        const limited = found?.code === 'LIMITED';
-        const refusal = found && !limited ? (() => {
-            const [reason] = refusedFrom([found], chatIndex).map(row => row.reason);
-            return { code: found.code, path: '', message: reason || found.message };
-        })() : null;
-        return {
-            raw: line.raw,
-            parsed: { op: line.op, kind: line.kind === 'dm' ? `dm ${line.name}` : line.kind, ...(line.kind === 'dm' ? line.labels : { argument: line.name }) },
-            outcome: refusal ? 'refused' : 'applied',
-            ...(refusal ? { refusal } : {}), ...(limited ? { note: found.message } : {}),
-            changes: [],
-        };
-    });
+const sourceKey = source => source ? `${source.sid}/${source.swipeKey}/${source.evidence}` : '';
+
+function stateSnapshot(state, target, names) {
+    const instances = state?.domains?.dataModules?.instances?.[target.id];
+    if (target.scope === 'chat') return { fields: clone(instances?.chat?.fields ?? {}), timers: clone(instances?.chat?.timers ?? {}) };
+    const fields = {}, timers = {};
+    for (const [id, subject] of Object.entries(instances?.characters ?? {})) {
+        fields[names.get(id) ?? id] = clone(subject.fields ?? {});
+        timers[names.get(id) ?? id] = clone(subject.timers ?? {});
+    }
+    return { fields, timers };
+}
+
+/** Rebuild every row from the current message, its Source/line occurrence and surviving receipts. */
+function trace(host, target, steps, texts, names, deleted) {
+    const records = [];
+    const skipped = host.store.problems();
+    for (const group of messageTexts(steps, texts)) {
+        const at = messageIndex(host, group.number);
+        if (at < 0) continue;
+        const source = host.store.sourceAt(at);
+        const observed = host.outcomes.get(sourceKey(source)) ?? { lines: [], problems: [] };
+        const parsed = parseChanges(extractBlock(host.ctx.chat[at].mes) ?? '').lines;
+        const record = readRecord(host.ctx.chat[at]);
+        const receipts = new Map((record?.receipts ?? []).map(receipt => [receipt.id, receipt]));
+        const problems = skipped.filter(item => item.index === at);
+        let previous = stateSnapshot(host.store.before(at), target, names);
+        let occurrence = 0;
+        const surviving = group.steps.filter(index => !deleted.has(index));
+        for (const index of surviving) {
+            const count = parseChanges(extractBlock(texts[index]) ?? '').lines.length;
+            let now = previous;
+            const lines = parsed.slice(occurrence, occurrence + count).map(line => {
+                const outcome = observed.lines[occurrence++];
+                const receipt = receipts.get(outcome?.receipt);
+                const problem = receipt ? problems.find(item => item.receipts?.includes(receipt.id)) : null;
+                const inactive = Boolean(problem);
+                const refusal = outcome?.refusal ?? null;
+                if (receipt && outcome.source) {
+                    const block = host.store.blockAt(at, outcome.source.ordinal);
+                    const span = record.spans?.find(item => item.source?.ordinal === outcome.source.ordinal);
+                    if (block && span) {
+                        const prefix = host.store.prefixWitness({ ...source, op: block.op + span.n });
+                        if (prefix) now = stateSnapshot(prefix.state, target, names);
+                    }
+                }
+                return {
+                    raw: line.raw,
+                    parsed: { op: line.op, kind: line.kind === 'dm' ? `dm ${line.name}` : line.kind, ...(line.kind === 'dm' ? line.labels : { argument: line.name }) },
+                    outcome: inactive ? 'inactive' : refusal ? 'refused' : receipt ? 'applied' : 'unread',
+                    ...(refusal ? { refusal } : {}), ...(outcome?.note && !inactive ? { note: outcome.note } : {}),
+                    changes: [],
+                    ...(problem ? { problem: { code: problem.code, path: '', message: problem.why ?? problem.message } } : {}),
+                };
+            });
+            if (index === surviving.at(-1)) now = stateSnapshot(host.store.at(at), target, names);
+            const changes = changesBetween(previous.fields, now.fields);
+            const inactive = lines.some(line => line.outcome === 'inactive');
+            const ownProblems = [...lines.flatMap(line => line.problem ? [line.problem] : []),
+                ...(index === surviving.at(-1) ? observed.problems.map(item => ({ code: item.code, path: '', message: item.message })) : [])];
+            records.push({
+                index, type: steps[index].type, reply: group.number,
+                status: inactive ? 'inactive' : lines.some(line => line.outcome === 'refused') ? 'refused' : steps[index].type === 'advance' ? 'advanced' : 'applied',
+                lines, changes, fields: now.fields, timers: now.timers,
+                replyCard: [cardOf(lines, changes), ...ownProblems.map(item => item.message)].filter(Boolean).join('\n'),
+                problems: ownProblems,
+            });
+            previous = now;
+        }
+    }
+    return records;
 }
 
 // The finished data-module part exposes no replyCard hook or card-text query. Its summaryOf is prompt tail text,
@@ -201,44 +291,19 @@ function messageTexts(steps, texts) {
     return groups.map((group, n) => ({ ...group, number: n + 1, text: group.steps.map(i => texts[i]).join('\n') }));
 }
 
-async function play(host, target, steps, names) {
-    const records = [];
+async function play(host, steps) {
     let reply = 0;
-    for (const [index, step] of steps.entries()) {
-        const before = snapshot(host, target, names);
+    for (const step of steps) {
         const text = stepText(step);
-        if (step.type === 'continue' && reply) await host.cont(`\n${text}`);
+        const continuing = step.type === 'continue' && reply > 0;
+        host.beginCapture();
+        if (continuing) await host.cont(`\n${text}`);
         else { reply += 1; await host.send(`Go on (${reply}).`, `${TEXT(reply)}\n${text}`); }
-        const chatIndex = host.ctx.chat.length - 1;
-        const lines = linesOf(host, text, chatIndex);
-        const now = snapshot(host, target, names);
-        const changes = changesBetween(before.fields, now.fields);
-        const refused = lines.some(line => line.outcome === 'refused');
-        records.push({
-            index, type: step.type, reply, status: step.type === 'advance' ? 'advanced' : refused ? 'refused' : 'applied',
-            lines, changes, fields: now.fields, timers: now.timers, replyCard: cardOf(lines, changes), problems: [],
-        });
+        host.endCapture(host.ctx.chat.length - 1, text, continuing);
     }
-    return records;
 }
 
-/** The step list after a reload or action, with each step's status read from what Story Block kept or skipped. */
-function restate(host, base, deleted = new Set()) {
-    const skipped = new Map();
-    for (const item of host.store.problems()) skipped.set(item.index, item);
-    return base.filter(record => !deleted.has(record.index)).map(record => {
-        const at = messageIndex(host, record.reply);
-        const problem = at >= 0 ? skipped.get(at) : null;
-        const inactive = Boolean(problem);
-        return {
-            index: record.index, type: record.type, status: inactive ? 'inactive' : record.status,
-            lines: record.lines, changes: [], replyCard: inactive ? problem.message : record.replyCard,
-            problems: inactive ? [{ code: problem.code, path: '', message: problem.why ?? problem.message }] : [],
-        };
-    });
-}
-
-async function apply(host, target, names, steps, action, texts) {
+async function apply(host, steps, action, texts, deleted) {
     const groups = messageTexts(steps, texts);
     const group = groups.find(item => item.steps.includes(action.step));
     if (!group && action.type !== 'reload') return fail('SIMULATOR', 'Choose a step of the scenario.');
@@ -253,21 +318,33 @@ async function apply(host, target, names, steps, action, texts) {
     if (action.type === 'delete') {
         if (steps[action.step].type === 'continue') {
             const left = group.steps.filter(i => i !== action.step).map(i => texts[i]).join('\n');
+            host.beginCapture();
             await host.st.editMessage(at, replyText(left));
             await host.sdk.reread(at);
-        } else await host.st.deleteMessage(at);
+            host.endCapture(at, left);
+            deleted.add(action.step);
+        } else {
+            await host.st.deleteMessage(at);
+            for (const index of group.steps) deleted.add(index);
+        }
         return null;
     }
     const edited = { ...texts, [action.step]: String(action.text ?? texts[action.step]) };
     const combined = replyText(group.steps.map(i => edited[i]).join('\n'));
     if (action.type === 'reread') {
+        host.beginCapture();
         await host.st.editMessage(at, combined);
         await host.sdk.reread(at);
+        texts[action.step] = edited[action.step];
+        host.endCapture(at, combined);
         return null;
     }
     if (action.type === 'swipe') {
         if (at !== host.ctx.chat.length - 1) return fail('SIMULATOR', 'A swipe replaces the latest reply: choose the last reply of the scenario.');
+        host.beginCapture();
         await host.swipe(combined);
+        texts[action.step] = edited[action.step];
+        host.endCapture(at, combined);
         return null;
     }
     return fail('SIMULATOR', `Unknown action ${action.type}.`);
@@ -328,16 +405,14 @@ export async function simulate(request) {
         if (built.error) return built.error;
         ({ host } = built);
         const { target } = built;
-        const base = await play(host, target, steps, names);
+        await play(host, steps);
         const texts = steps.map(stepText);
-        let records = base;
+        const deleted = new Set();
         if (request.action) {
-            const refused = await apply(host, target, names, steps, request.action, texts);
+            const refused = await apply(host, steps, request.action, texts, deleted);
             if (refused) return refused;
-            const group = messageTexts(steps, texts).find(item => item.steps.includes(request.action.step));
-            const gone = request.action.type === 'delete' && steps[request.action.step]?.type !== 'continue' && group ? new Set(group.steps) : new Set();
-            records = restate(host, base, gone);
         }
+        const records = trace(host, target, steps, texts, names, deleted);
         const final = snapshot(host, target, names);
         const problems = host.store.problems().map(item => ({ code: item.code, path: '', message: item.message }));
         const usage = usageOf(host);

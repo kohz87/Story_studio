@@ -269,3 +269,18 @@ test('the sample Story Director: stable ca_ IDs, name or ID input, and the time 
     assert.deepEqual(sampleActors(['Wessel', 'wessel', ' ', 'ca_abcd1234']), [{ id: 'ca_wessel01', name: 'Wessel' }, { id: 'ca_wessel02', name: 'wessel' }, { id: 'ca_abcd1234', name: 'abcd1234' }]);
     assert.deepEqual(['+6h', '+30m', '+2d', '45', '6 h', 'soon', '+'].map(timeMinutes), [360, 30, 2880, 45, 360, null, null]);
 });
+
+test('review 116: identical gain occurrences have distinct applied and CLAIMED outcomes', async () => {
+    const line = gain('the same favour');
+    for (const steps of [[reply([line, line])], [reply(line), cont(line)]]) {
+        for (const action of [null, { type: 'reload' }, { type: 'reread', step: 0 }]) {
+            const result = await simulate(factions(), REPUTATION, steps, action);
+            assert.equal(result.ok, true, JSON.stringify(result));
+            const lines = result.steps.flatMap(step => step.lines);
+            assert.deepEqual(lines.map(line => line.outcome), ['applied', 'refused']);
+            assert.equal(lines[0].refusal, undefined);
+            assert.equal(lines[1].refusal.code, 'CLAIMED');
+            assert.equal(result.final.fields.standing.guild, 3);
+        }
+    }
+});

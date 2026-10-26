@@ -239,3 +239,46 @@ test('path helpers refuse unsafe keys and keep key order on rename', () => {
     assert.deepEqual(root.list, []);
     assert.deepEqual(Object.keys(renameKey({ a: 1, b: 2, c: 3 }, 'b', 'z')), ['a', 'z', 'c']);
 });
+
+test('review 116: type selectors replace known fields and keep compatible values and unknown data', async () => {
+    const { MockDocument } = await import('./helpers/dom.js');
+    const { schemaControls } = await import('../src/screens/dm/schema.js');
+    const doc = new MockDocument();
+    const schema = { type: 'text', max: 50, default: 'kept', authorNote: { text: 'keep me' } };
+    const change = next => {
+        const host = doc.createElement('div');
+        schemaControls(doc, host, schema, { touch() {}, redraw() {} });
+        const select = host.querySelector('[aria-label="Type"]');
+        select.value = next;
+        select.dispatchEvent({ type: 'change' });
+    };
+    change('int');
+    assert.deepEqual(schema, { type: 'int', min: 0, max: 50, default: 0, authorNote: { text: 'keep me' } });
+    change('bool');
+    assert.deepEqual(schema, { type: 'bool', default: false, authorNote: { text: 'keep me' } });
+    change('map');
+    assert.deepEqual(schema, { ...defaultSchema('map'), authorNote: { text: 'keep me' } });
+    change('enum');
+    assert.deepEqual(schema, { ...defaultSchema('enum'), authorNote: { text: 'keep me' } });
+});
+
+test('review 116: operation selectors retain the authored path and expression but remove obsolete known fields', async () => {
+    const { MockDocument } = await import('./helpers/dom.js');
+    const { drawEffects } = await import('../src/screens/dm/effects.js');
+    const doc = new MockDocument();
+    const draft = factions().content.dataModules[0];
+    const effects = [{ op: 'add', path: ['standing', 'watch'], value: -5, bounds: 'clamp', authorNote: { text: 'keep me' } }];
+    const change = next => {
+        const host = doc.createElement('div');
+        drawEffects(doc, host, effects, { draft, where: 'kind', expr: { module: draft, where: 'kind' }, touch() {}, redraw() {} });
+        const select = host.querySelector('[aria-label="Effect 1 operation"]');
+        select.value = next;
+        select.dispatchEvent({ type: 'change' });
+    };
+    change('set');
+    assert.deepEqual(effects[0], { op: 'set', path: ['standing', 'watch'], value: -5, authorNote: { text: 'keep me' } });
+    change('clamp');
+    assert.deepEqual(effects[0], { op: 'clamp', path: ['standing', 'watch'], min: 0, max: 100, authorNote: { text: 'keep me' } });
+    change('reward');
+    assert.deepEqual(effects[0], { op: 'reward', template: 'favour', bind: {}, authorNote: { text: 'keep me' } });
+});
