@@ -1,0 +1,4568 @@
+{
+  "entries": {
+    "0": {
+      "uid": 0,
+      "key": [
+        "Bluewatch Village"
+      ],
+      "keysecondary": [],
+      "comment": "Bluewatch Village",
+      "content": "kind: settlement\nmarket: village\nname: Bluewatch Village\nregion: River Confederacy: core cities\ntags: river, frontier",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 0,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "1": {
+      "uid": 1,
+      "key": [
+        "Auvoth"
+      ],
+      "keysecondary": [],
+      "comment": "Auvoth",
+      "content": "kind: city\nname: Auvoth\nregion: Auvoth Compact",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 1,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "2": {
+      "uid": 2,
+      "key": [
+        "Hollin's Reach"
+      ],
+      "keysecondary": [],
+      "comment": "Hollin's Reach",
+      "content": "kind: village\nmarket: village\nname: Hollin's Reach\nregion: Shornmarch\ntags: frontier, forest",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 2,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "3": {
+      "uid": 3,
+      "key": [
+        "Wolfmere Outpost"
+      ],
+      "keysecondary": [],
+      "comment": "Wolfmere Outpost",
+      "content": "kind: outpost\nmarket: outpost\nname: Wolfmere Outpost\nregion: Shornmarch\ntags: frontier, forest",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 3,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "4": {
+      "uid": 4,
+      "key": [
+        "Varnhold Watch"
+      ],
+      "keysecondary": [],
+      "comment": "Varnhold Watch",
+      "content": "kind: fort\nname: Varnhold Watch\nregion: Shornmarch",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 4,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "5": {
+      "uid": 5,
+      "key": [
+        "Shorn"
+      ],
+      "keysecondary": [],
+      "comment": "Shorn",
+      "content": "kind: capital\nmarket: capital\nname: Shorn\nregion: Shornmarch\ntags: mountain, frontier",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 5,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "6": {
+      "uid": 6,
+      "key": [
+        "Greyvein Camp"
+      ],
+      "keysecondary": [],
+      "comment": "Greyvein Camp",
+      "content": "kind: town\nmarket: camp\nname: Greyvein Camp\nregion: Shornmarch\ntags: mining, mountain",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 6,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "7": {
+      "uid": 7,
+      "key": [
+        "Frostgate"
+      ],
+      "keysecondary": [],
+      "comment": "Frostgate",
+      "content": "kind: lock town\nmarket: lock-town\nname: Frostgate\nregion: Shornmarch\ntags: river, toll",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 7,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "8": {
+      "uid": 8,
+      "key": [
+        "Crowpine Town"
+      ],
+      "keysecondary": [],
+      "comment": "Crowpine Town",
+      "content": "kind: town\nmarket: town\nname: Crowpine Town\nregion: Shornmarch\ntags: forest",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 8,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "9": {
+      "uid": 9,
+      "key": [
+        "Old Lantern Post"
+      ],
+      "keysecondary": [],
+      "comment": "Old Lantern Post",
+      "content": "kind: town\nname: Old Lantern Post\nregion: Shornmarch",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 9,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "10": {
+      "uid": 10,
+      "key": [
+        "Hearthmere"
+      ],
+      "keysecondary": [],
+      "comment": "Hearthmere",
+      "content": "kind: town\nname: Hearthmere\nregion: Shornmarch",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 10,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "11": {
+      "uid": 11,
+      "key": [
+        "Northledger Depot"
+      ],
+      "keysecondary": [],
+      "comment": "Northledger Depot",
+      "content": "kind: depot\nname: Northledger Depot\nregion: Shornmarch",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 11,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "12": {
+      "uid": 12,
+      "key": [
+        "Rimebridge"
+      ],
+      "keysecondary": [],
+      "comment": "Rimebridge",
+      "content": "kind: fort\nname: Rimebridge\nregion: Shornmarch",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 12,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "13": {
+      "uid": 13,
+      "key": [
+        "Ledgerford"
+      ],
+      "keysecondary": [],
+      "comment": "Ledgerford",
+      "content": "kind: city\nmarket: city\nname: Ledgerford\nregion: River Confederacy: core cities\ntags: river",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 13,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "14": {
+      "uid": 14,
+      "key": [
+        "Glassdock"
+      ],
+      "keysecondary": [],
+      "comment": "Glassdock",
+      "content": "kind: port\nmarket: town\nname: Glassdock\nregion: River Confederacy: core cities\ntags: river, port",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 14,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "15": {
+      "uid": 15,
+      "key": [
+        "Northbarge"
+      ],
+      "keysecondary": [],
+      "comment": "Northbarge",
+      "content": "kind: depot\nname: Northbarge\nregion: River Confederacy: locks/connectors",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 15,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "16": {
+      "uid": 16,
+      "key": [
+        "Brightwater Lock"
+      ],
+      "keysecondary": [],
+      "comment": "Brightwater Lock",
+      "content": "kind: lock town\nmarket: lock-town\nname: Brightwater Lock\nregion: River Confederacy: locks/connectors\ntags: river, toll",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 16,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "17": {
+      "uid": 17,
+      "key": [
+        "Siltbarrow"
+      ],
+      "keysecondary": [],
+      "comment": "Siltbarrow",
+      "content": "kind: town\nmarket: town\nname: Siltbarrow\nregion: River Confederacy: locks/connectors\ntags: river",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 17,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "18": {
+      "uid": 18,
+      "key": [
+        "Lockswell"
+      ],
+      "keysecondary": [],
+      "comment": "Lockswell",
+      "content": "kind: lock town\nmarket: lock-town\nname: Lockswell\nregion: River Confederacy: locks/connectors\ntags: river, toll",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 18,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "19": {
+      "uid": 19,
+      "key": [
+        "Ferrywake"
+      ],
+      "keysecondary": [],
+      "comment": "Ferrywake",
+      "content": "kind: town\nname: Ferrywake\nregion: River Confederacy: locks/connectors",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 19,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "20": {
+      "uid": 20,
+      "key": [
+        "Ninebarge Crossing"
+      ],
+      "keysecondary": [],
+      "comment": "Ninebarge Crossing",
+      "content": "kind: town\nname: Ninebarge Crossing\nregion: River Confederacy: core cities",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 20,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "21": {
+      "uid": 21,
+      "key": [
+        "Reedmere"
+      ],
+      "keysecondary": [],
+      "comment": "Reedmere",
+      "content": "kind: town\nmarket: town\nname: Reedmere\nregion: River Confederacy: locks/connectors\ntags: river, swamp",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 21,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "22": {
+      "uid": 22,
+      "key": [
+        "Davenford"
+      ],
+      "keysecondary": [],
+      "comment": "Davenford",
+      "content": "kind: town\nname: Davenford\nregion: Valegard",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 22,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "23": {
+      "uid": 23,
+      "key": [
+        "Coinwater"
+      ],
+      "keysecondary": [],
+      "comment": "Coinwater",
+      "content": "kind: city\nmarket: city\nname: Coinwater\nregion: River Confederacy: core cities\ntags: river",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 23,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "24": {
+      "uid": 24,
+      "key": [
+        "Canalspur"
+      ],
+      "keysecondary": [],
+      "comment": "Canalspur",
+      "content": "kind: town\nname: Canalspur\nregion: River Confederacy: locks/connectors",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 24,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "25": {
+      "uid": 25,
+      "key": [
+        "Pearlbank"
+      ],
+      "keysecondary": [],
+      "comment": "Pearlbank",
+      "content": "kind: city\nmarket: city\nname: Pearlbank\nregion: River Confederacy: core cities\ntags: river",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 25,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "26": {
+      "uid": 26,
+      "key": [
+        "Valegard"
+      ],
+      "keysecondary": [],
+      "comment": "Valegard",
+      "content": "kind: capital\nmarket: capital\nname: Valegard\nregion: Valegard",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 26,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "27": {
+      "uid": 27,
+      "key": [
+        "Saltledger Quay"
+      ],
+      "keysecondary": [],
+      "comment": "Saltledger Quay",
+      "content": "kind: port\nmarket: town\nname: Saltledger Quay\nregion: River Confederacy: core cities\ntags: river, port",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 27,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "28": {
+      "uid": 28,
+      "key": [
+        "Tarnby"
+      ],
+      "keysecondary": [],
+      "comment": "Tarnby",
+      "content": "kind: town\nname: Tarnby\nregion: Valegard",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 28,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "29": {
+      "uid": 29,
+      "key": [
+        "Thousand Sails"
+      ],
+      "keysecondary": [],
+      "comment": "Thousand Sails",
+      "content": "kind: city\nmarket: city\nname: Thousand Sails\nregion: River Confederacy: core cities\ntags: river, port",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 29,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "30": {
+      "uid": 30,
+      "key": [
+        "Stirrup Crossing"
+      ],
+      "keysecondary": [],
+      "comment": "Stirrup Crossing",
+      "content": "kind: town\nname: Stirrup Crossing\nregion: Silver Mark",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 30,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "31": {
+      "uid": 31,
+      "key": [
+        "Wheatwake"
+      ],
+      "keysecondary": [],
+      "comment": "Wheatwake",
+      "content": "kind: town\nmarket: town\nname: Wheatwake\nregion: River Confederacy: core cities\ntags: farmland, river",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 31,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "32": {
+      "uid": 32,
+      "key": [
+        "Mirage City"
+      ],
+      "keysecondary": [],
+      "comment": "Mirage City",
+      "content": "kind: city\nname: Mirage City\nregion: River Confederacy: core cities",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 32,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "33": {
+      "uid": 33,
+      "key": [
+        "Black Iron Riverhold"
+      ],
+      "keysecondary": [],
+      "comment": "Black Iron Riverhold",
+      "content": "kind: fortress city\nname: Black Iron Riverhold\nregion: River Confederacy: core cities",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 33,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "34": {
+      "uid": 34,
+      "key": [
+        "Silvermark Commandery"
+      ],
+      "keysecondary": [],
+      "comment": "Silvermark Commandery",
+      "content": "kind: fortress\nname: Silvermark Commandery\nregion: Silver Mark",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 34,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "35": {
+      "uid": 35,
+      "key": [
+        "Holy City of Aurelion"
+      ],
+      "keysecondary": [],
+      "comment": "Holy City of Aurelion",
+      "content": "kind: capital\nname: Holy City of Aurelion\nregion: Aurelion/Church Heartland",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 35,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "36": {
+      "uid": 36,
+      "key": [
+        "Highmark Capital"
+      ],
+      "keysecondary": [],
+      "comment": "Highmark Capital",
+      "content": "kind: capital\nmarket: capital\nname: Highmark Capital\nregion: Highmark Empire",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 36,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "37": {
+      "uid": 37,
+      "key": [
+        "Seventh Seal Terrace"
+      ],
+      "keysecondary": [],
+      "comment": "Seventh Seal Terrace",
+      "content": "kind: district\nname: Seventh Seal Terrace\nregion: Auvoth Compact",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 37,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "38": {
+      "uid": 38,
+      "key": [
+        "Delver's Crown"
+      ],
+      "keysecondary": [],
+      "comment": "Delver's Crown",
+      "content": "kind: district\nname: Delver's Crown\nregion: Auvoth Compact",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 38,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "39": {
+      "uid": 39,
+      "key": [
+        "Outer Lamps"
+      ],
+      "keysecondary": [],
+      "comment": "Outer Lamps",
+      "content": "kind: district\nname: Outer Lamps\nregion: Auvoth Compact",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 39,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "40": {
+      "uid": 40,
+      "key": [
+        "Pale Market"
+      ],
+      "keysecondary": [],
+      "comment": "Pale Market",
+      "content": "kind: district\nname: Pale Market\nregion: Auvoth Compact",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 40,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "41": {
+      "uid": 41,
+      "key": [
+        "Boneglass Yard"
+      ],
+      "keysecondary": [],
+      "comment": "Boneglass Yard",
+      "content": "kind: district\nname: Boneglass Yard\nregion: Auvoth Compact",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 41,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "42": {
+      "uid": 42,
+      "key": [
+        "Ashbell Hospice"
+      ],
+      "keysecondary": [],
+      "comment": "Ashbell Hospice",
+      "content": "kind: district\nname: Ashbell Hospice\nregion: Auvoth Compact",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 42,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "43": {
+      "uid": 43,
+      "key": [
+        "Auvoth Depths"
+      ],
+      "keysecondary": [],
+      "comment": "Auvoth Depths",
+      "content": "kind: dungeon\nlayer: underground\nname: Auvoth Depths\nnote: Treaty-controlled megadungeon under Auvoth: sealed internal descents, F to SSS by depth.\nregion: Auvoth Compact",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 43,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "44": {
+      "uid": 44,
+      "key": [
+        "Rimeglass Delve"
+      ],
+      "keysecondary": [],
+      "comment": "Rimeglass Delve",
+      "content": "kind: dungeon\nlayer: underground\nname: Rimeglass Delve\nnote: Seasonal licensed delve (C-B): cold iron, blue coal, ice crystals; moving ice galleries.\nregion: Shornmarch",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 44,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "45": {
+      "uid": 45,
+      "key": [
+        "Inspection Quay",
+        "river-gate",
+        "the quay"
+      ],
+      "keysecondary": [],
+      "comment": "Inspection Quay",
+      "content": "kind: quay\nname: Inspection Quay\nnote: Stone river-gate with its chain across the Bluewatch Branch; every hand is named here before stepping ashore.\nregion: Bluewatch Village",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 45,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "46": {
+      "uid": 46,
+      "key": [
+        "Watchhouse",
+        "signal tower",
+        "the Watch"
+      ],
+      "keysecondary": [],
+      "comment": "Watchhouse",
+      "content": "kind: watch-fort\nname: Watchhouse\nnote: Seat of Watch-Captain Rorke; the signal tower trails brazier smoke and faces north.\nregion: Bluewatch Village",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 46,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "47": {
+      "uid": 47,
+      "key": [
+        "Stray Oar",
+        "the Stray Oar inn"
+      ],
+      "keysecondary": [],
+      "comment": "Stray Oar",
+      "content": "kind: inn\nname: Stray Oar\nnote: Inn for convoy crews; the salvage convoy to Auvoth hires guards here.\nregion: Bluewatch Village",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 47,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "48": {
+      "uid": 48,
+      "key": [
+        "Guild Office",
+        "Adventurer Guild office",
+        "guild office"
+      ],
+      "keysecondary": [],
+      "comment": "Guild Office",
+      "content": "kind: guild office\nname: Guild Office\nnote: A one-room Adventurer Guild branch desk beside the Watchhouse; Fenna keeps the register and the job board.\nregion: Bluewatch Village",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 48,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "49": {
+      "uid": 49,
+      "key": [
+        "Watch Granary",
+        "the granary",
+        "storehouses"
+      ],
+      "keysecondary": [],
+      "comment": "Watch Granary",
+      "content": "kind: storehouse\nname: Watch Granary\nnote: The Watch storehouses and the granary cellars under them.\nregion: Bluewatch Village",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 49,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "50": {
+      "uid": 50,
+      "key": [
+        "Salt-and-Ash Yard",
+        "salt-and-ash yard",
+        "salt sheds"
+      ],
+      "keysecondary": [],
+      "comment": "Salt-and-Ash Yard",
+      "content": "kind: yard\nname: Salt-and-Ash Yard\nnote: Where the lay sealer completes the dead, since no priest lives this far north; the salt sheds stand by it.\nregion: Bluewatch Village",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 50,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "51": {
+      "uid": 51,
+      "key": [
+        "Gate Forge",
+        "the forge",
+        "smithy"
+      ],
+      "keysecondary": [],
+      "comment": "Gate Forge",
+      "content": "kind: smithy\nname: Gate Forge\nnote: The Watch smith's forge by the river-gate.\nregion: Bluewatch Village",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 51,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "52": {
+      "uid": 52,
+      "key": [
+        "North Culvert",
+        "the culvert",
+        "culvert"
+      ],
+      "keysecondary": [],
+      "comment": "North Culvert",
+      "content": "kind: culvert\nname: North Culvert\nnote: Stone culvert under the north road that drains the hill stream past the palisade; a grate keeps debris out.\nregion: Bluewatch Village",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 52,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "53": {
+      "uid": 53,
+      "key": [
+        "East Bluff",
+        "the east bluff",
+        "east bluffs"
+      ],
+      "keysecondary": [],
+      "comment": "East Bluff",
+      "content": "kind: bluff\nname: East Bluff\nnote: Rocky bluff above the river east of the palisade; crag wolves den in its clefts.\nregion: Bluewatch Village",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 53,
+      "extensions": {
+        "story_studio": {
+          "kind": "places"
+        }
+      }
+    },
+    "54": {
+      "uid": 54,
+      "key": [
+        "Cellar Rat Swarm"
+      ],
+      "keysecondary": [],
+      "comment": "Cellar Rat Swarm",
+      "content": "loot.0.def: rat-tail\nloreTags: vermin, bluewatch, settled\nname: Cellar Rat Swarm\nskills: hidden-shiv",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 54,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "55": {
+      "uid": 55,
+      "key": [
+        "Sluice Leech"
+      ],
+      "keysecondary": [],
+      "comment": "Sluice Leech",
+      "content": "loot.0.def: live-leech\nloreTags: aquatic, parasite, bluewatch\nname: Sluice Leech\nskills: low-strike",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 55,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "56": {
+      "uid": 56,
+      "key": [
+        "Starved Crag Wolf"
+      ],
+      "keysecondary": [],
+      "comment": "Starved Crag Wolf",
+      "content": "loot.0.def: crag-wolf-pelt\nloot.1.def: crag-wolf-fang\nloreTags: beast, wolf, bluewatch\nname: Starved Crag Wolf\nskills: low-strike, hidden-shiv",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 56,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "57": {
+      "uid": 57,
+      "key": [
+        "Salt-crew Tough"
+      ],
+      "keysecondary": [],
+      "comment": "Salt-crew Tough",
+      "content": "loot.0.def: coarse-salt\nloot.1.def: knife\nloreTags: humanoid, bandit, river\nname: Salt-crew Tough\nskills: brace-spear, shield-bash",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 57,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "58": {
+      "uid": 58,
+      "key": [
+        "Crag Wolf Matriarch"
+      ],
+      "keysecondary": [],
+      "comment": "Crag Wolf Matriarch",
+      "content": "loot.0.def: crag-wolf-pelt\nloot.1.def: crag-wolf-fang\nloot.2.def: small-monster-core\nloreTags: beast, wolf, alpha\nname: Crag Wolf Matriarch\nskills: low-strike, guard-cleave, gutter-feint",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 58,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "59": {
+      "uid": 59,
+      "key": [
+        "River Drake"
+      ],
+      "keysecondary": [],
+      "comment": "River Drake",
+      "content": "loot.0.def: river-drake-scale\nloot.1.def: small-monster-core\nloreTags: drake, reptile, river\nname: River Drake\nskills: guard-cleave, unyielding-step, crushing-blow",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 59,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "60": {
+      "uid": 60,
+      "key": [
+        "Ditch Crawler"
+      ],
+      "keysecondary": [],
+      "comment": "Ditch Crawler",
+      "content": "loot.0.def: live-leech\nloot.1.def: rat-tail\nloreTags: vermin, marsh, settled\nname: Ditch Crawler\nskills: low-strike",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 60,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "61": {
+      "uid": 61,
+      "key": [
+        "Roadside Bandit"
+      ],
+      "keysecondary": [],
+      "comment": "Roadside Bandit",
+      "content": "loot.0.def: knife\nloot.1.def: common-ale\nloreTags: humanoid, outlaw, road\nname: Roadside Bandit\nskills: hidden-shiv, gutter-feint",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 61,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "62": {
+      "uid": 62,
+      "key": [
+        "Fen Wolf"
+      ],
+      "keysecondary": [],
+      "comment": "Fen Wolf",
+      "content": "loot.0.def: crag-wolf-pelt\nloreTags: beast, wolf, marsh\nname: Fen Wolf\nskills: low-strike, hidden-shiv",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 62,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "63": {
+      "uid": 63,
+      "key": [
+        "Barge Pirate"
+      ],
+      "keysecondary": [],
+      "comment": "Barge Pirate",
+      "content": "loot.0.def: hemp-rope\nloot.1.def: knife\nloreTags: humanoid, pirate, river\nname: Barge Pirate\nskills: river-skiff-footwork, hidden-shiv",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 63,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "64": {
+      "uid": 64,
+      "key": [
+        "Wild Boar"
+      ],
+      "keysecondary": [],
+      "comment": "Wild Boar",
+      "content": "loot.0.def: crag-wolf-fang\nloreTags: beast, wilderness\nname: Wild Boar\nskills: shield-bash, watchmans-grit",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 64,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "65": {
+      "uid": 65,
+      "key": [
+        "Red-cap Goblin"
+      ],
+      "keysecondary": [],
+      "comment": "Red-cap Goblin",
+      "content": "loot.0.def: iron-filings\nloreTags: goblinoid, cunning, hills\nname: Red-cap Goblin\nskills: hidden-shiv, slum-instinct",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 65,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "66": {
+      "uid": 66,
+      "key": [
+        "Crag Goat Ram"
+      ],
+      "keysecondary": [],
+      "comment": "Crag Goat Ram",
+      "content": "loot.0.def: crag-wolf-fang\nloreTags: beast, mountain\nname: Crag Goat Ram\nskills: shield-bash",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 66,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "67": {
+      "uid": 67,
+      "key": [
+        "Shore Crab Giant"
+      ],
+      "keysecondary": [],
+      "comment": "Shore Crab Giant",
+      "content": "loot.0.def: small-monster-core\nloreTags: crustacean, coast\nname: Shore Crab Giant\nskills: guard-cleave, iron-breathing",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 67,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "68": {
+      "uid": 68,
+      "key": [
+        "Mud Snapper"
+      ],
+      "keysecondary": [],
+      "comment": "Mud Snapper",
+      "content": "loot.0.def: small-monster-core\nloreTags: aquatic, river\nname: Mud Snapper\nskills: shield-bash, iron-breathing",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 68,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "69": {
+      "uid": 69,
+      "key": [
+        "Bog Leech Mother"
+      ],
+      "keysecondary": [],
+      "comment": "Bog Leech Mother",
+      "content": "loot.0.def: live-leech\nloot.1.def: small-monster-core\nloreTags: parasite, marsh, nest\nname: Bog Leech Mother\nskills: low-strike, gutter-feint",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 69,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "70": {
+      "uid": 70,
+      "key": [
+        "Rime Wolf"
+      ],
+      "keysecondary": [],
+      "comment": "Rime Wolf",
+      "content": "loot.0.def: crag-wolf-pelt\nloot.1.def: small-monster-core\nloreTags: beast, wolf, frost\nname: Rime Wolf\nskills: low-strike, frost-shard",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 70,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "71": {
+      "uid": 71,
+      "key": [
+        "Bone Seeker"
+      ],
+      "keysecondary": [],
+      "comment": "Bone Seeker",
+      "content": "loot.0.def: small-monster-core\nloreTags: vermin, crypt, auvoth\nname: Bone Seeker\nskills: hidden-shiv, slum-instinct",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 71,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "72": {
+      "uid": 72,
+      "key": [
+        "Snow Spider"
+      ],
+      "keysecondary": [],
+      "comment": "Snow Spider",
+      "content": "loot.0.def: small-monster-core\nloreTags: spider, tundra, frost\nname: Snow Spider\nskills: frost-shard, gutter-feint",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 72,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "73": {
+      "uid": 73,
+      "key": [
+        "Highland Harpy"
+      ],
+      "keysecondary": [],
+      "comment": "Highland Harpy",
+      "content": "loot.0.def: small-monster-core\nloreTags: monstrosity, winged, mountain\nname: Highland Harpy\nskills: swift-thrust, poised-step",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 73,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "74": {
+      "uid": 74,
+      "key": [
+        "Restless Corpse"
+      ],
+      "keysecondary": [],
+      "comment": "Restless Corpse",
+      "content": "loot.0.def: completion-salts\nloot.1.def: iron-filings\nloreTags: undead, crypt, auvoth\nname: Restless Corpse\nskills: guard-cleave, watchmans-grit",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 74,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "75": {
+      "uid": 75,
+      "key": [
+        "Reef Shark"
+      ],
+      "keysecondary": [],
+      "comment": "Reef Shark",
+      "content": "loot.0.def: crag-wolf-fang\nloreTags: aquatic, coast\nname: Reef Shark\nskills: guard-cleave, low-strike",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 75,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "76": {
+      "uid": 76,
+      "key": [
+        "Frost Bear"
+      ],
+      "keysecondary": [],
+      "comment": "Frost Bear",
+      "content": "loot.0.def: crag-wolf-pelt\nloot.1.def: crag-wolf-fang\nloot.2.def: small-monster-core\nloreTags: beast, frost, tundra\nname: Frost Bear\nskills: crushing-blow, iron-breathing",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 76,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "77": {
+      "uid": 77,
+      "key": [
+        "Drowned Sailor"
+      ],
+      "keysecondary": [],
+      "comment": "Drowned Sailor",
+      "content": "loot.0.def: completion-salts\nloot.1.def: knife\nloreTags: undead, aquatic, coast\nname: Drowned Sailor\nskills: brace-spear, guard-cleave",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 77,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "78": {
+      "uid": 78,
+      "key": [
+        "Ash Crawler"
+      ],
+      "keysecondary": [],
+      "comment": "Ash Crawler",
+      "content": "loot.0.def: completion-salts\nloot.1.def: small-monster-core\nloreTags: vermin, ashlands, fire\nname: Ash Crawler\nskills: cauterize, cinder-ward",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 78,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "79": {
+      "uid": 79,
+      "key": [
+        "Crypt Spider"
+      ],
+      "keysecondary": [],
+      "comment": "Crypt Spider",
+      "content": "loot.0.def: small-monster-core\nloreTags: spider, crypt, auvoth\nname: Crypt Spider\nskills: gutter-feint, low-strike",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 79,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "80": {
+      "uid": 80,
+      "key": [
+        "Tundra Stalker"
+      ],
+      "keysecondary": [],
+      "comment": "Tundra Stalker",
+      "content": "loot.0.def: small-monster-core\nloreTags: predator, tundra, frost\nname: Tundra Stalker\nskills: frost-shard, riposte-lunge, poised-step",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 80,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "81": {
+      "uid": 81,
+      "key": [
+        "Cave Troll"
+      ],
+      "keysecondary": [],
+      "comment": "Cave Troll",
+      "content": "loot.0.def: iron-filings\nloot.1.def: small-monster-core\nloreTags: troll, mountain, subterranean\nname: Cave Troll\nskills: crushing-blow, fortress-stance, unyielding-step",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 81,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "82": {
+      "uid": 82,
+      "key": [
+        "Ice Troll"
+      ],
+      "keysecondary": [],
+      "comment": "Ice Troll",
+      "content": "loot.0.def: small-monster-core\nloreTags: troll, frost, frontier\nname: Ice Troll\nskills: crushing-blow, frost-lance, fortress-stance",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 82,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "83": {
+      "uid": 83,
+      "key": [
+        "Stone Hound"
+      ],
+      "keysecondary": [],
+      "comment": "Stone Hound",
+      "content": "loot.0.def: small-monster-core\nloreTags: construct, mountain\nname: Stone Hound\nskills: fortress-stance, unyielding-step",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 83,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "84": {
+      "uid": 84,
+      "key": [
+        "Cinder Hound"
+      ],
+      "keysecondary": [],
+      "comment": "Cinder Hound",
+      "content": "loot.0.def: small-monster-core\nloreTags: elemental, ashlands, fire\nname: Cinder Hound\nskills: judgement-flare, cauterize",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 84,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "85": {
+      "uid": 85,
+      "key": [
+        "Dungeon Shade"
+      ],
+      "keysecondary": [],
+      "comment": "Dungeon Shade",
+      "content": "loot.0.def: small-monster-core\nloreTags: undead, shadow, auvoth\nname: Dungeon Shade\nskills: shadow-cut, gloom-veil",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 85,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "86": {
+      "uid": 86,
+      "key": [
+        "Cliff Drake"
+      ],
+      "keysecondary": [],
+      "comment": "Cliff Drake",
+      "content": "loot.0.def: river-drake-scale\nloot.1.def: small-monster-core\nloreTags: drake, mountain\nname: Cliff Drake\nskills: crushing-blow, unyielding-step, guard-cleave",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 86,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "87": {
+      "uid": 87,
+      "key": [
+        "Glass Beetle"
+      ],
+      "keysecondary": [],
+      "comment": "Glass Beetle",
+      "content": "loot.0.def: small-monster-core\nloreTags: vermin, glass-waste\nname: Glass Beetle\nskills: fortress-stance, crushing-blow",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 87,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "88": {
+      "uid": 88,
+      "key": [
+        "Dust Wraith"
+      ],
+      "keysecondary": [],
+      "comment": "Dust Wraith",
+      "content": "loot.0.def: small-monster-core\nloreTags: undead, ashlands, spirit\nname: Dust Wraith\nskills: kinetic-wave, gloom-veil, shadow-cut",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 88,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "89": {
+      "uid": 89,
+      "key": [
+        "Tomb Sentinel"
+      ],
+      "keysecondary": [],
+      "comment": "Tomb Sentinel",
+      "content": "loot.0.def: iron-filings\nloot.1.def: small-monster-core\nloreTags: construct, crypt, auvoth\nname: Tomb Sentinel\nskills: titan-cleave, bastion-roar, adamant-barrier",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 89,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "90": {
+      "uid": 90,
+      "key": [
+        "Sea Drake"
+      ],
+      "keysecondary": [],
+      "comment": "Sea Drake",
+      "content": "loot.0.def: river-drake-scale\nloot.1.def: small-monster-core\nloreTags: drake, aquatic, sea\nname: Sea Drake\nskills: kinetic-wave, titan-cleave, frost-lance",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 90,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "91": {
+      "uid": 91,
+      "key": [
+        "Obsidian Goliath"
+      ],
+      "keysecondary": [],
+      "comment": "Obsidian Goliath",
+      "content": "loot.0.def: small-monster-core\nloreTags: titan, volcanic, ashlands\nname: Obsidian Goliath\nskills: titan-cleave, adamant-barrier, cleansing-pyre",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 91,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "92": {
+      "uid": 92,
+      "key": [
+        "Catacomb Wraith"
+      ],
+      "keysecondary": [],
+      "comment": "Catacomb Wraith",
+      "content": "loot.0.def: small-monster-core\nloreTags: undead, auvoth-depths, shadow\nname: Catacomb Wraith\nskills: phantom-arc, shadow-cut, gloom-veil",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 92,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "93": {
+      "uid": 93,
+      "key": [
+        "Grey Walker Manifestation"
+      ],
+      "keysecondary": [],
+      "comment": "Grey Walker Manifestation",
+      "content": "loot.0.def: small-monster-core\nloreTags: apex, ancient, abyssal\nname: Grey Walker Manifestation\nskills: null-sphere, astral-flare, tempest-fury",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 93,
+      "extensions": {
+        "story_studio": {
+          "kind": "creatures"
+        }
+      }
+    },
+    "94": {
+      "uid": 94,
+      "key": [
+        "Cane-Blade",
+        "Cane Blade",
+        "walking stick",
+        "ash walking stick",
+        "cane"
+      ],
+      "keysecondary": [],
+      "comment": "Cane-Blade",
+      "content": "kind: equipment\nname: Cane-Blade\nnote: Self-made katana-shaped blade hidden in an ash walking stick with an iron ferrule; crude steel, dulls fast, may snap on mail; heavier than any stick.\nslot: weapon\ntags: blade, hidden",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 94,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "95": {
+      "uid": 95,
+      "key": [
+        "Patched Oilcloth Coat",
+        "oilcloth coat"
+      ],
+      "keysecondary": [],
+      "comment": "Patched Oilcloth Coat",
+      "content": "kind: equipment\nname: Patched Oilcloth Coat\nnote: River-worn and patched.\nslot: armour",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 95,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "96": {
+      "uid": 96,
+      "key": [
+        "Knife",
+        "work knife"
+      ],
+      "keysecondary": [],
+      "comment": "Knife",
+      "content": "kind: goods\nname: Knife\ntags: tool",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 96,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "97": {
+      "uid": 97,
+      "key": [
+        "Whetstone"
+      ],
+      "keysecondary": [],
+      "comment": "Whetstone",
+      "content": "kind: goods\nname: Whetstone\ntags: tool",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 97,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "98": {
+      "uid": 98,
+      "key": [
+        "Minor Healing Draught",
+        "healing draught",
+        "minor healing potion"
+      ],
+      "keysecondary": [],
+      "comment": "Minor Healing Draught",
+      "content": "kind: consumable\nname: Minor Healing Draught\nnote: Closes wounds, leaves weakness and a scar.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 98,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "99": {
+      "uid": 99,
+      "key": [
+        "Healing Salve",
+        "salve"
+      ],
+      "keysecondary": [],
+      "comment": "Healing Salve",
+      "content": "kind: consumable\nname: Healing Salve",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 99,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "100": {
+      "uid": 100,
+      "key": [
+        "Bandage",
+        "bandages"
+      ],
+      "keysecondary": [],
+      "comment": "Bandage",
+      "content": "effect.cure: bleed\nkind: consumable\nname: Bandage",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 100,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "101": {
+      "uid": 101,
+      "key": [
+        "Common Antidote",
+        "antidote"
+      ],
+      "keysecondary": [],
+      "comment": "Common Antidote",
+      "content": "effect.cure: poison\nkind: consumable\nname: Common Antidote",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 101,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "102": {
+      "uid": 102,
+      "key": [
+        "Mana Draught",
+        "mana potion"
+      ],
+      "keysecondary": [],
+      "comment": "Mana Draught",
+      "content": "kind: consumable\nname: Mana Draught\nrarity: uncommon",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 102,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "103": {
+      "uid": 103,
+      "key": [
+        "Leech-salt Pouch"
+      ],
+      "keysecondary": [],
+      "comment": "Leech-salt Pouch",
+      "content": "kind: consumable\nname: Leech-salt Pouch\nnote: Coarse salt in burlap, thrown or packed: leeches let go and shrivel.\ntags: salt",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 103,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "104": {
+      "uid": 104,
+      "key": [
+        "Coarse Bread"
+      ],
+      "keysecondary": [],
+      "comment": "Coarse Bread",
+      "content": "kind: goods\nname: Coarse Bread\ntags: food",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 104,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "105": {
+      "uid": 105,
+      "key": [
+        "Hot Meal"
+      ],
+      "keysecondary": [],
+      "comment": "Hot Meal",
+      "content": "kind: goods\nname: Hot Meal\ntags: food",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 105,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "106": {
+      "uid": 106,
+      "key": [
+        "Common Ale",
+        "ale"
+      ],
+      "keysecondary": [],
+      "comment": "Common Ale",
+      "content": "kind: goods\nname: Common Ale\ntags: drink",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 106,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "107": {
+      "uid": 107,
+      "key": [
+        "Trail Rations"
+      ],
+      "keysecondary": [],
+      "comment": "Trail Rations",
+      "content": "kind: goods\nname: Trail Rations\nnote: One day.\ntags: food",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 107,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "108": {
+      "uid": 108,
+      "key": [
+        "Torch"
+      ],
+      "keysecondary": [],
+      "comment": "Torch",
+      "content": "kind: goods\nname: Torch\ntags: light",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 108,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "109": {
+      "uid": 109,
+      "key": [
+        "Lamp Oil"
+      ],
+      "keysecondary": [],
+      "comment": "Lamp Oil",
+      "content": "kind: goods\nname: Lamp Oil\nnote: Enough for one night.\ntags: light",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 109,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "110": {
+      "uid": 110,
+      "key": [
+        "Flint and Steel"
+      ],
+      "keysecondary": [],
+      "comment": "Flint and Steel",
+      "content": "kind: goods\nname: Flint and Steel\ntags: tool",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 110,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "111": {
+      "uid": 111,
+      "key": [
+        "Hemp Rope"
+      ],
+      "keysecondary": [],
+      "comment": "Hemp Rope",
+      "content": "kind: goods\nname: Hemp Rope\nnote: 10 m.\ntags: tool",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 111,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "112": {
+      "uid": 112,
+      "key": [
+        "Waterskin"
+      ],
+      "keysecondary": [],
+      "comment": "Waterskin",
+      "content": "kind: goods\nname: Waterskin",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 112,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "113": {
+      "uid": 113,
+      "key": [
+        "Bedroll"
+      ],
+      "keysecondary": [],
+      "comment": "Bedroll",
+      "content": "kind: goods\nname: Bedroll",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 113,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "114": {
+      "uid": 114,
+      "key": [
+        "Wool Blanket",
+        "blanket"
+      ],
+      "keysecondary": [],
+      "comment": "Wool Blanket",
+      "content": "kind: goods\nname: Wool Blanket",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 114,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "115": {
+      "uid": 115,
+      "key": [
+        "Backpack"
+      ],
+      "keysecondary": [],
+      "comment": "Backpack",
+      "content": "kind: goods\nname: Backpack\nnote: Frame pack of oiled canvas: carries 20 more while someone has it.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 115,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "116": {
+      "uid": 116,
+      "key": [
+        "Pack Mule",
+        "mule"
+      ],
+      "keysecondary": [],
+      "comment": "Pack Mule",
+      "content": "kind: goods\nname: Pack Mule\nnote: A sure-footed river-road mule with its harness: carries 80 more for whoever leads it.\ntags: animal",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 116,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "117": {
+      "uid": 117,
+      "key": [
+        "Barge Hold Share",
+        "barge hold",
+        "hold share"
+      ],
+      "keysecondary": [],
+      "comment": "Barge Hold Share",
+      "content": "kind: goods\nname: Barge Hold Share\nnote: A paid share of a river barge's hold for the party's goods: 200 more carried while the party keeps it.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 117,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "118": {
+      "uid": 118,
+      "key": [
+        "Burlap Sack",
+        "sack",
+        "burlap sacks"
+      ],
+      "keysecondary": [],
+      "comment": "Burlap Sack",
+      "content": "kind: goods\nname: Burlap Sack",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 118,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "119": {
+      "uid": 119,
+      "key": [
+        "Coarse Salt"
+      ],
+      "keysecondary": [],
+      "comment": "Coarse Salt",
+      "content": "kind: material\nname: Coarse Salt\nnote: A scoop from the salt sheds.\ntags: salt",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 119,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "120": {
+      "uid": 120,
+      "key": [
+        "Completion Salts"
+      ],
+      "keysecondary": [],
+      "comment": "Completion Salts",
+      "content": "kind: goods\nname: Completion Salts\nnote: Licensed salt-and-iron mix that seals one body.\ntags: salt, funeral",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 120,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "121": {
+      "uid": 121,
+      "key": [
+        "Fur-lined Cloak"
+      ],
+      "keysecondary": [],
+      "comment": "Fur-lined Cloak",
+      "content": "kind: equipment\nname: Fur-lined Cloak\nnote: Bluewatch cold-weather gear.\nslot: worn\ntags: cold",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 121,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "122": {
+      "uid": 122,
+      "key": [
+        "Spear"
+      ],
+      "keysecondary": [],
+      "comment": "Spear",
+      "content": "kind: equipment\nname: Spear\nslot: weapon\ntags: reach",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 122,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "123": {
+      "uid": 123,
+      "key": [
+        "Hatchet"
+      ],
+      "keysecondary": [],
+      "comment": "Hatchet",
+      "content": "kind: equipment\nname: Hatchet\nslot: weapon\ntags: axe",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 123,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "124": {
+      "uid": 124,
+      "key": [
+        "Iron-bound Buckler"
+      ],
+      "keysecondary": [],
+      "comment": "Iron-bound Buckler",
+      "content": "kind: equipment\nname: Iron-bound Buckler\nslot: offhand",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 124,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "125": {
+      "uid": 125,
+      "key": [
+        "Gambeson"
+      ],
+      "keysecondary": [],
+      "comment": "Gambeson",
+      "content": "kind: equipment\nname: Gambeson\nslot: armour",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 125,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "126": {
+      "uid": 126,
+      "key": [
+        "Iron Cap"
+      ],
+      "keysecondary": [],
+      "comment": "Iron Cap",
+      "content": "kind: equipment\nname: Iron Cap\nslot: worn",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 126,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "127": {
+      "uid": 127,
+      "key": [
+        "Wolf-pelt Mantle"
+      ],
+      "keysecondary": [],
+      "comment": "Wolf-pelt Mantle",
+      "content": "kind: equipment\nname: Wolf-pelt Mantle\nslot: worn\ntags: cold",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 127,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "128": {
+      "uid": 128,
+      "key": [
+        "Crag Wolf Pelt",
+        "wolf pelt"
+      ],
+      "keysecondary": [],
+      "comment": "Crag Wolf Pelt",
+      "content": "kind: material\nname: Crag Wolf Pelt",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 128,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "129": {
+      "uid": 129,
+      "key": [
+        "Crag Wolf Fang",
+        "wolf fang"
+      ],
+      "keysecondary": [],
+      "comment": "Crag Wolf Fang",
+      "content": "kind: material\nname: Crag Wolf Fang",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 129,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "130": {
+      "uid": 130,
+      "key": [
+        "Rat Tail",
+        "rat tails"
+      ],
+      "keysecondary": [],
+      "comment": "Rat Tail",
+      "content": "kind: material\nname: Rat Tail",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 130,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "131": {
+      "uid": 131,
+      "key": [
+        "Live Leech",
+        "leech"
+      ],
+      "keysecondary": [],
+      "comment": "Live Leech",
+      "content": "kind: material\nname: Live Leech\nnote: Alchemists and barber-surgeons buy them.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 131,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "132": {
+      "uid": 132,
+      "key": [
+        "Small Monster Core",
+        "monster core"
+      ],
+      "keysecondary": [],
+      "comment": "Small Monster Core",
+      "content": "kind: material\nname: Small Monster Core\nnote: Intact core of a Soul Class I creature.\nrarity: uncommon",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 132,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "133": {
+      "uid": 133,
+      "key": [
+        "River Drake Scale"
+      ],
+      "keysecondary": [],
+      "comment": "River Drake Scale",
+      "content": "kind: material\nname: River Drake Scale\nrarity: uncommon",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 133,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "134": {
+      "uid": 134,
+      "key": [
+        "Bluecap Moss",
+        "moss"
+      ],
+      "keysecondary": [],
+      "comment": "Bluecap Moss",
+      "content": "kind: material\nname: Bluecap Moss\nnote: Pale moss off the culvert stones; alchemists steep it for salves and draughts.\ntags: herb",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 134,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "135": {
+      "uid": 135,
+      "key": [
+        "Cleansing Spirits",
+        "spirits"
+      ],
+      "keysecondary": [],
+      "comment": "Cleansing Spirits",
+      "content": "kind: material\nname: Cleansing Spirits\nnote: A stoppered flask of strong clear spirit for wounds and glassware.\ntags: alchemy",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 135,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    },
+    "136": {
+      "uid": 136,
+      "key": [
+        "Iron Filings"
+      ],
+      "keysecondary": [],
+      "comment": "Iron Filings",
+      "content": "kind: material\nname: Iron Filings\nnote: A twist of forge filings: the iron in salt-and-iron mixes.\ntags: iron, salt",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 100,
+      "position": 0,
+      "disable": false,
+      "excludeRecursion": true,
+      "preventRecursion": true,
+      "delayUntilRecursion": false,
+      "probability": 100,
+      "useProbability": true,
+      "depth": 4,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "scanDepth": null,
+      "caseSensitive": false,
+      "matchWholeWords": true,
+      "displayIndex": 136,
+      "extensions": {
+        "story_studio": {
+          "kind": "items"
+        }
+      }
+    }
+  }
+}

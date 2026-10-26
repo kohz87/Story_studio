@@ -118,7 +118,7 @@ export function mountStudio(root) {
 
 
     const ctx = {
-        doc, win, root, app, main, inspector: inspectorBody, overlays, selection, file,
+        doc, win, root, app, main, inspector: inspectorBody, overlays, selection, file, authoring: {},
         get model() { return history.current; },
         get history() { return history; },
         get dirty() {
@@ -199,8 +199,9 @@ export function mountStudio(root) {
                 };
             }
             if (model?.document) {
-                const previous = { history, selection: { ...selection }, baseline: lastBaselineJson, filename: ctx.filename };
+                const previous = { history, selection: { ...selection }, baseline: lastBaselineJson, filename: ctx.filename, authoring: ctx.authoring };
                 history = createHistory(model);
+                ctx.authoring = {};
                 selection.kind = 'classes';
                 selection.id = null;
                 selection.form = null;
@@ -214,6 +215,7 @@ export function mountStudio(root) {
                     Object.assign(selection, previous.selection);
                     lastBaselineJson = previous.baseline;
                     ctx.filename = previous.filename;
+                    ctx.authoring = previous.authoring;
                     ctx.render();
                     return null;
                 }
@@ -278,9 +280,13 @@ export function mountStudio(root) {
             more.open = KINDS.slice(8).includes(selection.kind);
             more.append(el(doc, 'summary', 'More kinds'));
             for (const kind of KINDS.slice(8)) more.append(button(doc, `${LABELS[kind]} (${records(model, kind).length})`, () => ctx.select(kind)));
-            rail.append(more, button(doc, 'Pack settings', () => ctx.select('settings')), check);
+            rail.append(more, button(doc, 'Pack settings', () => ctx.select('settings')));
+            for (const [kind, label] of [['narrator', 'Narrator card'], ['lorebook', 'Lorebook'], ['lore-import', 'Import lorebook']]) {
+                rail.append(button(doc, label, () => ctx.select(kind), { 'aria-current': selection.kind === kind ? 'page' : 'false' }));
+            }
+            rail.append(check);
             main.replaceChildren(); inspectorBody.replaceChildren();
-            inspector.hidden = !model?.document || selection.kind === 'check';
+            inspector.hidden = !model?.document || ['check', 'narrator', 'lorebook', 'lore-import'].includes(selection.kind);
             renderScreen(ctx);
         },
         destroy() {

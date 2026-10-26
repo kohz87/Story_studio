@@ -5,8 +5,14 @@ import { renderSkills } from './skills.js';
 import { renderRecords } from './records.js';
 import { renderCheck } from './problems.js';
 import { KINDS } from '../records.js';
+import { renderNarrator, renderLorebook, renderLoreImport } from './authoring.js';
 
 export function renderScreen(ctx) {
+    const authoring = { narrator: renderNarrator, lorebook: renderLorebook, 'lore-import': renderLoreImport };
+    if (Object.hasOwn(authoring, ctx.selection.kind) && ctx.model?.document) {
+        authoring[ctx.selection.kind](ctx);
+        return;
+    }
     if (ctx.selection.kind === 'settings' && ctx.model?.document) {
         renderPackSettings(ctx);
         return;
