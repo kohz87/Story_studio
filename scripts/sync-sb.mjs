@@ -26,6 +26,12 @@ try {
     rmSync(target, { recursive: true, force: true });
     mkdirSync(resolve('vendor'), { recursive: true });
     cpSync(join(scratch, 'tests', 'vendor', 'story-block'), target, { recursive: true });
+    // The checker's shipped fixtures (valid packs and one refusal vector per DM_* code) travel with the vendored copy,
+    // so parity tests can run from a lone clone. They are data, never edited here.
+    const fixtures = join(from, 'tests', 'v2', 'data-modules', 'fixtures');
+    const fixtureTarget = resolve('vendor', 'story-block-fixtures', 'data-modules');
+    rmSync(resolve('vendor', 'story-block-fixtures'), { recursive: true, force: true });
+    if (existsSync(fixtures)) cpSync(fixtures, fixtureTarget, { recursive: true });
     console.log(`sync-sb: vendor/story-block from ${from}`);
 } finally {
     rmSync(scratch, { recursive: true, force: true });

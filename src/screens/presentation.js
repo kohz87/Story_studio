@@ -1,7 +1,7 @@
 import { el, button, field, safeLabel } from '../dom.js';
 import { parseJsonInput } from '../forms.js';
 import { applyEdit } from '../apply-edit.js';
-import { validatePack } from '../../vendor/story-block/src/v2/packs/validate.js';
+import { validatePack } from '../data-modules/sb-adapter.js';
 import { createPreview } from '../preview.js';
 import { SCREEN_FIELDS, MOUNTS, NODE_TYPES, standardWidgets, QUERIES, SAMPLE, replacePresentation, checkDefaults, elementSnippet, widgetSnippet } from '../screen-authoring.js';
 
