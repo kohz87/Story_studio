@@ -23,9 +23,11 @@
 
 import { assistSections, continuation, cutLine, defangMarker, extractBlock, grammarHeads, hasHidden, hideBlock, markOff, parseChanges, strayLines, stripBlock, withAssist } from './capture.js';
 import { notWritten } from './assist/extractor.js';
+import { PRECHECK } from './assist/classifier.js';
 import { refusedWhy } from './assist/safety.js';
 import { displayLines, readDisplayLine } from './extras.js';
-import { hash, readRecord } from './persist.js';
+import { occurrenceOf, operationKey, replacedProofs, reusePlan } from './evidence.js';
+import { hash, readRecord, swipeLoading } from './persist.js';
 import { CAPTURE_PREFIX, HOST_MODULE } from './registry.js';
 import { STATIC_MARKER, assemble, contextNotice, estimateTokens } from './prompt.js';
 import { MAX_CHANGE_LINES, ensureModules, makeView } from './sdk.js';
@@ -204,11 +206,17 @@ export function restoreMissing(chat, staticText, tailText) {
  * onChatChanged, onChatRenamed, onTimelineChanged, onGenerationEnded, preview, report, problems, clearProblems, blocked, blockers, unblock,
  * session, replyBusy, whenIdle }.
  */
-export function createTurn({ ctx, live = () => ctx, store, bus, registry, settings, events = null, onBlocked = null, notify = defaultNotify, initial = () => registry.initialState(), ownPrompt = () => false }) {
+export function createTurn({ ctx, live = () => ctx, store, bus, registry, settings, events = null, onBlocked = null, notify = defaultNotify, initial = () => registry.initialState(), ownPrompt = () => false, timeline = null }) {
     const types = () => ctx?.extension_prompt_types ?? ctx?.extensionPromptTypes ?? {};
     const roles = () => ctx?.extension_prompt_roles ?? ctx?.extensionPromptRoles ?? {};
     const position = place => (place === 'static' ? types().IN_PROMPT ?? IN_PROMPT : types().IN_CHAT ?? IN_CHAT);
     const hostSettings = () => (typeof settings === 'function' ? settings() : settings ?? {});
+    // Story Block's readers of earlier messages that this turn owns, each asked for by name from the timeline's active-history filter
+    // (timeline/active.js): messages a restore faded are not a module's last reader message nor a source of late lines. (A request is not
+    // filtered here: SillyTavern leaves the hidden messages out of it, and a restore hides what it faded.) A host without a timeline has none.
+    const reader = name => (typeof timeline?.active === 'function' ? timeline.active(name) : null);
+    const lateReader = reader('assist.late');
+    const viewReader = reader('view.lastUser');
     let session = null;
     let deferred = false;   // cues committed before a reply, left for the reply's save (runCues)
     let listeners = [];
@@ -281,20 +289,77 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         }
     }
 
-    const view = () => makeView({ store, registry, settings, chat: ctx?.chat });
+    const view = () => makeView({ store, registry, settings, chat: ctx?.chat, active: viewReader });
     const hasCarrier = () => (ctx?.chat ?? []).some(isCarrier);
     const lastCarrier = () => (ctx?.chat ?? []).findLastIndex(isCarrier);
 
     // The chat's state starts on its first carrier; a damaged record set up again goes to the Problems.
     function ensureInitial() {
         const notes = store.ensureInitial(initial());
-        for (const note of Array.isArray(notes) ? notes : []) problem({ code: 'DAMAGED', message: note });
+        for (const note of Array.isArray(notes) ? notes : []) problem({ code: 'DAMAGED', message: note, ...(repairActions().length ? { actions: repairActions() } : {}) });
     }
 
-    function rebuild() {
+    // What the reader may do about a story that Story Block keeps as it is (read-only), only on their say, each asked
+    // twice (never automatic): the actions the Problem carries and Settings → Diagnostics shows. A record from a newer
+    // version has none: update Story Block.
+    const START_OVER = Object.freeze({ id: 'start-over', label: 'Start this chat\'s story state over', confirm: 'The saved story state of this chat cannot be used as it is, and it is kept aside. Starting over begins the story\'s numbers (items, money, places) from their start, and the replies after it add their changes again. Start over?' });
+    const KEEP_EARLIEST = Object.freeze({ id: 'keep-earliest', label: 'Keep the story state from the earliest saved point', confirm: 'The replies before the earliest saved point of this story are gone, and this session could not check what they did. Keeping it trusts that saved point as the start of the story, with whatever the deleted replies left in it. Keep it?' });
+    function repairActions() {
+        const kept = store.readOnly?.();
+        if (!kept || kept.kind === 'future') return [];
+        return kept.kind === 'unresolved' ? [KEEP_EARLIEST, START_OVER] : [START_OVER];
+    }
+    /** The reader's confirmed repair (store.startOver / keepEarliest): → { ok: true } | { ok: false, code, message }. */
+    async function repair(id, { confirmed = false } = {}) {
+        try {
+            if (id === 'keep-earliest') store.keepEarliest?.({ confirmed });
+            else if (id === 'start-over') store.startOver?.({ confirmed });
+            else return refusal('NOT_FOUND', `There is no repair called "${id}".`);
+        } catch (error) {
+            return refusal('REFUSED', error?.message ?? String(error));
+        }
+        rebuild();
+        await trySave('after the repair');
+        return { ok: true };
+    }
+    const startOver = options => repair('start-over', options);
+
+    // `publish: false`: the caller finishes its own work first (reconciling after a delete) and tells the screens once.
+    function rebuild({ publish = true } = {}) {
         store.rebuild();
         if (hasCarrier()) ensureInitial();
-        events?.emit('head', { index: store.headIndex() });
+        if (publish) events?.emit('head', { index: store.headIndex() });
+    }
+
+    // A guarded system step with a `replan` planned again (store.replaceStory / store.reconcile's `rerun`): as its
+    // span saved it (type, payload, seed: `info.replan`; the receipt is only what was shown), on `state`, on the
+    // reply it is kept on (`own` for the one a Re-read is on), keeping its ordinal.
+    function planAgain(state, receipt, info = null, own = null) {
+        const plan = info?.replan ?? { type: receipt.type, payload: receipt.replan?.payload ?? {}, seed: receipt.seed };
+        const at = Number.isInteger(info?.index) ? info.index : null;
+        const reply = own ?? (at !== null && store.carrierSid?.(at) ? { index: at, sid: store.carrierSid(at) } : null);
+        const ordinal = info?.span?.source?.ordinal;
+        // The proof of the block being planned again may be given again: the step keeps its ids.
+        const replacing = Array.isArray(info?.span?.evidence) ? info.span.evidence : [];
+        return bus.run(plan.type, plan.payload ?? {}, { cause: 'system', state, seed: plan.seed, replacing, reusing: typeof info?.span?.id === 'string' ? info.span : null, ...(Number.isInteger(info?.occurrence) ? { occurrence: info.occurrence } : {}), ...(reply ? { reply: { ...reply, ...(Number.isInteger(ordinal) ? { ordinal } : {}), ...(Number.isInteger(info?.opsBefore) ? { opsBefore: info.opsBefore } : {}) } } : {}) });
+    }
+
+    // After a delete or swipe (REPLAY.md "Reconciling"): the guarded steps that carry a `replan` are planned again
+    // from the first one on, in the same save window; steps that come out as they were change nothing and write
+    // nothing. Not while the story record is read-only. What was planned again is a Problem, quietly.
+    function reconcileNow() {
+        const from = store.replansFrom?.();
+        if (!Number.isInteger(from) || store.readOnly?.()) return;
+        try {
+            const done = store.reconcile(from, { rerun: planAgain });
+            if (!done.changed) return;
+            store.scheduleSave?.();
+            const parts = [done.planned ? `${done.planned} planned again` : '', done.removed ? `${done.removed} taken back` : ''].filter(Boolean).join(', ');
+            if (!parts) return;     // (revs numbered on, nothing the reader needs told)
+            problem({ code: 'REPLANNED', quiet: true, message: `The story before some steps changed, so ${parts || 'steps'} (their changes follow what is there now).` });
+        } catch (error) {
+            problem({ code: 'FAILED', message: `Steps that follow the change could not be planned again: ${error?.message ?? error}` });
+        }
     }
 
     // beforeGenerate (§4.1 step 3): each hook may return lines for the tail, or commands to
@@ -306,6 +371,8 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
     async function runCues(type = 'normal', { dryRun = false } = {}) {
         const cues = {};
         let committed = false;
+        const prechecks = [];
+        const requested = [];
         const commit = !dryRun && type !== 'continue';
         for (const { moduleId, fn } of registry.hookEntries('beforeGenerate')) {
             let out;
@@ -320,12 +387,28 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             const lines = Array.isArray(out) ? out : Array.isArray(out?.lines) ? out.lines : [];
             if (lines.length) cues[moduleId] = lines.filter(line => typeof line === 'string');
             for (const command of commit && Array.isArray(out?.commands) ? out.commands : []) {
+                // Assist's roll is previewed for the prompt, without writing on the previous reply.
+                // Completion runs the same seed on the generated reply; only that transaction is stored.
+                if (command?.type === PRECHECK) {
+                    requested.push({ moduleId, payload: command.payload ?? {} });
+                    continue;
+                }
                 const result = await bus.command(command?.type, command?.payload ?? {}, { cause: 'system' });
                 if (result?.ok) {
                     committed = true;
                     events?.emit('committed', { receipt: result.receipt });
                 } else problem({ module: moduleId, code: result?.code ?? 'FAILED', message: `The cue "${command?.type}" was not committed: ${result?.message ?? 'unknown error'}` });
             }
+        }
+        // Other cues may settle a fight or change a modifier. Preview on the state they leave,
+        // which is also the state the generated reply's prelude will start from.
+        for (const { moduleId, payload } of requested) {
+            const prior = session?.prechecks?.find(step => JSON.stringify(step.payload) === JSON.stringify(payload));
+            const result = bus.run(PRECHECK, payload, { cause: 'system', ...(prior ? { seed: prior.seed } : {}) });
+            if (result?.ok) {
+                prechecks.push({ type: PRECHECK, payload, seed: result.receipt.seed });
+                cues[moduleId] = [...(cues[moduleId] ?? []), `[Happened]\n${result.receipt.summary}`];
+            } else problem({ module: moduleId, code: result?.code ?? 'FAILED', message: `The cue "${PRECHECK}" was not prepared: ${result?.message ?? 'unknown error'}` });
         }
         // Saved with the reply (MESSAGE_RECEIVED), not now: each save writes the whole chat file, and the
         // reply's save comes moments later with these cues in it. A reply that never comes still has them
@@ -334,7 +417,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             store.deferSave?.();
             deferred = true;
         }
-        return cues;
+        return { cues, prechecks };
     }
 
     // What modules send with the reply on their own, under their own prompt keys (SPEC §5: NPC State
@@ -500,7 +583,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
                 block(blocked, abort);
                 return;
             }
-            const cues = await runCues(kind);
+            const { cues, prechecks } = await runCues(kind);
             const built = build(cues);
             tellTooSmall(built.fit);
             const chat = ctx.chat;
@@ -508,6 +591,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             const index = kind === 'swipe' || kind === 'continue' ? last : chat.length;
             session = {
                 type: kind,
+                prechecks,
                 index,
                 untold: built.untold.map(receipt => receipt.id),
                 staticText: defuseMacros(built.staticText),
@@ -642,7 +726,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
     function lateLines(index, own = []) {
         const chat = ctx?.chat ?? [];
         const from = chat.slice(0, Math.max(0, index)).findLastIndex(isCarrier);
-        if (from < 0) return [];
+        if (from < 0 || lateReader?.faded().has(from)) return [];
         const stored = assistSections(String(chat[from]?.mes ?? '')).next;
         if (!stored.length) return [];
         const safe = parseChanges(stored.join('\n')).lines.filter(line => !refusedWhy(line, null, { late: true }));
@@ -670,7 +754,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
     // `late` / `assist` (MODULES §F123): the Assist safety net's lines, run after the reply's own as story
     // lines marked as its (late: read from the reply before, after the reader had sent), within the same
     // cap per reply (`used`: lines the reply already read in an earlier call).
-    async function captureLines(index, all, before = null, type = 'normal', { late = [], assist = [], used = 0 } = {}) {
+    async function captureLines(index, all, before = null, type = 'normal', { late = [], assist = [], used = 0, prechecks = [] } = {}) {
         const receipts = [];
         const found = [];
         const lines = capped(index, all, found);
@@ -680,13 +764,16 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         let off = [];
         let steps = [];
         await (store.batch ?? (fn => fn()))(async () => {
+            // The seeded pre-roll precedes this reply's story lines, as it did in the prompt.
+            // Its Source is now this reply's; the previous reply is never changed.
+            const prepared = prechecks.length ? await afterCapture(index, { type, problems: found, prechecks, onlyPrechecks: true }) : [];
             ({ off } = await captureEach(index, lines, receipts, found, null, null, shown));
             for (const mark of [LATE, NOW]) {
                 const group = extra.filter(item => item.mark === mark).map(item => item.line);
                 if (group.length) off = [...new Set([...off, ...(await captureEach(index, group, receipts, found, null, null, shown, mark)).off])];
             }
-            // Only after a capture that kept a story line (never for an empty one, a click or a system step).
-            if (receipts.length) steps = await afterCapture(index, { type, problems: found });
+            // A pre-roll is part of this reply even when its narration has no Changes block.
+            if (receipts.length || prepared.length) steps = [...prepared, ...await afterCapture(index, { type, problems: found })];
         });
         return { receipts, problems: found, off, steps: steps.map(step => step.receipt) };
     }
@@ -701,14 +788,23 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
      * lines. A hook that fails or takes longer than HOOK_TIMEOUT_MS, or a step that is refused, is a Problem.
      * Live (no `state`): each step is appended to the head as it runs. A Re-read passes `state` (the reply's
      * state after its new story lines), `reply` and `seeds` (the old steps' seeds by type, in order): nothing
-     * is stored, and the steps come back as [{ ops, receipt }] for store.replaceStory.
+     * is stored, and the steps come back as [{ ops, receipt, block? }] for store.replaceStory (`block`: what a
+     * guarded step hands over, REPLAY.md; `plan` counts the guarded blocks the Re-read has planned so far, so
+     * each gets its own ordinal). The same runner stores Assist's seeded pre-roll prelude with
+     * `beforeGenerate: true`; Re-read plans that prelude before the story lines and replaces it too.
      */
-    async function afterCapture(index, { type = 'normal', problems = [], state = null, reply = null, seeds = null } = {}) {
+    async function afterCapture(index, { type = 'normal', problems = [], state = null, reply = null, seeds = null, plan = null, prechecks = [], onlyPrechecks = false } = {}) {
         const steps = [];
         const live = state === null;
         let now = live ? store.head() : state;
-        for (const { moduleId, fn } of registry.hookEntries('afterCapture')) {
-            const seen = live ? view() : makeView({ store, registry, settings, chat: ctx?.chat, state: now, reply });
+        // A Re-read has stored nothing yet: the proof its lines and earlier steps planned is what the hooks and steps see.
+        const planned = () => (live || !plan ? [] : [...plan.blocks.flatMap(piece => piece.block?.evidence ?? []), ...steps.flatMap(step => step.block?.evidence ?? [])]);
+        const hooks = [
+            ...(prechecks.length ? [{ moduleId: HOST_MODULE, precheck: true, fn: () => ({ commands: prechecks }) }] : []),
+            ...(onlyPrechecks ? [] : registry.hookEntries('afterCapture')),
+        ];
+        for (const { moduleId, fn, precheck = false } of hooks) {
+            const seen = live ? view() : makeView({ store, registry, settings, chat: ctx?.chat, active: viewReader, state: now, reply, pendingProofs: () => planned().map(proof => ({ proof, block: null })) });
             let out;
             try { out = await within(fn(seen, { index, type }), HOOK_TIMEOUT_MS); } catch (error) {
                 problems.push(problem({ module: moduleId, index, code: 'FAILED', message: `afterCapture failed: ${error?.message ?? error}` }));
@@ -720,24 +816,39 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             }
             for (const command of Array.isArray(out?.commands) ? out.commands : []) {
                 const payload = command?.payload ?? {};
-                const seed = seeds?.(command?.type);
-                const result = bus.run(command?.type, payload, { cause: 'system', state: live ? store.head() : now, ...(reply ? { reply } : {}), ...(seed === undefined ? {} : { seed }) });
+                const seed = command.seed ?? seeds?.(command?.type);
+                const taking = plan ? occurrenceFor(plan, command?.type, payload) : null;
+                const result = bus.run(command?.type, payload, { cause: 'system', state: live ? store.head() : now, ...(reply ? { reply: plan ? { ...reply, ...(taking.span && (plan.preserveSources || occurrenceOf(taking.span) === null) ? { ordinal: taking.span.source.ordinal } : {}), pending: plan.pending, opsBefore: plan.blocks.reduce((sum, piece) => sum + (Number.isInteger(piece.n) ? piece.n : 0), 0) + steps.reduce((sum, step) => sum + (Array.isArray(step.ops) ? step.ops.length : 0), 0) } : reply } : {}), ...(plan ? { planned: planned(), replacing: plan.replacing, reusing: taking.span, ...(Number.isInteger(taking.value) ? { occurrence: taking.value } : {}) } : {}), ...(seed === undefined ? {} : { seed }) });
                 if (!result?.ok) {
                     problems.push(problem({ module: moduleId, index, code: result?.code ?? 'FAILED', message: `The step "${command?.type}" after the reply's lines was not run: ${result?.message ?? 'unknown error'}` }));
                     continue;
                 }
                 let replan = result.receipt.replan;
                 if (!replan) { try { replan = { payload: structuredClone(payload) }; } catch { replan = undefined; } }
-                const receipt = { ...result.receipt, afterCapture: true, ...(replan ? { replan } : {}) };
+                const receipt = { ...result.receipt, afterCapture: true, ...(precheck ? { beforeGenerate: true } : {}), ...(replan ? { replan } : {}) };
                 if (live) {
-                    store.append({ ops: result.ops, receipt });
+                    store.append({ ops: result.ops, receipt, ...(result.block ? { block: result.block } : {}) });
                     now = store.head();
                     events?.emit('committed', { receipt });
-                } else now = result.state;
-                steps.push({ ops: result.ops, receipt });
+                } else {
+                    now = result.state;
+                    if (result.block && plan) {
+                        plan.pending += 1;
+                        if (taking.key) plan.reuse.commit(taking.key, result.block.occurrence);
+                    }
+                }
+                steps.push({ ops: result.ops, receipt, state: now, ...(result.block ? { block: result.block } : {}) });
             }
         }
         return steps;
+    }
+
+    // The occurrence a block of a Re-read that does `type` with `payload` takes (evidence.js reusePlan): the number of a block it replaces, else the next unused.
+    function occurrenceFor(plan, type, payload) {
+        try {
+            const key = operationKey(type, payload);
+            return { key, value: plan.reuse.peek(key), span: plan.reuse.span(key) };
+        } catch { return { key: null, value: undefined }; }
     }
 
     // For a Re-read: each afterCapture step run again gets the seed of the old one of its type, in order.
@@ -756,7 +867,9 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
     // Runs `lines` as story captures on carrier `index`, each on the state the one before left. Stored on
     // the head as they go (append), or, with `base` (a Re-read), run on that state and returned as
     // { ops } for store.replaceStory, nothing stored.
-    async function captureEach(index, lines, receipts, found, base = null, seeds = null, shown = new Map(), assist = null) {
+    // `plan` ({ blocks: [], pending: 0 }, a Re-read's, shared by its calls): the guarded blocks planned so far
+    // (REPLAY.md), so each line's block gets the next ordinal and replaceStory stores each as a block of its own.
+    async function captureEach(index, lines, receipts, found, base = null, seeds = null, shown = new Map(), assist = null, plan = null) {
         const collected = [];
         const firstProblem = found.length;
         // Display kinds (written words) whose lines were read while their feature was off (capture.js markOff).
@@ -766,7 +879,10 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         const message = ctx?.chat?.[index];
         // `sid`: the reply's record ID, which stays with the reply when earlier messages are deleted.
         const carrier = { index, swipe: Number.isInteger(message?.swipe_id) ? message.swipe_id : 0, sid: store.carrierSid?.(index) ?? null };
-        const reader = (ctx?.chat ?? []).slice(0, index).findLast(item => item?.is_user);
+        // The message right before the reply (system messages aside), and only when it is the reader's: a reply that
+        // follows another reply has no message of the reader's to quote (proof, EVIDENCE.md).
+        const before = (ctx?.chat ?? []).slice(0, index).findLast(item => !item?.is_system);
+        const reader = before?.is_user ? before : null;
         const chat = { lastUser: String(reader?.mes ?? ''), reply: stripBlock(String(message?.mes ?? ''), 'Changes', { heads: changeHeads() }) };
         // A Re-read (a2-3): the reply as it stands now, for bookkeeping its kept blocks wrote (ctx.standing).
         let standing = null;
@@ -802,15 +918,25 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             }
             let result;
             try {
-                const run = opts => bus.run(`${CAPTURE_PREFIX}${entry.kind}`, { ...line, kind: entry.kind, word: line.kind }, { cause: 'story', state, capture: entry, carrier, chat, standing, ...(seed === undefined ? {} : { seed }), ...opts });
+                const operation = { type: `${CAPTURE_PREFIX}${entry.kind}`, payload: { ...line, kind: entry.kind, word: line.kind } };
+                const taking = plan ? occurrenceFor(plan, operation.type, operation.payload) : null;
+                const run = opts => bus.run(operation.type, operation.payload, { cause: 'story', state, capture: entry, carrier: plan ? { ...carrier, ...(taking.span && (plan.preserveSources || occurrenceOf(taking.span) === null) ? { ordinal: taking.span.source.ordinal } : {}), pending: plan.pending, opsBefore: plan.blocks.reduce((sum, piece) => sum + (Number.isInteger(piece.n) ? piece.n : 0), 0) } : carrier, chat, standing, ...(plan ? { planned: plan.blocks.flatMap(piece => piece.block?.evidence ?? []), replacing: plan.replacing, reusing: taking.span, ...(Number.isInteger(taking.value) ? { occurrence: taking.value } : {}) } : {}), ...(seed === undefined ? {} : { seed }), ...opts });
                 result = entry.off ? await run({ capture: { ...entry, off: false }, again: true }) : await run();
                 // Refused by a feature that is off (a command it called, ctx.feature): run as it ran before.
                 if (again && !entry.off && result?.code === 'FEATURE_OFF') result = await run({ again: true });
                 // The receipt remembers which line made it (`line`), so a Re-read can give the line its seed again.
                 // The safety net's lines are marked as its (receipt `assist`: 'now' | 'late', and the line).
                 if (result?.ok) result = { ...result, receipt: { ...result.receipt, line: mark, ...(assist ? { assist, assistLine: cutAt(line.raw, 200) } : {}) } };
-                if (result?.ok && base) collected.push(...result.ops);
-                else if (result?.ok) store.append({ ops: result.ops, receipt: result.receipt });
+                if (result?.ok && base) {
+                    collected.push(...result.ops);
+                    if (plan) {
+                        plan.blocks.push({ n: result.ops.length, receipt: result.receipt, ...(result.block ? { block: result.block } : {}) });
+                        if (result.block) {
+                            plan.pending += 1;
+                            if (taking.key) plan.reuse.commit(taking.key, result.block.occurrence);
+                        }
+                    }
+                } else if (result?.ok) store.append({ ops: result.ops, receipt: result.receipt, ...(result.block ? { block: result.block } : {}) });
             } catch (error) {
                 result = { ok: false, code: 'FAILED', message: error?.message ?? String(error) };
             }
@@ -898,7 +1024,8 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         const message = Number.isInteger(index) ? chat[index] : undefined;
         if (!message) return refusal('NOT_FOUND', `There is no message ${index} in this chat.`);
         if (message.is_user) return refusal('REFUSED', 'This is the reader\'s own message; only replies hold story changes.');
-        if (message.is_system) return refusal('REFUSED', 'This is a system message; it holds no story changes.');
+        // (a reply a restore hid keeps its record, and can be read again; a system message of SillyTavern's has none)
+        if (message.is_system && !readRecord(message)) return refusal('REFUSED', 'This is a system message; it holds no story changes.');
         if (session) return refusal('REFUSED', 'A reply is being written; Re-read once it is done.');
         if (!readRecord(message)) return refusal('REFUSED', 'This reply keeps no story record, so there is nothing to read again.');
         const base = store.before?.(index);
@@ -923,21 +1050,55 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         let ops;
         let off = [];
         let steps = [];
+        // `replacing`: the proof of the blocks this Re-read replaces (its story lines and its steps): ids of them may be held again by the blocks that replace
+        // them. `reuse`: the occurrences those blocks have, given again per operation while the number of blocks of the operation is unchanged.
+        let plan = null;
+        const problemsFrom = problems.length;
+        const reply = store.carrierSid?.(index) ? { index, sid: store.carrierSid(index) } : null;
         try {
             let after;
-            const seeds = storySeeds(readRecord(message));
-            ({ ops, off, state: after } = await captureEach(index, lines, receipts, problems, base, seeds));
-            for (const mark of [LATE, NOW]) {
-                const group = extra.filter(item => item.mark === mark).map(item => item.line);
-                if (!group.length) continue;
-                const more = await captureEach(index, group, receipts, problems, after, seeds, new Map(), mark);
-                ops = [...ops, ...more.ops];
-                off = [...new Set([...off, ...more.off])];
-                after = more.state;
+            // The Re-read is planned; when an operation has more or fewer blocks than it replaces it is planned again with none of that
+            // operation's old occurrences given back (evidence.js reusePlan), and again while a plan finds another operation changed (the
+            // retired set only grows). Every pass starts from the same inputs but that set: seeds, steps' seeds, plan and outputs are made anew.
+            let retire = new Set();
+            const bound = 32;     // (each pass retires at least one more operation, so a reply ends well before; a plan that does not is not stored)
+            let settled = false;
+            for (let pass = 0; pass <= bound; pass += 1) {
+                receipts.length = 0;
+                problems.length = problemsFrom;
+                steps = [];
+                const seeds = storySeeds(readRecord(message));
+                const record = readRecord(message);
+                // Native checkpoints name exact prefixes. An unchanged reply reusing the same roots must keep their
+                // Sources too, or a fresh ordinal alone changes owner state and silently drops its native checkpoint.
+                // Changed text and chats without published native work retain the ordinary allocation behavior.
+                const preserveSources = timeline?.hasNativeChanges?.() === true
+                    && record?.spans?.some(span => span.boundaries?.[0]?.payloadHash === store.payloadHashAt(index));
+                plan = { blocks: [], pending: 0, replacing: replacedProofs(record), reuse: reusePlan(record, retire), preserveSources };
+                const prechecks = (record?.receipts ?? [])
+                    .filter(receipt => receipt.beforeGenerate === true && receipt.type === PRECHECK)
+                    .map(receipt => ({ type: PRECHECK, payload: receipt.replan?.payload ?? {}, seed: receipt.seed }));
+                const prepared = prechecks.length ? await afterCapture(index, { type: 'reread', problems, state: base, reply, plan, prechecks, onlyPrechecks: true }) : [];
+                plan.blocks.push(...prepared.map(step => ({ n: step.ops.length, receipt: step.receipt, ...(step.block ? { block: step.block } : {}) })));
+                receipts.push(...prepared.map(step => step.receipt));
+                ({ ops, off, state: after } = await captureEach(index, lines, receipts, problems, prepared.at(-1)?.state ?? base, seeds, new Map(), null, plan));
+                ops = [...prepared.flatMap(step => step.ops), ...ops];
+                for (const mark of [LATE, NOW]) {
+                    const group = extra.filter(item => item.mark === mark).map(item => item.line);
+                    if (!group.length) continue;
+                    const more = await captureEach(index, group, receipts, problems, after, seeds, new Map(), mark, plan);
+                    ops = [...ops, ...more.ops];
+                    off = [...new Set([...off, ...more.off])];
+                    after = more.state;
+                }
+                // The reply's afterCapture steps, run again after its new story lines (none when none was kept).
+                if (receipts.length) steps = await afterCapture(index, { type: 'reread', problems, state: after, reply, seeds: stepSeeds(readRecord(message)), plan });
+                const unsure = plan.reuse.ambiguous([...plan.blocks, ...steps]);
+                if (!unsure.length) { settled = true; break; }
+                retire = new Set([...retire, ...unsure]);
             }
-            // The reply's afterCapture steps, run again after its new story lines (none when none was kept).
-            const reply = store.carrierSid?.(index) ? { index, sid: store.carrierSid(index) } : null;
-            if (receipts.length) steps = await afterCapture(index, { type: 'reread', problems, state: after, reply, seeds: stepSeeds(readRecord(message)) });
+            // A plan that still reports a changed operation is never stored.
+            if (!settled) return refusal('CONFLICT', 'The reply could not be read again without taking blocks for ones that went; nothing was changed.');
             // B-b2-timeline-r2: the lines ran while the reader could act (a capture handler may wait). A
             // message deleted, another chat opened, the reply swiped or edited, or a reply begun in that
             // time: what was read is no longer this reply's, so nothing is stored (not even on the
@@ -948,8 +1109,9 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             }
             // A kept system step marked `replan` (B-a1-13) runs again on the new story changes, as it ran
             // before: a system step, its own seed.
-            const rerun = (state, receipt) => bus.run(receipt.type, receipt.replan?.payload ?? {}, { cause: 'system', state, seed: receipt.seed, ...(reply ? { reply } : {}) });
-            store.replaceStory(index, { ops, receipts, rerun, settled: steps });
+            // A guarded block of a later reply is planned again on its own reply, keeping its ordinal (info.span).
+            const rerun = (state, receipt, info = null) => planAgain(state, receipt, info, !Number.isInteger(info?.index) || info.index === index ? reply : null);
+            store.replaceStory(index, { ops, receipts, rerun, settled: steps, blocks: plan.blocks });
         } catch (error) {
             return refusal('CONFLICT', `${error?.message ?? error}`);
         }
@@ -961,6 +1123,8 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             if (Array.isArray(message.swipes) && Number.isInteger(message.swipe_id)) message.swipes[message.swipe_id] = hidden;
             redraw(index, message);
         }
+        timeline?.settle();
+        if (timeline?.needsRecovery()) await timeline.recover();
         await trySave('after the Re-read');
         for (const receipt of [...receipts, ...steps.map(step => step.receipt)]) events?.emit('committed', { receipt });
         events?.emit('head', { index: store.headIndex() });
@@ -1022,14 +1186,14 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             if (cut) problems.push(problem({ index: id, line: cut, code: 'CUT_OFF', message: `The reply ended in the middle of the change line "${cutAt(cut, 80)}" (nothing after it on its line, and the block was not closed), so it was not used. Continue finishes it; or end the line and close the block by hand, then Re-read.` }));
             // The previous reply's safety-net lines that came after the reader sent (not for a Continue).
             const late = current.type === 'continue' ? [] : lateLines(id, parsed.lines.map(line => line.raw));
-            const result = await captureLines(id, parsed.lines, at ? current.base : null, current.type, { late });
+            const result = await captureLines(id, parsed.lines, at ? current.base : null, current.type, { late, prechecks: current.prechecks });
             problems.push(...result.problems);
 
             // What this reply was told; a Continue keeps what the reply was told before.
             // (B-b2-timeline-9: read through readRecord, and only receipt IDs, whatever the chat holds.)
             const told = current.type === 'continue' ? readRecord(message)?.narrated ?? [] : [];
             const before = told.filter(id => typeof id === 'string');
-            store.setNarrated(id, [...new Set([...before, ...current.untold])]);
+            store.setNarrated(id, [...new Set([...before, ...current.untold, ...result.steps.filter(receipt => receipt.beforeGenerate === true).map(receipt => receipt.id)])]);
 
             // Also with no block: the change lines left in the story are listed in the hidden comment, so a
             // Re-read leaves them too (B-a1-3, B-a1-10).
@@ -1039,6 +1203,10 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
                 message.mes = hidden;
                 if (Array.isArray(message.swipes) && Number.isInteger(message.swipe_id)) message.swipes[message.swipe_id] = hidden;
                 edited = true;
+            }
+            if (timeline?.needsRecovery()) {
+                const anchored = await timeline.recover();
+                if (!anchored.ok) problem({ index: id, code: anchored.code, message: anchored.message });
             }
             deferred = false;
             // One write for the reply, its capture and the reader's actions after it (store.saveIdle).
@@ -1154,7 +1322,8 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         session = null;
         markIdle();
         clearPrompts();
-        rebuild();
+        rebuild({ publish: false });
+        timeline?.settle();
         // A1-2: read-backs of a write that timed out before a reload of the page go on.
         try { store.resume?.(); } catch { /* only a guard */ }
         // A cue left for the reply's save (runCues) whose reply will not come here: saved now (into its
@@ -1164,6 +1333,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             if (store.dirty?.()) store.scheduleSave?.();
         }
         await ensureModules({ store, bus, registry, events });
+        events?.emit('head', { index: store.headIndex() });
     }
 
     /**
@@ -1185,8 +1355,28 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
     }
 
     /** Deleted messages, swipes, a greeting picked: the state is rebuilt from what is stored. */
-    function onTimelineChanged() {
-        rebuild();
+    async function onTimelineChanged() {
+        rebuild({ publish: false });
+        reconcileNow();
+        timeline?.settle();
+        if (timeline?.needsRecovery()) await timeline.recover();
+        events?.emit('head', { index: store.headIndex() });   // one head, after the steps that follow the change are planned again
+    }
+
+    /**
+     * A deleted swipe. SillyTavern tells of the deletion of the swipe being shown before it shows the next one (`extra` is
+     * still the deleted swipe's; MESSAGE_SWIPED follows). The shown swipe is told by whose record it holds, not by its text
+     * (persist.js swipeLoading): while it is in flux nothing is rebuilt, restamped, reconciled or published, so no record is
+     * written and no head is told of; the swipe load that follows does all of it once. Any other swipe deletion is a
+     * change on its own.
+     */
+    function onSwipeDeleted(detail) {
+        const live = ctx?.chat ?? [];
+        const at = Number.isInteger(detail) ? detail : detail?.messageId;
+        const message = live[Number.isInteger(at) ? at : live.length - 1];
+        const deleted = Number.isInteger(detail?.swipeId) ? detail.swipeId : null;
+        if (swipeLoading(message, deleted)) return;
+        return onTimelineChanged();
     }
 
     /** GENERATION_STOPPED: the reader stopped the reply being written (its last line may be unfinished). */
@@ -1204,10 +1394,16 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         if (store.dirty()) store.scheduleSave();
     }
 
+    let offModules = null;
     function install({ globalName = INTERCEPTOR_NAME } = {}) {
         for (const [key, place] of V1_KEYS) setPrompt(key, '', place);
         clearPrompts();
         if (globalName) globalThis[globalName] = interceptor;
+        // A module turned ready or dormant: guarded blocks of its are asked again (store.lifecycleChanged).
+        offModules?.();
+        offModules = events?.on?.('modules', () => {
+            if (store.lifecycleChanged?.()) events?.emit('head', { index: store.headIndex() });
+        }) ?? null;
         const source = ctx?.eventSource;
         const names = ctx?.eventTypes ?? ctx?.event_types ?? {};
         const on = (event, fn) => {
@@ -1224,11 +1420,14 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         on(names.CHAT_RENAMED, onChatRenamed);
         // MESSAGE_EDITED too: a record's swipe mark follows an edit (persist.js restamp), so a Continue
         // after it still finds the record.
-        for (const event of [names.MESSAGE_DELETED, names.MESSAGE_SWIPED, names.MESSAGE_SWIPE_DELETED, names.CHARACTER_FIRST_MESSAGE_SELECTED, names.MESSAGE_EDITED]) on(event, onTimelineChanged);
+        for (const event of [names.MESSAGE_DELETED, names.MESSAGE_SWIPED, names.CHARACTER_FIRST_MESSAGE_SELECTED, names.MESSAGE_EDITED]) on(event, onTimelineChanged);
+        on(names.MESSAGE_SWIPE_DELETED, onSwipeDeleted);
         return api;
     }
 
     function uninstall({ globalName = INTERCEPTOR_NAME } = {}) {
+        offModules?.();
+        offModules = null;
         const source = ctx?.eventSource;
         for (const [event, fn] of listeners) (source?.removeListener ?? source?.off)?.call(source, event, fn);
         listeners = [];
@@ -1238,6 +1437,9 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
     }
 
     const api = {
+        repairActions,
+        repair,
+        startOver,
         interceptor,
         install,
         uninstall,

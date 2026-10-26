@@ -1,5 +1,5 @@
 import { RULES_V2_LIMITS } from '../vendor/story-block/src/v2/packs/rules-v2.js';
-import { openPack } from './model.js';
+import { openPack, sourceTextOf } from './model.js';
 
 export const DRAFT_KEY = 'story-studio-draft';
 export const MAX_PACK_BYTES = RULES_V2_LIMITS.packBytes;
@@ -13,7 +13,11 @@ export function readDraft(win) {
         const parsed = JSON.parse(raw);
         if (!parsed || typeof parsed !== 'object' || parsed.version !== 1) return null;
         if (!parsed.document || typeof parsed.document !== 'object') return null;
-        const model = openPack(parsed.document);
+        let model = openPack(parsed.document);
+        if (typeof parsed.sourceText === 'string') {
+            const original = openPack(parsed.sourceText);
+            if (original.validation.ok && JSON.stringify(original.document) === JSON.stringify(model.document)) model = original;
+        }
         if (!model?.document) return null;
         return { model, dirty: Boolean(parsed.dirty) };
     } catch {
@@ -28,6 +32,7 @@ export function writeDraft(win, model, dirty) {
         const payload = JSON.stringify({
             version: 1,
             document: model.document,
+            sourceText: sourceTextOf(model),
             dirty: Boolean(dirty),
         });
         if (payload.length > MAX_DRAFT_BYTES) return false;

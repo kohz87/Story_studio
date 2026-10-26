@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { MockDocument } from './helpers/dom.js';
 import { mountStudio } from '../src/studio.js';
 import { DRAFT_KEY } from '../src/session.js';
+import { openPack, exportPack } from '../src/model.js';
 import { setField } from '../src/edits.js';
 import { smallRulesPack } from './fixtures/smallRulesPack.js';
 
@@ -379,7 +380,7 @@ test('unsafe opens preserve the current draft and its saved backup', () => {
     assert.equal(ctx.model, snapshot);
     assert.equal(ctx.dirty, true);
     assert.equal(win.localStorage.getItem(DRAFT_KEY), saved);
-    assert.match(root.querySelector('.notice').textContent, /unsafe-key/);
+    assert.match(root.querySelector('.notice').textContent, /UNSAFE_KEY/);
     ctx.destroy();
 });
 
@@ -478,4 +479,23 @@ test('schema refusals preserve the model, history, redo, dirty state and autosav
     assert.equal(saves, 0);
     assert.equal(win.localStorage.getItem(DRAFT_KEY), saved);
     assert.equal(ctx.model.validation.ok, true);
+});
+
+test('draft storage retains original text only for its matching immutable document', () => {
+    const text = '\uFEFF' + JSON.stringify(smallRulesPack(), null, 4) + '\r\n';
+    const { win, ctx } = setupStudio();
+    const initial = ctx.loadText(text);
+    assert.equal(exportPack(initial), text);
+    const saved = win.localStorage.getItem(DRAFT_KEY);
+    ctx.destroy();
+    const restored = setupStudio({ [DRAFT_KEY]: saved });
+    assert.equal(exportPack(restored.ctx.model), text);
+    restored.ctx.destroy();
+    const damaged = JSON.parse(saved);
+    damaged.document.name = 'Edited saved draft';
+    const edited = setupStudio({ [DRAFT_KEY]: JSON.stringify(damaged) });
+    assert.equal(edited.ctx.model.document.name, 'Edited saved draft');
+    assert.notEqual(exportPack(edited.ctx.model), text);
+    assert.equal(openPack(exportPack(edited.ctx.model)).document.name, 'Edited saved draft');
+    edited.ctx.destroy();
 });

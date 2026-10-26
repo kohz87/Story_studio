@@ -187,17 +187,20 @@ export function createSettings({ root, registry, save = () => {} }) {
 /**
  * Runs a registered query on `state`; the answer is a plain copy. Throws for an unknown query.
  * A query is called (state, args, tools) with tools.query(name, args) over the same state,
- * tools.receipts() → [{ index, receipt }], the stored receipts in chat order (`receipts` option), and
+ * tools.receipts() → [{ index, receipt }], the stored receipts in chat order (`receipts` option),
+ * tools.pendingProofs() → [{ proof }], a Re-read's planned proof (`pendingProofs` option, story.evidence), and
  * tools.reply ({ index, sid } or null, the `reply` option): the reply the state is the head of, as a
  * command's ctx.reply (commands.js).
  */
-export function runQuery(registry, state, name, args, { receipts = () => [], reply = null } = {}) {
+export function runQuery(registry, state, name, args, { receipts = () => [], reply = null, pendingProofs = null } = {}) {
     const query = registry.query(name);
     if (!query) throw new Error(`Story Suite: no module answers the query "${name}".`);
     const tools = Object.freeze({
         reply,
-        query: (other, otherArgs) => runQuery(registry, state, other, otherArgs, { receipts, reply }),
+        query: (other, otherArgs) => runQuery(registry, state, other, otherArgs, { receipts, reply, pendingProofs }),
         receipts: () => receipts() ?? [],
+        // The proof a Re-read has planned but not stored (evidence.js), for story.evidence; none otherwise.
+        ...(typeof pendingProofs === 'function' ? { pendingProofs } : {}),
     });
     const answer = query(state, args === undefined ? undefined : structuredClone(args), tools);
     return answer === undefined ? undefined : structuredClone(answer);
@@ -217,12 +220,13 @@ export const mountQuery = (registry, receipts = () => []) => (name, args, state)
  * (optional): another state than the head and the reply it stands for (`tools.reply`), for a Re-read's
  * afterCapture hook, which reads the reply's state after its new story lines (turn.js).
  */
-export function makeView({ store, registry, settings, chat = [], state = store.head(), reply = headReply(store) }) {
+export function makeView({ store, registry, settings, chat = [], active = null, state = store.head(), reply = headReply(store), pendingProofs = null }) {
     const messages = Array.isArray(chat) ? chat : [];
-    const lastUser = [...messages].reverse().find(message => message?.is_user);
+    // (`active`: the timeline's reader of earlier messages, so a faded message of the reader's is not the last one a module sees)
+    const lastUser = [...(active ? active.messages(messages) : messages)].reverse().find(message => message?.is_user);
     return Object.freeze({
         state,
-        query: (name, args) => runQuery(registry, state, name, args, { receipts: () => store.receipts?.() ?? [], reply }),
+        query: (name, args) => runQuery(registry, state, name, args, { receipts: () => store.receipts?.() ?? [], reply, pendingProofs }),
         settings,
         feature: id => featureOn(registry, id),
         chat: Object.freeze({ length: messages.length, lastUser: String(lastUser?.mes ?? '') }),
@@ -241,9 +245,12 @@ export function missingModules(registry, state) {
     const domains = state?.domains ?? {};
     return registry.modules()
         .filter(def => registry.held?.(def.id) !== true)
-        .map(def => ({ def, missing: Object.keys(def.domains ?? {}).filter(name => !Object.hasOwn(domains, name)) }))
+        .map(def => ({ def, missing: Object.keys(def.domains ?? {}).filter(name => !def.domains[name].deferred && !Object.hasOwn(domains, name)) }))
         .filter(entry => entry.missing.length);
 }
+
+// The timeline a registry's sdk was made with (createSdk), so ensureModules can recover it.
+const timelines = new WeakMap();
 
 // What each registry's modules were last announced as (`modules` event): id → "status\u0000reason".
 const announced = new WeakMap();
@@ -283,6 +290,11 @@ const toldFailures = new WeakMap();
  */
 export async function ensureModules({ store, bus, registry, events = null }) {
     announceModules(registry, events);
+    // A save point or a restore the last run left half way is finished or aborted before anything else (docs/v2/TIMELINE.md); a
+    // chat that never used the timeline has nothing to recover and costs one look.
+    const line = timelines.get(registry);
+    line?.settle?.();
+    if (line?.needsRecovery()) await line.recover();
     // A restore barrier changes nothing until every part agrees (registry.setRestore).
     if (registry.restore?.().state === 'pending') return [];
     if (store.headIndex() < 0 || !store.head()) return [];
@@ -358,6 +370,7 @@ export function preflight({ store, registry, chat = () => [], apiVersion = 2 }, 
 
     const result = {
         hostApi: apiVersion,
+        deferredDomains: true,
         hostVersion: registry.hostVersion?.() ?? '',
         storeVersion: null,
         classification: 'empty',
@@ -438,11 +451,12 @@ export function preflight({ store, registry, chat = () => [], apiVersion = 2 }, 
  * The public sdk. `deps`: { store, bus, registry, settings (createSettings), events
  * (createEvents), chat?: () => Message[], check?, onRegister?(def) (after each registerModule),
  * rewind?({ index, beforeRev }) (src/v2/rewind.js), substitute?(text), dialog?(screenId, opts), dialogCurrent?(), reread?(index) (turn.js),
- * callModel?(request) (model-call.js createModelCalls().callModel) }.
+ * callModel?(request) (model-call.js createModelCalls().callModel), timeline? (timeline/coordinator.js createTimeline: sdk.timeline,
+ * savepoint.make, the participants of the modules registered) }.
  * Returns { sdk, events, markReady }:
  * `sdk.ready` resolves to the sdk once the host calls markReady().
  */
-export function createSdk({ store, bus, registry, settings, events = createEvents(), chat = () => [], check = checkModule, onRegister = null, rewind = null, substitute = text => String(text ?? ''), dialog = null, dialogCurrent = null, reread = null, callModel = null }) {
+export function createSdk({ store, bus, registry, settings, events = createEvents(), chat = () => [], check = checkModule, onRegister = null, rewind = null, substitute = text => String(text ?? ''), dialog = null, dialogCurrent = null, reread = null, callModel = null, timeline = null }) {
     let markReady;
     const ready = new Promise(resolve => { markReady = () => resolve(sdk); });
     const refused = message => ({ ok: false, code: 'REFUSED', message });
@@ -463,6 +477,7 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
     // reader's action runs. What is asked is the need itself (a ready module whose domain the chat lacks),
     // not whether a change was announced: a view may have announced it already. A quiet host costs a scan.
     const settle = () => {
+        timeline?.settle();
         announceModules(registry, events);
         if (registry.restore?.().state === 'pending' || store.headIndex?.() < 0) return null;
         const head = store.head?.();
@@ -473,12 +488,24 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
         const why = registry.refusal?.(type);
         return why ? { ok: false, code: why.code, message: why.message } : null;
     };
+    // The participants of the modules already registered (the runtime's `modules`, the core), and of each one registered later.
+    const attachParticipant = def => {
+        const done = timeline?.attach(def);
+        if (done && done.ok === false) console.warn(`[Story Suite] ${def?.id}'s participant was not registered: ${done.message}`);
+    };
+    if (timeline) {
+        timelines.set(registry, timeline);
+        for (const def of registry.modules()) attachParticipant(def);
+    }
+    const viewReader = typeof timeline?.active === 'function' ? timeline.active('view.lastUser') : null;
+    const noTimeline = async () => ({ ok: false, code: 'UNSUPPORTED', message: 'This host has no timeline.' });
     const sdk = Object.freeze({
         apiVersion: 2,
         ready,
         /** Registers a module (§6); a module enabled mid-chat gets its initial state now. */
         async registerModule(def) {
             registry.register(def);
+            attachParticipant(def);
             if (typeof onRegister === 'function') {
                 try { onRegister(def); } catch (error) { console.warn('[Story Suite] a module was registered, but the screens could not follow', error); }
             }
@@ -496,6 +523,9 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
             if (registry.isInternal?.(type)) return refused(`"${type}" is a step Story Block takes itself; it cannot be sent as an action.`);
             const waiting = settle();
             if (waiting) await waiting;
+            // A save point waits for the participants' checkpoints, which a command handler cannot: the timeline makes it
+            // (docs/v2/TIMELINE.md) and answers with the same receipt envelope.
+            if (type === 'savepoint.make' && timeline) return saved(await timeline.makeCommand(payload));   // (the timeline tells the `committed` event itself)
             return held(type) ?? saved(committed(await bus.command(type, payload, { cause: 'ui' })));
         },
         preview: async (type, payload) => {
@@ -505,7 +535,7 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
             return held(type) ?? bus.preview(type, payload);
         },
         commit: async token => saved(committed(await bus.commit(token))),
-        query: (name, args) => runQuery(registry, store.head(), name, args, { receipts: () => store.receipts?.() ?? [], reply: headReply(store) }),
+        query: (name, args) => { timeline?.settle(); return runQuery(registry, store.head(), name, args, { receipts: () => store.receipts?.() ?? [], reply: headReply(store) }); },
         /** The stored receipts on the current line of history, in chat order: [{ index, receipt }]. */
         receipts: () => store.receipts?.() ?? [],
         /**
@@ -535,7 +565,7 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
         /** The view tabs and contexts get: { state, query, settings, chat }. */
         view: () => {
             announceModules(registry, events);
-            return makeView({ store, registry, settings, chat: chat() });
+            return makeView({ store, registry, settings, chat: chat(), active: viewReader });
         },
         /**
          * What the chat holds for `module`, read-only and usable before it registers (docs/v2/LIFECYCLE.md):
@@ -555,6 +585,13 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
             open: (screenId, opts = {}) => (typeof dialog === 'function' ? dialog(screenId, opts) : null),
             current: () => (typeof dialogCurrent === 'function' ? dialogCurrent() ?? null : null),
         }),
+        /**
+         * The timeline coordinator (RB_CONTRACT §8; docs/v2/TIMELINE.md): `head`, `make` (a manual save), `list`, `status`,
+         * `history`, `forget` for a reader; `prepare`, `activate`, `abort`, `recover`, `nativeEvent`, `registerParticipant`
+         * refuse without the host's capability, which no module is given. Every method answers `{ ok: true, … }` or
+         * `{ ok: false, code, message }`, as a promise.
+         */
+        timeline: timeline ? timeline.api : Object.freeze(Object.fromEntries(['head', 'make', 'list', 'status', 'history', 'forget', 'registerParticipant', 'prepare', 'activate', 'abort', 'recover', 'nativeEvent', 'nativeMutation'].map(name => [name, noTimeline]))),
         id: newId,
         check: check ? Object.freeze({ ...check }) : null,
         settings: id => settings(id),

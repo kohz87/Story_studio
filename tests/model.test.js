@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 
 import { smallRulesPack } from './fixtures/smallRulesPack.js';
 
+import { validatePack } from '../vendor/story-block/src/v2/packs/validate.js';
 import { openPack, exportPack, indexReferences, rulesV2Schema } from '../src/model.js';
 import {
     exportRulesV2,
@@ -148,7 +149,7 @@ test('malformed JSON returns null document, structured errors, and export throws
     assert.equal(model.packHash, null);
     assert.deepEqual(model.references, []);
     assert.ok(model.validation.errors.length > 0);
-    assert.equal(model.validation.errors[0].code, 'bad-schema');
+    assert.equal(model.validation.errors[0].code, 'NOT_JSON');
 
     // Exporting invalid model throws Error with errors property
     assert.throws(
@@ -156,7 +157,7 @@ test('malformed JSON returns null document, structured errors, and export throws
         err => {
             assert.ok(err instanceof Error);
             assert.ok(Array.isArray(err.errors));
-            assert.equal(err.errors[0].code, 'bad-schema');
+            assert.equal(err.errors[0].code, 'NOT_JSON');
             return true;
         }
     );
@@ -658,7 +659,7 @@ test('safeClone handles 10,000 nested objects without RangeError, returning null
     const model = openPack(deep);
     assert.equal(model.document, null);
     assert.equal(model.validation.ok, false);
-    assert.ok(model.validation.errors.some(e => e.code === 'too-large'));
+    assert.ok(model.validation.errors.some(e => ['TOO_DEEP', 'TOO_MANY', 'TOO_LARGE'].includes(e.code)));
     assert.deepEqual(model.references, []);
 
     // indexReferences on deep document also safely returns [] without throwing
@@ -732,7 +733,7 @@ test('oversized array (> 1000 items) yields document null with checker errors', 
     const model = openPack(doc);
     assert.equal(model.document, null);
     assert.equal(model.validation.ok, false);
-    assert.ok(model.validation.errors.some(e => e.code === 'too-large'));
+    assert.ok(model.validation.errors.some(e => ['TOO_DEEP', 'TOO_MANY', 'TOO_LARGE'].includes(e.code)));
 });
 
 test('unsupported function values yield document null', () => {
@@ -1053,51 +1054,21 @@ test('route names and aliases use shared place folding while qualified foreign I
     assert.equal(indexReferences(pack).find(ref => ref.path.join('.') === 'content.routes.0.from').targetId, 'pack.foreign/haven');
 });
 
-// Regression 9: Canonical export exceeding 512 KiB handled as immutable invalid model preserving authored document
-test('canonical export exceeding 512 KiB handled as immutable invalid model preserving authored document', () => {
-    const places = Array.from({ length: 900 }, (_, i) => ({
-        slug: `p-${i}`,
-        name: 'Place',
-        x: i,
-        y: 0,
-        note: 'x'.repeat(480),
-    }));
-
-    const pack = smallRulesPack({ places });
-
-    // Raw input is compact (489,292 bytes < 512 KiB) and passes validateRulesPack
-    const checkRes = validateRulesPack(pack);
-    assert.equal(checkRes.ok, true);
-
-    // exportRulesV2 fails with too-large due to 2-space canonical indentation
-    const exportRes = exportRulesV2(pack);
-    assert.equal(exportRes.ok, false);
-    assert.ok(exportRes.errors.some(e => e.code === 'too-large'));
-
-    // openPack handles export failure as immutable invalid model: never parses undefined or throws
+// Canonical indentation must not turn an SB-valid input into an invalid pack.
+test('SB-valid compact pack still exports when canonical indentation exceeds 512 KiB', () => {
+    const pack = smallRulesPack({ places: Array.from({ length: 900 }, (_, i) => ({
+        slug: `p-${i}`, name: 'Place', x: i, y: 0, note: 'x'.repeat(480),
+    })) });
+    assert.equal(validatePack(pack).ok, true);
+    assert.equal(exportRulesV2(pack).ok, false);
     const model = openPack(pack);
-    assert.equal(model.validation.ok, false);
-    assert.equal(model.rulesHash, null);
-    assert.equal(model.packHash, null);
-    assert.deepEqual(model.validation.errors, exportRes.errors);
-
-    // Authored document preserved for editing
-    assert.ok(model.document !== null);
-    assert.equal(model.document.content.places.length, 900);
-    assert.ok(Array.isArray(model.references));
-
-    // exportPack refuses with same errors
-    assert.throws(
-        () => exportPack(model),
-        err => {
-            assert.ok(err instanceof Error);
-            assert.deepEqual(err.errors, exportRes.errors);
-            return true;
-        }
-    );
+    assert.equal(model.validation.ok, true);
+    const output = exportPack(model);
+    assert.ok(Buffer.byteLength(output) <= 512 * 1024);
+    assert.equal(validatePack(output).ok, true);
+    assert.equal(openPack(output).packHash, model.packHash);
 });
 
-// Regression 10: Hostile proxy trap does not throw in openPack or indexReferences
 test('hostile proxy trap does not throw in openPack or indexReferences', () => {
     const hostile = new Proxy({}, {
         getPrototypeOf() {
@@ -1156,13 +1127,12 @@ test('rules packs must declare the shared capability, including safe invalid dra
     assert.equal(openPack(pack).validation.ok, true);
 });
 
-test('JSON text keeps shared duplicate-key validation before editing', () => {
-    const text = JSON.stringify(smallRulesPack()).replace('"id":"fixture"', '"id":"fixture","id":"fixture"');
-    const checked = validateRulesPack(text);
+test('JSON text follows SB duplicate-key semantics before editing', () => {
+    const text = JSON.stringify(smallRulesPack()).replace('"id":"fixture"', '"id":"first","id":"fixture"');
+    const checked = validatePack(text);
     const model = openPack(text);
-    assert.equal(checked.ok, false);
-    assert.equal(model.validation.ok, false);
-    assert.deepEqual(model.validation.errors, checked.errors);
-    assert.ok(model.validation.errors.some(e => e.code === 'dup-id'));
-    assert.throws(() => exportPack(model));
+    assert.equal(checked.ok, true);
+    assert.equal(model.validation.ok, true);
+    assert.equal(model.packHash, checked.packHash);
+    assert.equal(exportPack(model), text);
 });

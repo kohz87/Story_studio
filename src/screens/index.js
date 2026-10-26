@@ -1,3 +1,4 @@
+import { renderPackSettings } from './pack-settings.js';
 import { el } from '../dom.js';
 import { renderClasses } from './classes.js';
 import { renderSkills } from './skills.js';
@@ -6,6 +7,10 @@ import { renderCheck } from './problems.js';
 import { KINDS } from '../records.js';
 
 export function renderScreen(ctx) {
+    if (ctx.selection.kind === 'settings' && ctx.model?.document) {
+        renderPackSettings(ctx);
+        return;
+    }
     if (ctx.selection.kind === 'check' && ctx.model?.document) {
         renderCheck(ctx);
         return;

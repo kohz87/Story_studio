@@ -25,6 +25,7 @@
 // registers or comes back is seen at the next view, action or generation, and nothing registers twice.
 
 import { compareVersions, formatVersion, parseRange, parseVersion, satisfies } from './packs/version.js';
+import { HOST_DOMAIN } from './timeline/gate.js';
 import { NEEDS_HINT, affectsStatic, featureOf, featureProblems, featureWarnings } from './features.js';
 
 // Commands the registry makes itself, so the command bus can run them like any other:
@@ -48,14 +49,14 @@ export const STANDARD_PREFIX = 'ss.';
 
 // The settings fields this host knows, and the places a module's settings may ask for (`settings.place`,
 // or a fold's `place`): 'diagnostics' draws it as a sub-fold of Settings → Diagnostics (SPEC §6).
-const SETTINGS_KEYS = ['defaults', 'schema', 'section', 'render', 'folds', 'place'];
+const SETTINGS_KEYS = ['defaults', 'schema', 'section', 'render', 'folds', 'place', 'rules'];
 export const SETTINGS_PLACES = Object.freeze(['diagnostics']);
 const placeOf = value => (SETTINGS_PLACES.includes(value) ? value : null);
-const KNOWN_KEYS = ['id', 'name', 'version', 'description', 'requires', 'domains', 'commands', 'queries', 'capture', 'context', 'hooks', 'settings', 'tabs', 'screens', 'widgets', 'features', 'cards'];
+const KNOWN_KEYS = ['id', 'name', 'version', 'description', 'requires', 'domains', 'commands', 'queries', 'replayQueries', 'capture', 'context', 'hooks', 'settings', 'tabs', 'screens', 'widgets', 'features', 'cards', 'participant', 'batchResults'];
 const CONTEXT_KEYS = ['static', 'tail', 'budget', 'feature', 'parts'];
 // What `requires` may name: the Story Block it needs, and the peers (modules) it needs registered.
 const REQUIRES_KEYS = ['storyBlock', 'peers'];
-const COMMAND_KEYS = ['handler', 'internal', 'feature'];
+const COMMAND_KEYS = ['handler', 'internal', 'feature', 'enabled'];
 export const FIELD_TYPES = Object.freeze(['bool', 'int', 'choice', 'text', 'list', 'profile']);
 
 const MODULE_ID = /^[a-z0-9][a-z0-9._-]*$/;
@@ -166,8 +167,10 @@ export function definitionProblems(def) {
     if (map(def.domains, 'domains')) {
         for (const [name, domain] of Object.entries(def.domains)) {
             if (!DOMAIN.test(name)) { problems.push(`the domain name "${name}" must start with a letter and use letters, digits, "_" or "-"`); continue; }
+            if (name === HOST_DOMAIN) { problems.push(`the domain name "${name}" is the host's own (the timeline's save points); a module cannot declare it`); continue; }
             if (!isObject(domain)) { problems.push(`domain "${name}" is not an object`); continue; }
             fn(domain.initial, `domain "${name}" initial`);
+            if (domain.deferred !== undefined && typeof domain.deferred !== 'boolean') problems.push(`domain "${name}" deferred must be true or false`);
             if (domain.validate !== undefined) fn(domain.validate, `domain "${name}" validate`);
             if (domain.counters !== undefined && (!Array.isArray(domain.counters) || domain.counters.some(path => typeof path !== 'string' || !/^[^/~][^~]*$/.test(path)))) {
                 problems.push(`domain "${name}" counters must be a list of paths inside the domain, like "wallets/*/coin"`);
@@ -197,6 +200,17 @@ export function definitionProblems(def) {
         for (const [name, query] of Object.entries(def.queries)) {
             if (!COMMAND.test(name)) problems.push(`the query name "${name}" must be words joined by dots (like "party.actors")`);
             fn(query, `query "${name}"`);
+        }
+    }
+    // The queries a guard may ask on replay (docs/v2/REPLAY.md): the module's own, named here, and a promise that each depends on
+    // the state and its arguments alone.
+    if (def.replayQueries !== undefined) {
+        if (!Array.isArray(def.replayQueries)) problems.push('replayQueries is not a list of query names');
+        else {
+            for (const name of def.replayQueries) {
+                if (typeof name !== 'string') problems.push('replayQueries names something that is not a query name');
+                else if (typeof def.queries?.[name] !== 'function') problems.push(`replayQueries names "${name}", which is not one of this module's queries`);
+            }
         }
     }
     if (map(def.capture, 'capture')) {
@@ -632,7 +646,7 @@ export function createRegistry({ hostVersion = null, warn = message => console.w
         if (!kind) return null;
         const def = defs.get(owners.kind.get(kind));
         const spec = def.capture.kinds[kind];
-        return { moduleId: def.id, kind, grammar: spec.grammar.trim(), apply: def.capture.apply, feature: featureOf(spec), off: off(spec), display: displayOf(spec) };
+        return { moduleId: def.id, kind, grammar: spec.grammar.trim(), apply: def.capture.apply, feature: featureOf(spec), off: spec.enabled === false || off(spec), display: displayOf(spec) };
     }
 
     // The feature a command belongs to (a capture.<kind> command: its kind's), or null.
@@ -678,7 +692,7 @@ export function createRegistry({ hostVersion = null, warn = message => console.w
         return (ctx, payload) => {
             const own = Object.keys(def.domains ?? {});
             const lacking = name => typeof ctx.read !== 'function' || ctx.read(name) == null;
-            const named = own.filter(name => (!Array.isArray(payload?.domains) || payload.domains.includes(name)) && lacking(name));
+            const named = own.filter(name => !def.domains[name].deferred && (!Array.isArray(payload?.domains) || payload.domains.includes(name)) && lacking(name));
             const done = [];
             for (const name of named) {
                 const slice = initialSlice(name);
@@ -709,7 +723,7 @@ export function createRegistry({ hostVersion = null, warn = message => console.w
         const owner = owners.command.get(name);
         if (owner && held(owner)) return null;
         const entry = commandEntry(name);
-        return entry ? (isObject(entry) ? entry.handler : entry) : null;
+        return entry && entry.enabled !== false ? (isObject(entry) ? entry.handler : entry) : null;
     }
 
     function commandEntry(name) {
@@ -738,6 +752,7 @@ export function createRegistry({ hostVersion = null, warn = message => console.w
         const domains = {};
         const names = [...owners.domain.keys()].sort().filter(name => !held(owners.domain.get(name)));
         for (const name of names) {
+            if (defs.get(owners.domain.get(name)).domains[name].deferred) continue;
             const slice = initialSlice(name);
             if (slice) domains[name] = slice;
         }
@@ -790,6 +805,7 @@ export function createRegistry({ hostVersion = null, warn = message => console.w
             const owner = owners.query.get(name);
             if (!owner) return null;
             const fn = defs.get(owner).queries[name];
+            if (fn.enabled === false) return null;
             return off(fn) || held(owner) ? offQuery : fn;
         },
         initialState,
@@ -896,7 +912,7 @@ export function createRegistry({ hostVersion = null, warn = message => console.w
                 moduleId: def.id,
                 name: def.name ?? def.id,
                 domains: Object.keys(def.domains ?? {}),
-                kinds: Object.keys(def.capture?.kinds ?? {}).sort().filter(kind => !off(def.capture.kinds[kind])).map(kind => ({ kind, grammar: def.capture.kinds[kind].grammar.trim() })),
+                kinds: Object.keys(def.capture?.kinds ?? {}).sort().filter(kind => def.capture.kinds[kind].enabled !== false && !off(def.capture.kinds[kind])).map(kind => ({ kind, grammar: def.capture.kinds[kind].grammar.trim() })),
                 static: context.static,
                 tail: context.tail,
                 budget: def.context?.budget ?? null,

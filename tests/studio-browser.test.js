@@ -1,6 +1,7 @@
 // Browser workflows against the committed offline distribution.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
@@ -380,7 +381,7 @@ test('hostile packs stay literal and unsafe input preserves the current draft', 
         assert.equal(await page.locator('#studio b,#studio script,#studio iframe').count(), 0);
         assert.equal(await page.locator('.topbar button.primary').isDisabled(), true);
         await upload(page, '{"id":"fixture","__proto__":{"polluted":true}}');
-        await page.waitForFunction(() => /unsafe-key/.test(document.querySelector('.notice').textContent));
+        await page.waitForFunction(() => /UNSAFE_KEY/.test(document.querySelector('.notice').textContent));
         assert.equal(await page.locator('#pack-name').inputValue(), '<b>x</b>');
         assert.equal(await page.evaluate(() => ({}).polluted), undefined);
         await upload(page, JSON.stringify({ name: 'x'.repeat(600000) }));
@@ -390,7 +391,7 @@ test('hostile packs stay literal and unsafe input preserves the current draft', 
     });
 });
 
-test('denied storage still allows open edit undo and canonical export', { timeout: 30000 }, async () => {
+test('denied storage still allows open edit undo and original-byte export', { timeout: 30000 }, async () => {
     await withPage({ storageDenied: true }, async page => {
         const golden = smallRulesPack();
         await upload(page, golden);
@@ -398,6 +399,31 @@ test('denied storage still allows open edit undo and canonical export', { timeou
         assert.equal(await page.locator('#pack-name').inputValue(), '[PRIVATE DRAFT]');
         await page.getByRole('button', { name: 'Undo', exact: true }).click();
         assert.equal(await page.locator('#pack-name').inputValue(), golden.name);
-        assert.deepEqual(await download(page), Buffer.from(exportPack(openPack(golden))));
+        assert.deepEqual(await download(page), Buffer.from(JSON.stringify(golden)));
+    });
+});
+
+test('bundled Ersveil bytes survive browser open, edit/undo and draft reload offline', { timeout: 120000 }, async () => {
+    const text = readFileSync(new globalThis.URL('./fixtures/ersveil-bluewatch.json', import.meta.url), 'utf8');
+    await withPage({}, async page => {
+        page.setDefaultTimeout(15000);
+        await upload(page, text);
+        await page.waitForFunction(() => document.getElementById('pack-name').value === 'Ersveil: Bluewatch Starter');
+        assert.ok((await download(page)).equals(Buffer.from(text)));
+        await change(page, '#pack-name', 'Edited Ersveil');
+        await page.getByRole('button', { name: 'Undo', exact: true }).click();
+        assert.ok((await download(page)).equals(Buffer.from(text)));
+        await page.reload();
+        await page.locator('.studio').waitFor();
+        assert.ok((await download(page)).equals(Buffer.from(text)));
+        await navigate(page, 'Pack settings');
+        const weather = page.locator('details').filter({ has: page.locator('summary', { hasText: /^weather$/ }) });
+        await weather.locator('summary').click();
+        const weatherText = JSON.stringify({ tables: [{ weather: ['rain'] }] });
+        await weather.locator('textarea').fill(weatherText);
+        await weather.locator('textarea').press('Tab');
+        const exported = openPack((await download(page)).toString('utf8'));
+        assert.equal(exported.validation.ok, true);
+        assert.deepEqual(exported.document.weather, JSON.parse(weatherText));
     });
 });

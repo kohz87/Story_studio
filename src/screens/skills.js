@@ -8,6 +8,7 @@ import {
     powerScore,
     generatePowerUp,
     RULES_V2_CONSTANTS,
+    RULES_V2_PROGRESSION,
     rulesV2Schema,
 } from '../../vendor/story-block/src/v2/packs/rules-v2.js';
 
@@ -16,11 +17,17 @@ const SCHEMA_TYPES = rulesV2Schema.$defs.base.properties.type.enum;
 const SCHEMA_STATS = rulesV2Schema.$defs.stat.enum;
 const SCHEMA_ELEMENTS = rulesV2Schema.$defs.element.enum;
 
+const PATH_CHOICES = [RULES_V2_PROGRESSION.writtenChoices[0], RULES_V2_PROGRESSION.generatedChoice, ...RULES_V2_PROGRESSION.writtenChoices.slice(1)];
+const MAX_TIER = Math.max(...RULES_V2_PROGRESSION.tiers);
+const COST = rulesV2Schema.$defs.cost.properties.mp;
+const POWER = rulesV2Schema.$defs.effect.oneOf.find(part => part.properties.op.enum?.includes('damage')).properties.power;
+const EFFECTS = rulesV2Schema.$defs.base.properties.effects;
+
 /**
  * Parses and strictly validates integer inputs according to rules-v2 bounds.
  * Refuses empty strings, non-integers, non-finite numbers, and out-of-range values.
  */
-function parseIntegerInput(rawValue, min = 0, max = 999) {
+function parseIntegerInput(rawValue, min = COST.minimum, max = COST.maximum) {
     if (typeof rawValue !== 'string') {
         return { ok: false, error: 'Value must be a string' };
     }
@@ -43,9 +50,9 @@ function parseIntegerInput(rawValue, min = 0, max = 999) {
 
 /** Calculates power budget for a given progression tier and pathway step. */
 export function budgetFor(tier, step = 0, constants = RULES_V2_CONSTANTS) {
-    if (typeof tier !== 'number' || tier < 0 || tier > 3) return null;
-    const baseBudget = constants.classBudget?.[tier] ?? 12 * (tier + 1);
-    return baseBudget + (step ?? 0) * (constants.pathBudgetIncrement ?? 12);
+    if (typeof tier !== 'number' || !RULES_V2_PROGRESSION.tiers.includes(tier)) return null;
+    const baseBudget = constants.classBudget?.[tier] ?? RULES_V2_CONSTANTS.classBudget[tier];
+    return baseBudget + (step ?? 0) * (constants.pathBudgetIncrement ?? RULES_V2_CONSTANTS.pathBudgetIncrement);
 }
 
 /** Finds a skill and its owning class in a model document safely. */
@@ -99,10 +106,10 @@ export function applyTransforms(parentForm, transforms) {
         if (indexed.includes(tr.op) && (!Number.isInteger(tr.at) || tr.at < 0 || tr.at >= form.effects.length)) {
             throw new Error('Malformed transform: effect index is out of bounds');
         }
-        if (tr.op === 'remove-effect' && form.effects.length <= 1) {
+        if (tr.op === 'remove-effect' && form.effects.length <= EFFECTS.minItems) {
             throw new Error('Malformed transform: cannot remove the sole effect');
         }
-        if (tr.op === 'add-effect' && form.effects.length >= 4) {
+        if (tr.op === 'add-effect' && form.effects.length >= EFFECTS.maxItems) {
             throw new Error('Malformed transform: at most four effects are allowed');
         }
         switch (tr.op) {
@@ -140,7 +147,7 @@ export function applyTransforms(parentForm, transforms) {
                 if (tr.value === undefined || typeof tr.value !== 'object' || tr.value === null) {
                     throw new Error('Malformed transform: add-effect requires object "value"');
                 }
-                if (form.effects.length < 4) {
+                if (form.effects.length < EFFECTS.maxItems) {
                     form.effects.push(JSON.parse(JSON.stringify(tr.value)));
                 }
                 break;
@@ -149,7 +156,7 @@ export function applyTransforms(parentForm, transforms) {
                 if (typeof tr.at !== 'number' || tr.at < 0) {
                     throw new Error('Malformed transform: remove-effect requires numeric "at"');
                 }
-                if (tr.at >= 0 && tr.at < form.effects.length && form.effects.length > 1) {
+                if (tr.at >= 0 && tr.at < form.effects.length && form.effects.length > EFFECTS.minItems) {
                     form.effects.splice(tr.at, 1);
                 }
                 break;
@@ -240,7 +247,7 @@ export function resolveSkillForms(model, skillSlug) {
         cost: skill.base?.cost ?? { mp: 0, sp: 0, cooldown: 0 },
         effects: Array.isArray(skill.base?.effects) ? JSON.parse(JSON.stringify(skill.base.effects)) : [],
         unit: skill.base?.unit ?? null,
-        tier: 3,
+        tier: MAX_TIER,
     };
     const baseScoreRes = powerScore(baseFormObj);
     if (baseScoreRes.ok) {
@@ -269,7 +276,7 @@ export function resolveSkillForms(model, skillSlug) {
     // Base Node
     const baseResolved = resolvedForms?.[baseId];
     const baseScore = baseResolved?.powerScore ?? baseFormObj.powerScore ?? 0;
-    const baseBudget = budgetFor(3, 0);
+    const baseBudget = budgetFor(MAX_TIER, 0);
     const baseNode = {
         key: 'base',
         id: baseId,
@@ -295,12 +302,12 @@ export function resolveSkillForms(model, skillSlug) {
     nodesMap.set('base', baseNode);
 
     // Step 1: a, g, b
-    const step1Keys = ['a', 'g', 'b'];
+    const step1Keys = PATH_CHOICES;
     for (const key of step1Keys) {
         const id = `${baseId}-${key}`;
         const local = `${safeLabel(normSkill)}-base-${key}`;
-        const gen = key === 'g';
-        const step1Budget = budgetFor(3, 1);
+        const gen = key === RULES_V2_PROGRESSION.generatedChoice;
+        const step1Budget = budgetFor(MAX_TIER, 1);
 
         if (gen) {
             let gForm = resolvedForms?.[id];
@@ -316,7 +323,7 @@ export function resolveSkillForms(model, skillSlug) {
                         step: 1,
                         origin: 'generated',
                         fromForm: baseId,
-                        tier: 3,
+                        tier: MAX_TIER,
                         effects: [],
                         powerScore: 0,
                         invalid: true,
@@ -362,7 +369,7 @@ export function resolveSkillForms(model, skillSlug) {
                     form.step = 1;
                     form.origin = 'written';
                     form.fromForm = baseId;
-                    form.tier = 3;
+                    form.tier = MAX_TIER;
                     const scoreRes = powerScore(form);
                     if (scoreRes.ok) {
                         form.powerScore = scoreRes.score;
@@ -380,7 +387,7 @@ export function resolveSkillForms(model, skillSlug) {
                         step: 1,
                         origin: 'written',
                         fromForm: baseId,
-                        tier: 3,
+                        tier: MAX_TIER,
                         effects: [],
                         powerScore: 0,
                         invalid: true,
@@ -417,14 +424,14 @@ export function resolveSkillForms(model, skillSlug) {
     }
 
     // Step 2: for each parent in [a, g, b], kids in [a, g, b]
-    const step2Budget = budgetFor(3, 2);
+    const step2Budget = budgetFor(MAX_TIER, 2);
     for (const pKey of step1Keys) {
         const parentNode = nodesMap.get(pKey);
-        for (const cKey of ['a', 'g', 'b']) {
+        for (const cKey of PATH_CHOICES) {
             const nodeKey = `${pKey}-${cKey}`;
             const id = `${baseId}-${nodeKey}`;
             const local = `${safeLabel(normSkill)}-base-${nodeKey}`;
-            const gen = cKey === 'g';
+            const gen = cKey === RULES_V2_PROGRESSION.generatedChoice;
 
             if (gen) {
                 let gForm = resolvedForms?.[id];
@@ -441,7 +448,7 @@ export function resolveSkillForms(model, skillSlug) {
                                 step: 2,
                                 origin: 'generated',
                                 fromForm: parentNode.id,
-                                tier: 3,
+                                tier: MAX_TIER,
                                 effects: [],
                                 powerScore: 0,
                                 invalid: true,
@@ -457,7 +464,7 @@ export function resolveSkillForms(model, skillSlug) {
                             step: 2,
                             origin: 'generated',
                             fromForm: parentNode?.id,
-                            tier: 3,
+                            tier: MAX_TIER,
                             effects: [],
                             powerScore: 0,
                             invalid: true,
@@ -503,7 +510,7 @@ export function resolveSkillForms(model, skillSlug) {
                             step: 2,
                             origin: 'written',
                             fromForm: parentNode ? parentNode.id : baseId,
-                            tier: 3,
+                            tier: MAX_TIER,
                             effects: [],
                             powerScore: 0,
                             invalid: true,
@@ -521,7 +528,7 @@ export function resolveSkillForms(model, skillSlug) {
                             form.step = 2;
                             form.origin = 'written';
                             form.fromForm = parentNode.id;
-                            form.tier = 3;
+                            form.tier = MAX_TIER;
                             const scoreRes = powerScore(form);
                             if (scoreRes.ok) {
                                 form.powerScore = scoreRes.score;
@@ -539,7 +546,7 @@ export function resolveSkillForms(model, skillSlug) {
                                 step: 2,
                                 origin: 'written',
                                 fromForm: parentNode.id,
-                                tier: 3,
+                                tier: MAX_TIER,
                                 effects: [],
                                 powerScore: 0,
                                 invalid: true,
@@ -607,7 +614,7 @@ export function renderSkills(ctx) {
     const normSkill = localId(model, skill.slug);
     ctx.selection.id = normSkill;
 
-    const isTier3 = ownerClass ? (ownerClass.tier === 3) : records(model, 'branches').some(b => b && localId(model, b.skill) === normSkill);
+    const isTier3 = ownerClass ? (ownerClass.tier === MAX_TIER) : records(model, 'branches').some(b => b && localId(model, b.skill) === normSkill);
 
     // Screen shell container
     const screen = el(doc, 'div', '', { class: 'skills-screen' });
@@ -738,7 +745,7 @@ function renderTier3Screen(ctx, screen, skill, sIdx, _ownerClass) {
     const titleRow = el(doc, 'div', '', { class: 'skills-title-row' });
     titleRow.append(
         el(doc, 'h1', `${safeLabel(skill.name || normSkill)} · paths`),
-        el(doc, 'span', '12 forms: 8 you write, 4 Story Block makes', { class: 'skills-subtitle' })
+        el(doc, 'span', `${RULES_V2_PROGRESSION.graph.perSkill.total} forms: ${RULES_V2_PROGRESSION.graph.perSkill.written} you write, ${RULES_V2_PROGRESSION.graph.perSkill.generated} Story Block makes`, { class: 'skills-subtitle' })
     );
 
     const legend = el(doc, 'div', '', { class: 'skills-legend' });
@@ -987,7 +994,7 @@ function renderFormInspector(ctx, node, skill, sIdx) {
     }
     ctx.inspector.append(budgetSection);
 
-    ctx.inspector.append(el(doc, 'div', 'Each step-1 form leads to 3 step-2 forms: 2 you write and 1 generated. A reader picks one path per skill as they level.', {
+    ctx.inspector.append(el(doc, 'div', `Each step-1 form leads to ${PATH_CHOICES.length} step-2 forms: ${RULES_V2_PROGRESSION.writtenChoices.length} you write and 1 generated. A reader picks one path per skill as they level.`, {
         class: 'skills-footer-note muted',
     }));
 }
@@ -1021,13 +1028,13 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
     const mpInput = el(doc, 'input', '', {
         id: 'form-cost-mp',
         type: 'number',
-        min: '0',
-        max: '999',
+        min: String(COST.minimum),
+        max: String(COST.maximum),
         value: safeLabel(costMp),
         'data-path': JSON.stringify([...skillPath, 'base', 'cost', 'mp']),
     });
     mpInput.addEventListener('change', () => {
-        const parsed = parseIntegerInput(mpInput.value, 0, 999);
+        const parsed = parseIntegerInput(mpInput.value, COST.minimum, COST.maximum);
         if (!parsed.ok) {
             applyEdit(ctx, {
                 ok: false,
@@ -1045,13 +1052,13 @@ function renderBaseSkillControls(ctx, skill, sIdx) {
     const spInput = el(doc, 'input', '', {
         id: 'form-cost-sp',
         type: 'number',
-        min: '0',
-        max: '999',
+        min: String(COST.minimum),
+        max: String(COST.maximum),
         value: safeLabel(costSp),
         'data-path': JSON.stringify([...skillPath, 'base', 'cost', 'sp']),
     });
     spInput.addEventListener('change', () => {
-        const parsed = parseIntegerInput(spInput.value, 0, 999);
+        const parsed = parseIntegerInput(spInput.value, COST.minimum, COST.maximum);
         if (!parsed.ok) {
             applyEdit(ctx, {
                 ok: false,
@@ -1165,14 +1172,14 @@ function renderBranchControls(ctx, node) {
     const costInput = el(doc, 'input', '', {
         id: 'form-cost',
         type: 'number',
-        min: '0',
-        max: '999',
+        min: String(COST.minimum),
+        max: String(COST.maximum),
         value: safeLabel(curCostVal),
         'aria-label': 'Cost',
         'data-path': JSON.stringify([...branchPath, 'transforms']),
     });
     costInput.addEventListener('change', () => {
-        const parsed = parseIntegerInput(costInput.value, 0, 999);
+        const parsed = parseIntegerInput(costInput.value, COST.minimum, COST.maximum);
         if (!parsed.ok) {
             applyEdit(ctx, {
                 ok: false,
@@ -1200,14 +1207,14 @@ function renderBranchControls(ctx, node) {
     const powerInput = el(doc, 'input', '', {
         id: 'form-power',
         type: 'number',
-        min: '1',
-        max: '1000',
+        min: String(POWER.minimum),
+        max: String(POWER.maximum),
         value: safeLabel(curPower),
         'aria-label': 'Power',
         'data-path': JSON.stringify([...branchPath, 'transforms']),
     });
     powerInput.addEventListener('change', () => {
-        const parsed = parseIntegerInput(powerInput.value, 1, 1000);
+        const parsed = parseIntegerInput(powerInput.value, POWER.minimum, POWER.maximum);
         if (!parsed.ok) {
             applyEdit(ctx, {
                 ok: false,
