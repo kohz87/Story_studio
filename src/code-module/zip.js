@@ -29,12 +29,10 @@ export function zipStore(entries) {
         checkPath(entry.path);
         if (seen.has(entry.path)) throw new Error(`zip: duplicate path "${entry.path}"`);
         seen.add(entry.path);
+        if (!(entry.data instanceof Uint8Array)) throw new Error(`zip: "${entry.path}" is not bytes`);
         total += LOCAL_SIZE + entry.path.length + entry.data.length + CENTRAL_SIZE + entry.path.length;
     }
     if (total >= MAX_BYTES) throw new Error('zip: 4 GiB or more');
-    for (const entry of entries) {
-        if (!(entry.data instanceof Uint8Array)) throw new Error(`zip: "${entry.path}" is not bytes`);
-    }
 
     const sorted = [...entries].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
     const out = new Uint8Array(total);

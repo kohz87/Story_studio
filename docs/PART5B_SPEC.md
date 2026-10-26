@@ -2020,7 +2020,7 @@ and no file outside its list changed.
 
 - Add `src/code-module/render.js` (3.5), `src/code-module/generate.js` (6.2) and `tests/code-module-generate.test.js`.
 - Done when: the golden test passes byte for byte; determinism and variant tests pass; `generateScaffold` with the golden
-  inputs takes under 50 ms in Node (no base64 decoding); `scaffoldZip` under 2 s.
+  inputs takes under 50 ms in Node (no base64 decoding); `scaffoldZip` under 2 s as a logged target, asserted under 5 s (lead, 26 Oct: about 1.1 s under full-suite load).
 
 ### M6: The scaffold runs its own tests
 

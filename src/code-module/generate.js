@@ -94,7 +94,7 @@ export function generateScaffold(raw) {
     };
 }
 
-/** → { ok: true, entries: [{ path, data: Uint8Array }] } (all files, unprefixed, in path order) | { ok: false, errors }. */
+/** → { ok: true, inputs, entries: [{ path, data: Uint8Array }] } (all files, unprefixed, in path order) | { ok: false, errors }. */
 export function scaffoldEntries(raw) {
     const generated = generateScaffold(raw);
     if (!generated.ok) return generated;
@@ -102,14 +102,14 @@ export function scaffoldEntries(raw) {
     const entries = generated.files.map(({ path, text }) => ({ path, data: encoder.encode(text) }));
     for (const [path, base64] of VENDOR_FILES) entries.push({ path, data: fromBase64(base64) });
     entries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-    return { ok: true, entries };
+    return { ok: true, inputs: generated.inputs, entries };
 }
 
 /** → { ok: true, bytes: Uint8Array, filename: `${moduleId}.zip` } | { ok: false, errors }: the entries under `${moduleId}/`. */
 export function scaffoldZip(raw) {
     const result = scaffoldEntries(raw);
     if (!result.ok) return result;
-    const { moduleId } = raw;
+    const { moduleId } = result.inputs;
     const bytes = zipStore(result.entries.map(({ path, data }) => ({ path: `${moduleId}/${path}`, data })));
     return { ok: true, bytes, filename: `${moduleId}.zip` };
 }

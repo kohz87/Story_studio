@@ -17,7 +17,9 @@ const committed = readFileSync(join(root, 'src', 'code-module', 'assets.js'), 'u
 const copied = new Map(VENDOR_FILES.map(([path, base64]) => [path, Buffer.from(base64, 'base64')]));
 
 // The baseline these counts describe: Story Block 2.2.0 (a482fd0), re-synced in M0. The spec's 125 and 128 were measured
-// at 076764b; at 2.2.0 the generator reports the same counts, and the decoded closure is 2,347,514 bytes.
+// at 076764b; at 2.2.0 the generator reports the same counts. The copied files total 2,347,514 bytes: the closure is
+// 2,312,881 (the spec's figure at 076764b), plus LICENSE, package.json and the generated VERSION text (3 bytes shorter than
+// the vendored VERSION file).
 const BASELINE = { version: '2.2.0', commit: 'a482fd0e84b448f69a48635d0fd0f42dec03d616', files: 125 };
 
 test('the committed assets.js is exactly what the generator writes now', () => {

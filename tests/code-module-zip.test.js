@@ -86,12 +86,18 @@ test('more than 65,535 entries are refused, and exactly 65,535 are not', () => {
 });
 
 test('a total of 4 GiB or more is refused before any byte is copied', () => {
-    // One entry of 2^32 - 112 bytes makes 2^32 with its headers and the end record (name "big.bin": 7 bytes).
+    // A typed array whose length is overridden, so the size is refused before anything is copied. One entry of 2^32 - 112
+    // bytes makes 2^32 with its headers and the end record (name "big.bin": 7 bytes).
+    const big = new Uint8Array(1);
     const size = 2 ** 32 - 112;
-    assert.throws(() => zipStore([{ path: 'big.bin', data: { length: size } }]), /4 GiB or more/);
-    assert.throws(() => zipStore([{ path: 'big.bin', data: { length: size + 1 } }]), /4 GiB or more/);
+    Object.defineProperty(big, 'length', { value: size, configurable: true });
+    assert.throws(() => zipStore([{ path: 'big.bin', data: big }]), /4 GiB or more/);
+    Object.defineProperty(big, 'length', { value: size + 1, configurable: true });
+    assert.throws(() => zipStore([{ path: 'big.bin', data: big }]), /4 GiB or more/);
 });
 
-test('data that is not bytes is refused', () => {
+test('data that is not bytes is refused, before its size is read', () => {
     assert.throws(() => zipStore([{ path: 'a.txt', data: 'text' }]), /not bytes/);
+    assert.throws(() => zipStore([{ path: 'a.txt', data: undefined }]), /not bytes/);
+    assert.throws(() => zipStore([{ path: 'a.txt', data: { length: 2 ** 32 } }]), /not bytes/);
 });
