@@ -13,7 +13,7 @@ test('example A: one line per kind with the short slug form and typed label doma
     assert.equal(preview.short, true);
     // Story Block's runtime generates the grammar text for the pinned definition; Studio's preview adds examples around it.
     assert.equal(preview.source, 'story-block');
-    assert.equal(preview.storyBlockText, '+ dm reputation \u2014 reason | kind: gain | faction: guild|watch|compact; - dm reputation \u2014 reason | kind: loss | faction: guild|watch|compact');
+    assert.equal(preview.storyBlockText, 'Data modules in this story (write these lines exactly; a refused line changes nothing):\n+ dm reputation \u2014 reason | kind: gain | faction: guild|watch|compact\n- dm reputation \u2014 reason | kind: loss | faction: guild|watch|compact');
     for (const kind of preview.kinds) assert.ok(preview.storyBlockText.includes(`${kind.op} dm ${preview.ref} \u2014 reason | kind: ${kind.name}`), kind.name);
     assert.deepEqual(preview.kinds.map(kind => kind.name), ['gain', 'loss']);
     assert.equal(preview.kinds[0].line, '+ dm reputation — <what happened> | kind: gain | faction: guild|watch|compact');
@@ -40,7 +40,7 @@ test('example B: who is named for character scope, ints show their range, condit
     const rest = preview.kinds.find(kind => kind.name === 'rest');
     assert.equal(rest.line, '! dm survival — <what happened> | kind: rest | who: <attached character> | hours: 1 to 8');
     assert.deepEqual(rest.examples.valid, ['! dm survival — what happened | kind: rest | who: Wessel | hours: 4']);
-    assert.ok(rest.examples.refused.some(item => item.line.endsWith('hours: 9') && item.code === 'DM_BOUNDS'));
+    assert.ok(rest.examples.refused.some(item => item.line.endsWith('hours: 9') && item.code === 'DM_LABEL'));
     assert.deepEqual(rest.conditions, [{ code: 'DM_CONDITION', when: '(label hours >= 1)', message: 'Rest needs 1 to 8 hours already narrated.' }]);
     const meal = preview.kinds.find(kind => kind.name === 'meal');
     assert.equal(meal.line, '! dm survival — <what happened> | kind: meal | who: <attached character>');

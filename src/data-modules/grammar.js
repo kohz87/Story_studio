@@ -25,8 +25,8 @@ function sampleValue(schema) {
 
 function outOfRange(schema) {
     if (schema?.type === 'enum') return { value: 'not-listed', code: 'DM_LABEL', why: 'a value outside the declared list' };
-    if (schema?.type === 'int' && Number.isInteger(schema.max)) return { value: schema.max + 1, code: 'DM_BOUNDS', why: 'a whole number above the declared maximum' };
-    if (schema?.type === 'int' && Number.isInteger(schema.min)) return { value: schema.min - 1, code: 'DM_BOUNDS', why: 'a whole number below the declared minimum' };
+    if (schema?.type === 'int' && Number.isInteger(schema.max)) return { value: schema.max + 1, code: 'DM_LABEL', why: 'a whole number above the declared maximum' };
+    if (schema?.type === 'int' && Number.isInteger(schema.min)) return { value: schema.min - 1, code: 'DM_LABEL', why: 'a whole number below the declared minimum' };
     return null;
 }
 

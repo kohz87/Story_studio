@@ -48,20 +48,22 @@ export function grammar(pack, module) {
  * Block's own tests use). That function loads the store and the bus through computed dynamic imports, which a single
  * bundled page cannot resolve, so the real modules are imported here instead.
  */
-async function createSimulationHost({ modules }) {
+async function createSimulationHost({ modules, storeOptions = null }) {
     const st = createFakeContext({ extensionSettings: {} });
     st.notices = [];
     const runtime = createRuntime({
-        ctx: st.ctx, core: true, modules, createStore, createCommandBus, callModel: null, timelineFaults: null, onBlocked: null,
+        ctx: st.ctx, core: true, modules,
+        createStore: storeOptions ? options => createStore({ ...options, ...storeOptions }) : createStore,
+        createCommandBus, callModel: null, timelineFaults: null, onBlocked: null,
         notify: (reason, moduleId) => st.notices.push({ reason, moduleId }),
     });
-    const { store, sdk, turn, markReady } = runtime;
+    const { store, sdk, turn, markReady, registry, settings } = runtime;
     turn.install({ globalName: null });
     st.interceptor = turn.interceptor;
     await turn.onChatChanged();
     markReady();
     return {
-        st, ctx: st.ctx, store, sdk, turn, packs: runtime.packs,
+        st, ctx: st.ctx, store, sdk, turn, registry, settings, packs: runtime.packs,
         send: (text, reply = '') => st.send(text, { reply }),
         swipe: (reply = '') => st.generate('swipe', { reply }),
         cont: (reply = '') => st.generate('continue', { reply }),
@@ -130,6 +132,8 @@ function linesOf(host, text, chatIndex) {
     });
 }
 
+// The finished data-module part exposes no replyCard hook or card-text query. Its summaryOf is prompt tail text,
+// not a reply's changes. Compose the field diff here; refusal reasons and clamp notes remain the runtime's exact text.
 function cardOf(lines, changes) {
     const rows = lines.map(line => (line.refusal ? line.refusal.message : line.note ? line.note : null)).filter(Boolean);
     const moved = changes.map(change => `${change.path} ${change.before} → ${change.after}`);
@@ -165,11 +169,13 @@ async function build(request, actors) {
     if (!target) return { error: fail('DM_SCHEMA', `The pack has no data module ${module}.`) };
     const minute = scenario.startMinute === null || scenario.startMinute === '' ? null : scenario.startMinute;
     if (minute !== null && !Number.isSafeInteger(minute)) return { error: fail('DM_BOUNDS', 'The starting story minute must be a whole number.', 'startMinute') };
-    const host = await createSimulationHost({ modules: [sampleDirector({ minute, actors })] });
+    // Short scenarios still exercise checkpoints and trimmed receipts, with the same storeOptions as the testkit host.
+    const host = await createSimulationHost({ modules: [sampleDirector({ minute, actors })], storeOptions: { checkpointEvery: 2, receiptKeep: 3 } });
     const installed = await host.packs.packs.install(pack);
     if (!installed.ok) { host.close(); return { error: fail(installed.code ?? 'REFUSED', installed.message ?? 'The pack could not be installed on the sample chat.') }; }
     for (const definition of needed(definitions, target)) {
-        const offer = host.sdk.query('dataModules.offers').find(row => row.module === definition.id);
+        const offer = host.sdk.query('dataModules.setup').find(row => row.module === definition.id);
+        if (!offer || offer.available === false) { host.close(); return { error: fail('DEPENDENCY_UNAVAILABLE', offer?.reason || `No offer for ${definition.id}.`) }; }
         const subjects = definition.scope === 'character' ? actors.map(actor => actor.id) : [];
         const pinned = await host.sdk.command('dm.pin', { module: definition.id, hash: offer?.hash, packHash: offer?.packHash, subjects });
         if (!pinned.ok) { host.close(); return { error: fail(pinned.code ?? 'REFUSED', pinned.message ?? `Could not pin ${definition.id}.`) }; }
@@ -266,6 +272,33 @@ async function apply(host, target, names, steps, action, texts) {
     return fail('SIMULATOR', `Unknown action ${action.type}.`);
 }
 
+// Compare fresh stores over saved records, both with their checkpoints and with every later checkpoint removed,
+// as Story Block's replay-purity tests do. The first carrier retains the initial state (including the sample actors).
+function replayEqual(host) {
+    const live = host.head();
+    const problems = store => store.problems().map(({ index, block, code }) => [index, block ?? null, code ?? null]);
+    return [false, true].every(strip => {
+        const chat = clone(host.ctx.chat);
+        if (strip) {
+            const first = chat.findIndex(message => !message.is_user && message.extra?.storySuite);
+            chat.forEach((message, index) => {
+                if (index === first) return;
+                for (const holder of [message.extra, ...(message.swipe_info ?? []).map(swipe => swipe.extra)]) {
+                    if (!holder?.storySuite) continue;
+                    delete holder.storySuite.checkpoint;
+                    delete holder.storySuite.covers;
+                    delete holder.storySuite.coverHash;
+                }
+            });
+        }
+        const validate = (state, names) => names.flatMap(name => host.registry.validator(name)?.(state.domains?.[name], state) ?? []);
+        const store = createStore({ chat: () => chat, save: async () => {}, validate, scratch: name => host.registry.scratch(name) });
+        createCommandBus({ store, registry: host.registry, settings: host.settings });
+        store.ensureInitial(host.registry.initialState());
+        return same(store.head(), live) && same(problems(store), problems(host.store));
+    });
+}
+
 // The runtime reports skipped lines and clamps with console warnings meant for the reader's console; a disposable chat
 // should not fill the author's. Only Story Block's own prefixed lines are dropped, and only while a simulation runs.
 function quiet() {
@@ -307,10 +340,7 @@ export async function simulate(request) {
         const final = snapshot(host, target, names);
         const problems = host.store.problems().map(item => ({ code: item.code, path: '', message: item.message }));
         const usage = usageOf(host);
-        // The comparison the design asks for: what Story Block holds now against a cold rebuild from the saved chat.
-        const live = JSON.stringify(host.head());
-        host.store.rebuild();
-        return { ok: true, steps: records, final, usage, problems, replay: { equal: JSON.stringify(host.head()) === live } };
+        return { ok: true, steps: records, final, usage, problems, replay: { equal: replayEqual(host) } };
     } catch (error) {
         return fail('SIMULATOR_ERROR', String(error?.message ?? error));
     } finally {

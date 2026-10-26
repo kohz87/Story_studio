@@ -6,6 +6,21 @@ import { fileURLToPath } from 'node:url';
 import { offlineRuntime } from '../scripts/offline-runtime.mjs';
 import { firstReference } from '../scripts/dist-scan.mjs';
 
+test('the testkit host still needs a runtime loader, so the simulator must wire the real modules statically', async () => {
+    const result = await build({
+        stdin: {
+            contents: `import { createHost } from './vendor/story-block/testkit/index.js';
+                globalThis.makeHost = createHost;`,
+            resolveDir: fileURLToPath(new URL('../', import.meta.url)),
+        },
+        plugins: [offlineRuntime], bundle: true, format: 'esm', target: 'es2022',
+        write: false, minify: true, legalComments: 'none',
+    });
+    // Computed imports in hostAvailable/createHost survive bundling. Remove the duplicated host wiring when this changes.
+    assert.match(result.outputFiles[0].text, /\bimport\s*\(/);
+    assert.notEqual(firstReference(result.outputFiles[0].text), null);
+});
+
 test('bundled chat-file and branch defaults throw without reaching a request or module loader', async () => {
     const result = await build({
         stdin: {

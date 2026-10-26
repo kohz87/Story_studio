@@ -991,9 +991,30 @@ path. Inputs: attached characters, starting story minute, and the steps: a reply
 reply above, or a time advance (narrated as `! time +Nm`). Output per step: parsed lines, refusals with Story Block's
 code and reason, notes such as "Requested -60; applied -6 (0/100)", field changes, the reply-card text and timer
 cursors; for the run, final fields, budget usage and a comparison of the live state with a cold rebuild from the saved
-chat. *Delete*, *Re-read* (edit then Story Block's re-read), *Swipe* (the latest reply) and *Reload* (reopen the saved
+chat, both with saved checkpoints and with later checkpoints stripped, including the reported Problems. Short scenarios
+use the real store options `checkpointEvery: 2` and `receiptKeep: 3`, matching the testkit contract. *Delete*, *Re-read*
+(edit then Story Block's re-read), *Swipe* (the latest reply) and *Reload* (reopen the saved
 chat) show what Story Block does, including blocks it skips with `REPLAY_PREREQUISITE`; each reports which steps
 changed status. Nothing in Studio evaluates a line, a condition or a timer.
+
+The vendored runtime is the finished `stage6/data-modules` at `1e8ade4` (see `vendor/story-block/VERSION`). Pinning reads
+`dataModules.setup` and passes its `module`, `hash` and `packHash` to `dm.pin`, with attached actor IDs as `subjects`.
+Snapshots use `dataModules.view`; cross-module imports are resolved by the runtime's `dataModules.public` projection.
+The host also exposes `dataModules.offers`, `dataModules.presentation` and `dataModules.actors`, and the reader commands
+`dm.attach`, `dm.act` and `dm.migrate`. Scenario lines go through normal capture; Studio never calls internal `dm.capture`
+or `dm.tick` directly. The simulator actions remain Delete, Re-read, Swipe and Reload.
+
+Conditions are recorded as answers in this runtime. Deleting example A's second gain retracts its +3 and title, while
+the later Watch loss stays active because its rule answer is unchanged. Deleting the first gain makes only the second
+gain inactive (`REPLAY_PREREQUISITE`); Watch still reaches -5. A condition that changes its answer invalidates its action.
+The unpinned `dm` capture kind is undeclared (`UNKNOWN_KIND`), as are other kinds or queries with `enabled: false`.
+
+There is still no data-module `hooks.replyCard` or card-text query in the finished runtime. `summaryOf` is the current
+state for the prompt tail, not a reply's changes. Studio therefore composes the reply-card field diff and uses the exact
+runtime refusal reasons and clamp notes. `testkit.createHost({ storeOptions })` still uses computed dynamic imports for
+the store and command bus: they survive bundling and fail the distribution's loader scan. The simulator retains the
+small static host wiring around the real `createRuntime`, store and bus. Tests compare it with `createHost` at the same
+checkpoint/receipt thresholds and prove the computed imports still survive bundling; remove the duplicate when that changes.
 
 Story Director's story time and actors are published, state-only contracts the data modules read. Studio is offline and
 has no Story Director, so the simulation registers a small sample owner of exactly those two projections
@@ -1006,10 +1027,11 @@ The runtime is bundled into the page, which grows the single file to about 1.4 M
 optional import at module level, which a classic script cannot do, so `scripts/build.mjs` bundles as ESM, drops the
 entry's unused trailing export, wraps the code in an async function and proves by compiling (not running) it that it
 is a classic script. The page is still one inline classic script. The static scan of the finished page
-([`scripts/dist-scan.mjs`](../scripts/dist-scan.mjs), run by the build and by `tests/build.test.js`) allows exactly two
-inert defaults of the bundled runtime by shape: SillyTavern's chat-file client `fetch = (...args) => globalThis.fetch(...args)`
-and the branch helpers' `importer = path => import(path)`. The page's policy (`connect-src 'none'`, no script source)
-makes neither usable, and the browser tests fail on any request.
+([`scripts/dist-scan.mjs`](../scripts/dist-scan.mjs), run by the build and by `tests/build.test.js`) has no exemptions.
+Before bundling, [`scripts/offline-runtime.mjs`](../scripts/offline-runtime.mjs) replaces the chat-file request and branch
+loader defaults with throwing offline shims; synchronized vendor files remain untouched. Tests invoke each default and
+prove it throws without a request or module load. The scan rejects any remaining network or loader reference, including
+executable bypasses. The page also has `connect-src 'none'`, and browser tests fail on any request.
 
 ### Guarantees kept
 
@@ -1025,7 +1047,8 @@ deterministic (build twice, same hash), the page makes no requests, and every pi
   waiting states, the migration comparison.
 - [`data-modules-parity`](../tests/data-modules-parity.test.js): for both Story Block worked examples and every
   refusal vector, Studio's verdict (open, edit, check) equals the importer's, with exact error arrays, and the
-  limit boundaries agree.
+  limit boundaries agree. The finished checker's label-data and closed `dm.act` template payload cases run through
+  the same paths. The upstream `unused-baseline.json` is a replay trace, kept beside the fixtures but not opened as a pack.
 - [`data-modules-simulator`](../tests/data-modules-simulator.test.js): the simulation on the real runtime reproduces
   the design's numbers (example A Guild 0, 3, 6 with the title and Watch -5; example B 12/0, 16/2, 0/2, the 59/60/61
   minute boundaries and remainders), refusals (`DM_LABEL`, `CLAIMED`), delete/Re-read/Swipe/Reload what-ifs,
@@ -1038,9 +1061,6 @@ deterministic (build twice, same hash), the page makes no requests, and every pi
 
 ### Known issues (part 5a)
 
-- The vendored runtime is Story Block's work in progress on `stage6/data-modules` ("steps 2-4"). The simulation reports
-  whatever it does today; when it changes, run `npm run sync-sb` and the simulator tests show what moved. There is no
-  generated reply-card hook in it yet, so the card text shown is composed from its refusals, notes and field changes.
 - The sample Story Director publishes only time and actor identities. A pack needing another owner's data (Story
   Director checks, coin, items, experience) is v1.1 and refused.
 - A step's field changes are the net change of the reply; two writes to one field in one reply show as one.

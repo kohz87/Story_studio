@@ -31,7 +31,7 @@ test('limits, descriptors and diagnostics are Story Block\u2019s own objects', (
     assert.equal(adapter.grammar({}, {}), null);
     const pack = factions();
     assert.equal(adapter.grammar(pack, pack.content.dataModules[0]),
-        '+ dm reputation \u2014 reason | kind: gain | faction: guild|watch|compact; - dm reputation \u2014 reason | kind: loss | faction: guild|watch|compact');
+        'Data modules in this story (write these lines exactly; a refused line changes nothing):\n+ dm reputation \u2014 reason | kind: gain | faction: guild|watch|compact\n- dm reputation \u2014 reason | kind: loss | faction: guild|watch|compact');
 });
 
 test('the adapter returns the vendored importer verdict unchanged', () => {

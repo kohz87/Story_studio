@@ -11,6 +11,8 @@
 // result   { ok: true, steps: [{ index, type, status, lines: [{ raw, parsed, outcome, refusal?, note? }], changes,
 //            fields, timers, replyCard, problems }], final: { fields, timers }, usage, problems, replay: { equal } }
 //          or { ok: false, errors: [{ code, path, message }] }
+//   replyCard  Studio composes the field diff with runtime refusal reasons and notes (no data-module card hook).
+//   replay     compares live state and Problems with fresh stores over saved records, with and without later checkpoints.
 //   status   applied | refused | advanced | inactive (a stored block Story Block now skips, with its code)
 import { simulate } from './sb-adapter.js';
 import { moduleId, entries, isObject, list, clone } from './dm-model.js';

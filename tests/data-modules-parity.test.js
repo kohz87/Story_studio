@@ -13,7 +13,8 @@ import { grammarPreview } from '../src/data-modules/grammar.js';
 const DIR = new URL('../vendor/story-block-fixtures/data-modules/', import.meta.url);
 const read = name => readFileSync(new URL(`${name}.json`, DIR), 'utf8');
 const names = readdirSync(DIR).map(file => file.replace(/\.json$/, '')).sort();
-const packs = names.filter(name => name !== 'refusals');
+// The replay golden is a trace, not an importable pack. Keep it vendored with the upstream fixtures.
+const packs = names.filter(name => !['refusals', 'unused-baseline'].includes(name));
 
 // The base definition the refusal vectors are applied to (tests/v2/data-modules/check.test.js in Story Block).
 const change = () => ({ op: 'add', path: ['points'], value: 1, bounds: 'clamp' });
@@ -101,4 +102,60 @@ test('definitions not in a pack leave other packs byte-identical: an old pack ga
     assert.equal(exportPack(model), text);
     assert.equal(Object.hasOwn(model.document.content, 'dataModules'), false);
     assert.equal(model.packHash, null);
+});
+
+// The finished checker's label-data and closed template-payload cases (upstream check.test.js).
+const GOOD = { module: 'pack.dm-test/counter', kind: 'ask', labels: { query: 'hello', command: 'bye' } };
+const button = payload => `<button data-command="dm.act" data-payload='${JSON.stringify(payload)}'>Ask</button>`;
+const screenPack = (screen, layout = false) => {
+    const definition = base();
+    definition.kinds.ask = { op: '!', ui: true, labels: {
+        query: { type: 'enum', values: ['hello', 'bye'] }, command: { type: 'enum', values: ['hello', 'bye'] },
+    }, effects: [change()] };
+    definition.screens = [{ id: 'ask-screen', title: 'Ask', mounts: ['tab'],
+        ...(layout ? { layout: { root: { type: 'col', children: screen } } } : { template: screen }),
+    }];
+    return wrap([definition]);
+};
+const layoutButton = payload => ({ type: 'button', label: 'Ask', command: 'dm.act', payload });
+const cases = [
+    ['layout labels called query and command are data', () => screenPack([layoutButton(GOOD)], true), null],
+    ['layout label values still have declared types', () => screenPack([layoutButton({ ...GOOD, labels: { query: 'nope', command: 'bye' } })], true), 'DM_LABEL'],
+    ['a real foreign binding beside label data is refused', () => screenPack([layoutButton(GOOD), { type: 'text', label: 'x', bind: { query: 'inventory.items', args: {} } }], true), 'DM_SCHEMA'],
+    ['template label data', () => screenPack(button(GOOD)), null],
+    ['template label interpolation', () => screenPack(button({ ...GOOD, labels: { query: '{{ item.q }}', command: 'bye' } })), null],
+    ['foreign module', () => screenPack(button({ ...GOOD, module: 'pack.other/counter' })), 'DM_SCHEMA'],
+    ['kind without ui', () => screenPack(button({ ...GOOD, kind: 'gain' })), 'DM_SCHEMA'],
+    ['unknown kind', () => screenPack(button({ ...GOOD, kind: 'nope' })), 'DM_SCHEMA'],
+    ['extra payload key', () => screenPack(button({ ...GOOD, extra: 1 })), 'DM_SCHEMA'],
+    ['missing labels', () => screenPack(button({ module: GOOD.module, kind: GOOD.kind })), 'DM_LABEL'],
+    ['extra label', () => screenPack(button({ ...GOOD, labels: { ...GOOD.labels, more: 'x' } })), 'DM_LABEL'],
+    ['who on chat scope', () => screenPack(button({ ...GOOD, who: 'Wessel' })), 'DM_LABEL'],
+    ['missing payload', () => screenPack('<button data-command="dm.act">Ask</button>'), 'DM_SCHEMA'],
+    ['array payload', () => screenPack(button([1])), 'DM_SCHEMA'],
+    ['dynamic module', () => screenPack(button({ ...GOOD, module: '{{ x }}' })), 'DM_SCHEMA'],
+    ['form action', () => screenPack('<form data-submit="dm.act"><input data-draft="x"></form>'), 'DM_SCHEMA'],
+    ['step template payload', () => {
+        const pack = screenPack(button(GOOD));
+        pack.content.dataModules[0].screens[0].steps = [{ id: 's', template: button({ ...GOOD, module: 'pack.other/counter' }) }];
+        return pack;
+    }, 'DM_SCHEMA'],
+];
+
+for (const [name, make, code] of cases) test(`finished checker parity: ${name}`, () => {
+    const pack = make(), text = JSON.stringify(pack);
+    const sb = validatePack(text), model = openPack(text);
+    assert.equal(sb.ok, code === null, JSON.stringify(sb.errors));
+    if (code) assert.ok(sb.errors.some(error => error.code === code), JSON.stringify(sb.errors));
+    assert.deepEqual(model.validation.errors, sb.errors ?? []);
+    assert.equal(model.validation.ok, sb.ok);
+    const empty = openPack(JSON.stringify(wrap([])));
+    const result = replaceModules(empty, pack.content.dataModules);
+    assert.equal(result.ok, sb.ok);
+    assert.deepEqual(checkModules(empty, pack.content.dataModules).errors, sb.errors ?? []);
+    if (sb.ok) assert.equal(exportPack(model), text);
+    else {
+        assert.deepEqual(result.errors, sb.errors);
+        assert.equal(result.model, empty);
+    }
 });

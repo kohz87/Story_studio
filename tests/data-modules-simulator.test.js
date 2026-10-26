@@ -6,7 +6,8 @@ import { factions, survival, linked } from './fixtures/data-modules/index.js';
 import * as adapter from '../src/data-modules/sb-adapter.js';
 import { buildRequest, run, defaultScenario, replyText, compareRuns } from '../src/data-modules/simulator.js';
 import { openPack } from '../src/model.js';
-import { sampleActors, actorId, timeMinutes } from '../src/data-modules/sim-director.js';
+import { sampleActors, actorId, timeMinutes, sampleDirector } from '../src/data-modules/sim-director.js';
+import { createHost } from '../vendor/story-block/testkit/index.js';
 
 const REPUTATION = 'pack.ersveil-factions/reputation';
 const SURVIVAL = 'pack.ersveil-survival/survival';
@@ -26,6 +27,45 @@ test('the runtime is real: the simulator is wired to the vendored Story Block ho
     assert.equal(adapter.status().simulator, true);
 });
 
+test('the static simulator host matches createHost at checkpoint and receipt-trimming thresholds', async t => {
+    const pack = factions();
+    const steps = Array.from({ length: 4 }, threeReplies).flat();
+    const host = await createHost({ modules: [sampleDirector({ minute: 1000, actors: [] })], storeOptions: { checkpointEvery: 2, receiptKeep: 3 } });
+    t.after(() => host.close());
+    assert.equal((await host.packs.packs.install(pack)).ok, true);
+    const offer = host.sdk.query('dataModules.setup').find(row => row.module === REPUTATION);
+    assert.equal((await host.sdk.command('dm.pin', { module: offer.module, hash: offer.hash, packHash: offer.packHash, subjects: [] })).ok, true);
+    const fields = [];
+    for (const step of steps) {
+        await host.send('Go on.', step.text);
+        fields.push(structuredClone(host.sdk.query('dataModules.view', { module: REPUTATION }).chat));
+    }
+    await host.store.flush();
+    const records = host.ctx.chat.flatMap(message => message.extra?.storySuite ? [message.extra.storySuite] : []);
+    assert.ok(records.slice(1).some(record => record.checkpoint), 'later checkpoints were made');
+    const older = records.slice(1, -3).flatMap(record => record.receipts ?? []);
+    assert.ok(older.length);
+    assert.ok(older.every(receipt => Object.keys(receipt.data ?? {}).every(key => key === 'v2')), 'older receipts retain only durable v2 data');
+    const result = await simulate(pack, REPUTATION, steps);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.deepEqual(result.steps.map(step => step.fields), fields);
+    assert.deepEqual(result.replay, { equal: true });
+});
+
+test('without an active pin the finished runtime treats dm as undeclared', async t => {
+    t.mock.method(console, 'warn', () => {});
+    const host = await createHost();
+    t.after(() => host.close());
+    assert.equal((await host.packs.packs.install(factions())).ok, true);
+    assert.equal(host.sdk.query('dataModules.view', { module: REPUTATION }), null);
+    await host.send('Begin.', 'The guild hall.');
+    await host.send('Go on.', replyText([gain('a favour')]));
+    const [problem] = host.turn.problems();
+    assert.equal(problem.code, 'UNKNOWN_KIND');
+    assert.match(problem.message, /No module keeps "dm"/);
+    assert.equal(host.head().domains.dataModules, undefined);
+});
+
 test('example A: Guild 0 -> 3 -> 6 with the title, Watch 0 -> -5, durable and equal to a cold replay', async () => {
     const result = await simulate(factions(), REPUTATION, threeReplies());
     assert.equal(result.ok, true, JSON.stringify(result));
@@ -41,7 +81,7 @@ test('example A: Guild 0 -> 3 -> 6 with the title, Watch 0 -> -5, durable and eq
     assert.deepEqual(result.steps[0].lines[0].parsed, { op: '+', kind: 'gain', faction: 'guild' });
     assert.deepEqual(result.replay, { equal: true });
     assert.deepEqual(result.problems, []);
-    assert.deepEqual(result.usage, { roots: 1, visits: 12 });
+    assert.deepEqual(result.usage, { roots: 1, visits: 11 });
 });
 
 test('example A: a faction outside the declared list refuses the whole line with Story Block’s own reason', async () => {
@@ -52,7 +92,7 @@ test('example A: a faction outside the declared list refuses the whole line with
     assert.equal(step.lines[0].outcome, 'refused');
     assert.equal(step.lines[0].refusal.code, 'DM_LABEL');
     assert.match(step.lines[0].refusal.message, /faction/);
-    assert.match(step.lines[0].refusal.message, /Nothing applied/);
+    assert.equal(step.lines[0].refusal.message, 'Reputation: faction must be guild, watch or compact; nothing applied.');
     assert.deepEqual(result.final.fields, { standing: { guild: 0, watch: 0, compact: 0 }, title: 'none' });
 });
 
@@ -64,31 +104,32 @@ test('example A: repeating a faction in a Continue of the same reply is CLAIMED 
     assert.equal(result.final.fields.standing.guild, 3);
 });
 
-test('example A: deleting the first gain makes the later blocks inactive with Story Block’s code; Re-read applies without the title', async () => {
+test('example A: deleting a gain keeps the later loss when its recorded condition answers stay the same', async () => {
     const steps = threeReplies();
     const base = await simulate(factions(), REPUTATION, steps);
     const deleted = await simulate(factions(), REPUTATION, steps, { type: 'delete', step: 0 });
     assert.equal(deleted.ok, true);
-    assert.deepEqual(deleted.steps.map(step => [step.index, step.status]), [[1, 'inactive'], [2, 'inactive']]);
+    assert.deepEqual(deleted.steps.map(step => [step.index, step.status]), [[1, 'inactive'], [2, 'applied']]);
     assert.equal(deleted.steps[0].problems[0].code, 'REPLAY_PREREQUISITE');
     assert.match(deleted.steps[0].problems[0].message, /Re-read this action/);
-    assert.deepEqual(deleted.final.fields, { standing: { guild: 0, watch: 0, compact: 0 }, title: 'none' });
+    assert.deepEqual(deleted.final.fields, { standing: { guild: 0, watch: -5, compact: 0 }, title: 'none' });
     assert.deepEqual(deleted.replay, { equal: true });
     const diff = compareRuns(base, deleted);
-    assert.deepEqual(diff.statuses, [{ index: 1, before: 'applied', after: 'inactive' }, { index: 2, before: 'applied', after: 'inactive' }]);
+    assert.deepEqual(diff.statuses, [{ index: 1, before: 'applied', after: 'inactive' }]);
     assert.ok(diff.fields.some(item => item.path === 'standing.guild' && item.before === 6 && item.after === 0));
-    // Deleting the second gain retracts its +3 and the title together. The later loss read the rule inputs (guild standing
-    // and title) it was recorded against, so Story Block skips it too and asks for a Re-read.
+    // Deleting the second gain retracts its +3 and the title together. The later loss still answers the title rule
+    // the same way, so its block stays active.
     const second = await simulate(factions(), REPUTATION, steps, { type: 'delete', step: 1 });
-    assert.deepEqual(second.final.fields, { standing: { guild: 3, watch: 0, compact: 0 }, title: 'none' });
-    assert.deepEqual(second.steps.map(step => [step.index, step.status]), [[0, 'applied'], [2, 'inactive']]);
-    assert.equal(second.steps[1].problems[0].code, 'REPLAY_PREREQUISITE');
+    assert.deepEqual(second.final.fields, { standing: { guild: 3, watch: -5, compact: 0 }, title: 'none' });
+    assert.deepEqual(second.steps.map(step => [step.index, step.status]), [[0, 'applied'], [2, 'applied']]);
+    assert.deepEqual(second.problems, []);
+    assert.deepEqual(second.replay, { equal: true });
 });
 
 test('example A: Re-read with edited text, Swipe of the last reply, and Reload', async () => {
     const steps = threeReplies();
     const reread = await simulate(factions(), REPUTATION, steps, { type: 'reread', step: 1, text: replyText([gain('another', 'compact')]) });
-    assert.deepEqual(reread.final.fields.standing, { guild: 3, watch: 0, compact: 3 });
+    assert.deepEqual(reread.final.fields.standing, { guild: 3, watch: -5, compact: 3 });
     assert.equal(reread.final.fields.title, 'none');
     assert.deepEqual(reread.replay, { equal: true });
     const swipe = await simulate(factions(), REPUTATION, steps, { type: 'swipe', step: 2, text: replyText([loss('elsewhere', 'compact')]) });
@@ -101,6 +142,18 @@ test('example A: Re-read with edited text, Swipe of the last reply, and Reload',
     assert.deepEqual(reload.steps.map(step => step.status), ['applied', 'applied', 'applied']);
     const unknown = await simulate(factions(), REPUTATION, steps, { type: 'dance', step: 0 });
     assert.equal(unknown.ok, false);
+});
+
+test('a changed condition answer makes the dependent loss inactive on replay', async () => {
+    const pack = factions();
+    pack.content.dataModules[0].kinds.loss.when = ['ge', ['get', ['standing', 'guild']], 6];
+    const result = await simulate(pack, REPUTATION, threeReplies(), { type: 'delete', step: 1 });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.deepEqual(result.final.fields, { standing: { guild: 3, watch: 0, compact: 0 }, title: 'none' });
+    assert.deepEqual(result.steps.map(step => [step.index, step.status]), [[0, 'applied'], [2, 'inactive']]);
+    assert.equal(result.steps[1].problems[0].code, 'REPLAY_PREREQUISITE');
+    assert.match(result.steps[1].problems[0].message, /condition.*answered differently/);
+    assert.deepEqual(result.replay, { equal: true });
 });
 
 test('example B: rest settles the six elapsed hours first (12/6) then recovers (12/0); later time and a meal follow the design', async () => {
@@ -150,7 +203,7 @@ test('example B: an oversized time jump refuses without moving the timer cursor'
 test('a character who was not attached refuses the line; an unnamed actor refuses too', async () => {
     const result = await simulate(survival(), SURVIVAL, [reply(meal.replace('Wessel', 'Nobody'))], null, { actors: ['Wessel'] });
     assert.equal(result.steps[0].status, 'refused');
-    assert.match(result.steps[0].lines[0].refusal.message, /Actor is missing, removed or not attached/);
+    assert.equal(result.steps[0].lines[0].refusal.message, 'Survival: who must be an attached character (Wessel); nothing applied.');
     assert.deepEqual(result.final.fields, { Wessel: { hunger: 0, fatigue: 0 } });
 });
 
