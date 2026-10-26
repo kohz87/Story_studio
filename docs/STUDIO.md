@@ -662,6 +662,9 @@ instructions, creator and character version. Tone notes use the V2 `personality`
 schema has no dedicated tone field, so ordinary packs start with empty tone notes. A safe draft's `toneNotes`
 or text `tone`, when present, supplies that default. The JSON preview updates as you type.
 
+The card name must contain non-whitespace text. Both JSON and PNG downloads show an `export-error`
+notice and produce no file while the name is blank. Enter a name to enable a successful export.
+
 **Download card JSON** exports `chara_card_v2`, version `2.0`, with the mandatory V2 fields, empty alternate
 greetings/tags and an empty extensions object. **Download card PNG** contains the exact same UTF-8 JSON,
 base64-encoded in a `chara` PNG `tEXt` chunk before `IEND`. The 128 × 192 book cover, stored DEFLATE scanlines,

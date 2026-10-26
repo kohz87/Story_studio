@@ -46,6 +46,7 @@ export function narratorCard(pack, overrides = {}) {
             data[key] = overrides[key];
         }
     }
+    if (!data.name.trim()) throw new Error('Card name must not be empty');
     return { spec: 'chara_card_v2', spec_version: '2.0', data: {
         ...data, alternate_greetings: [], tags: [], extensions: {},
     } };

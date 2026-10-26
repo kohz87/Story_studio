@@ -35,12 +35,17 @@ export function renderNarrator(ctx) {
     const form = el(doc, 'div', '', { class: 'stack authoring-form' });
     const extra = el(doc, 'details', '', { class: 'card stack' });
     extra.append(el(doc, 'summary', 'Additional card fields'));
-    const preview = el(doc, 'pre', json(), { id: 'card-preview' });
+    const preview = el(doc, 'pre', '', { id: 'card-preview' });
+    const updatePreview = () => {
+        try { preview.textContent = json(); }
+        catch (err) { preview.textContent = `export-error: ${err.message}`; }
+    };
+    updatePreview();
     for (const key of Object.keys(defaults)) {
         const input = el(doc, ['name', 'creator', 'character_version'].includes(key) ? 'input' : 'textarea', '', { id: `card-${key}` });
         input.value = state.card[key] ?? defaults[key];
         if (key === 'description') input.setAttribute('rows', '14');
-        input.addEventListener('input', () => { state.card[key] = input.value; preview.textContent = json(); });
+        input.addEventListener('input', () => { state.card[key] = input.value; updatePreview(); });
         const target = ['name', 'description', 'personality', 'scenario', 'first_mes'].includes(key) ? form : extra;
         target.append(field(doc, LABELS[key], input));
     }

@@ -50,6 +50,21 @@ test('narrator supports missing metadata without inventing a place, clock or ton
     assert.equal(narratorFields({ toneNotes: 'A measured pace' }).personality, 'A measured pace');
 });
 
+for (const format of ['JSON', 'PNG']) {
+    test(`narrator ${format} export refuses empty and whitespace-only names`, () => {
+        const output = name => {
+            const json = exportNarrator(pack, { name });
+            return format === 'PNG' ? exportCardPng(json) : json;
+        };
+        for (const name of ['', ' ', '\t\r\n', '\u00a0\u2003']) {
+            assert.throws(() => output(name), /Card name must not be empty/);
+        }
+        assert.ok(output('Narrator'));
+        assert.equal(narratorCard(pack, { name: '  Narrator  ' }).data.name, '  Narrator  ');
+        assert.equal(exportPack(model), fixture);
+    });
+}
+
 function crc32(data) {
     let crc = 0xffffffff;
     for (const value of data) {

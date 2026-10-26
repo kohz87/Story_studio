@@ -109,6 +109,35 @@ test('offline narrator flow edits V2 JSON and exports a decodable PNG with ident
     });
 });
 
+test('blank card names visibly refuse JSON and PNG downloads until corrected', { timeout: 60000 }, async () => {
+    await withPage(async page => {
+        await upload(page, smallRulesPack());
+        await navigate(page, 'Narrator card');
+        const downloads = [];
+        page.on('download', file => downloads.push(file.suggestedFilename()));
+        for (const name of ['', ' \t\u00a0\u2003']) {
+            await page.locator('#card-name').fill(name);
+            assert.equal(await page.locator('#card-preview').textContent(), 'export-error: Card name must not be empty');
+            await navigate(page, 'Lorebook');
+            await navigate(page, 'Narrator card');
+            assert.equal(await page.locator('#card-name').inputValue(), name, 'Invalid drafts remain editable after navigation');
+            for (const format of ['JSON', 'PNG']) {
+                await page.getByRole('button', { name: `Download card ${format}`, exact: true }).click();
+                assert.equal(await page.locator('.notice').isVisible(), true);
+                assert.equal(await page.locator('.notice').textContent(), 'export-error: Card name must not be empty');
+                assert.deepEqual(downloads, []);
+            }
+        }
+        await page.locator('#card-name').fill('A named narrator');
+        assert.equal(JSON.parse(await page.locator('#card-preview').textContent()).data.name, 'A named narrator');
+        const json = await download(page, 'Download card JSON');
+        assert.equal(JSON.parse(json.bytes).data.name, 'A named narrator');
+        const png = await download(page, 'Download card PNG');
+        assert.deepEqual([...png.bytes.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+        assert.deepEqual(downloads, ['fixture-narrator.json', 'fixture-narrator.png']);
+    });
+});
+
 test('offline lorebook flow previews names, aliases and regions and exports the Ersveil golden', { timeout: 60000 }, async () => {
     await withPage(async page => {
         await upload(page, fixture);
