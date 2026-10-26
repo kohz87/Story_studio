@@ -1123,7 +1123,7 @@ What the form makes (`src/code-module/`, `src/screens/code-module.js`):
 - **The zip.** Entries are STORED, sorted by path, with fixed times and attributes, so the same inputs always give the same
   bytes. The writer refuses bad paths, duplicate paths, more than 65,535 entries and 4 GiB or more. Tests:
   `tests/code-module-zip.test.js` (every field of section 3.9 read back, CRC-32 equal to `zlib.crc32`, the refusals,
-  determinism). `unzip -t` and `python3 -m zipfile -t` both accept a sample zip written by the writer (checked by hand while writing M3).
+  determinism). `unzip -t` and `python3 -m zipfile -t` both accept a sample zip written by the writer (checked by hand while writing M3). Those two checks are manual and are not part of `npm test`.
 - **Timing.** On the golden inputs `generateScaffold` took 0.17 ms and `scaffoldZip` 292 ms in Node 22 when measured for M5 (the
   spec records about 1.1 s under full-suite load). The tests assert under 50 ms and under 5 s; the logged target for the zip is 2 s.
   Test: `tests/code-module-generate.test.js`.
@@ -1131,9 +1131,10 @@ What the form makes (`src/code-module/`, `src/screens/code-module.js`):
   and the notice bar on a refused Download are built with `createElement` and `textContent` only. Focus stays in a field while
   typing. A download leaves the pack's Undo and the header Export button as they were. Tests:
   `tests/code-module-browser.test.js` (at 1280 and 390 px; the existing browser suites pass unchanged).
-- **Size.** The single-file build grows from 1,396,934 bytes to 4,576,241 bytes (about 4.6 MB), and still passes the
-  static scan with no exemptions. Tests: `tests/build.test.js` (one classic script, scan clean, two builds identical).
-  The golden zip is 2,397,094 bytes with 137 entries.
+- **Size.** The single-file build grows from 1,396,934 bytes to 4,576,312 bytes (about 4.6 MB), and still passes the
+  static scan with no exemptions. Tests: `tests/build.test.js` (one classic script, scan clean, two builds identical, and under
+  5 MB: `assert.ok(Buffer.byteLength(html) < 5_000_000)`).
+  The golden zip is about 2.4 MB, with 9 written and 128 copied entries.
 
 Proof, by file: `tests/code-module-templates.test.js`, `-inputs`, `-zip`, `-assets`, `-generate`, `-render`, `-run`, `-host`
 and `-browser`, all in `npm test`. None of them skips when Chromium is missing.

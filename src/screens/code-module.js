@@ -9,7 +9,9 @@ import { EXAMPLE_INPUTS, INPUT_KEYS, LABELS } from '../code-module/inputs.js';
 import { generateScaffold, scaffoldZip } from '../code-module/generate.js';
 import { readInt } from './dm/ui.js';
 
-const INTRO = 'Start a SillyTavern extension that is a real Story Suite module: Studio writes its files, a copy of Story Block\'s testkit and tests that pass. Download the zip, then git init, install it and grow it. Your work stays on this device.';
+// The intro is split around `git init`, which is shown in a code element (the mockup's mono span).
+const INTRO_BEFORE = 'Start a SillyTavern extension that is a real Story Suite module: Studio writes its files, a copy of Story Block\'s testkit and tests that pass. Download the zip, then ';
+const INTRO_AFTER = ', install it and grow it. Your work stays on this device.';
 const CONTROL_IDS = {
     moduleId: 'cm-module-id', name: 'cm-name', description: 'cm-description', author: 'cm-author', capability: 'cm-capability',
     domain: 'cm-domain', field: 'cm-field', label: 'cm-label', min: 'cm-min', max: 'cm-max', initial: 'cm-initial', step: 'cm-step',
@@ -190,7 +192,9 @@ export function renderCodeModule(ctx) {
         downloadFile(ctx, result.bytes, result.filename, 'application/zip');
     });
 
-    ctx.main.append(el(doc, 'h1', 'Code module'), el(doc, 'p', INTRO, { class: 'muted' }));
+    const intro = el(doc, 'p', '', { class: 'muted' });
+    intro.append(el(doc, 'span', INTRO_BEFORE), el(doc, 'code', 'git init'), el(doc, 'span', INTRO_AFTER));
+    ctx.main.append(el(doc, 'h1', 'Code module'), intro);
     const workspace = el(doc, 'div', '', { class: 'presentation-workspace code-module-workspace' });
     workspace.append(form, files);
     ctx.main.append(workspace);

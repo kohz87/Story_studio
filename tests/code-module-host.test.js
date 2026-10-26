@@ -20,12 +20,12 @@ const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
 // Writes the entries to a temp folder, imports the module and its part from it, and removes the folder again.
-async function loadScaffold(entries) {
+async function loadScaffold(entries, domain = 'lantern') {
     const dir = mkdtempSync(join(tmpdir(), 'studio-code-module-host-'));
     try {
         writeScaffold(dir, entries);
         const module = await import(pathToFileURL(join(dir, 'src', 'module.js')).href);
-        const part = await import(pathToFileURL(join(dir, 'src', 'parts', 'lantern.js')).href);
+        const part = await import(pathToFileURL(join(dir, 'src', 'parts', `${domain}.js`)).href);
         return { module, part };
     } finally {
         rmSync(dir, { recursive: true, force: true });
@@ -35,30 +35,38 @@ async function loadScaffold(entries) {
 const lineOf = (kind, change) => `~ ${kind} Test — a test line | by: ${change > 0 ? '+' : ''}${change}`;
 const replyWith = (...lines) => `The story goes on.\n\n<Changes>\n${lines.join('\n')}\n</Changes>`;
 
-test('the generated module registers with no problem, warning or refusal, and shows its capability', async () => {
-    const { module } = await loadScaffold(scaffoldEntries(golden).entries);
-    const def = module.createModule();
-    assert.deepEqual(definitionProblems(def), []);
-    assert.deepEqual(definitionWarnings(def), []);
-    const warnings = [];
-    const warn = console.warn;
-    console.warn = (...args) => warnings.push(args.join(' '));
-    let host;
-    try {
-        host = await createHost({ modules: [def] });
-    } finally {
-        console.warn = warn;
-    }
-    try {
-        assert.deepEqual(warnings.filter(text => text.includes(MODULE_ID)), []);
-        assert.deepEqual(host.registry.refusals(), []);
-        const entry = host.sdk.modules().find(item => item.id === MODULE_ID);
-        assert.equal(entry.status, 'ready');
-        assert.deepEqual(entry.capabilities, [golden.capability]);
-    } finally {
-        host.close();
-    }
-});
+// The two variants that register on the host: the golden inputs (a capability and a screen) and cold-tally (neither).
+const cold = {
+    ...golden, moduleId: 'cold-tally', name: 'Cold', domain: 'chill', field: 'degrees', label: 'Degrees', min: -5, max: 5,
+    initial: -5, step: 10, kind: 'chill', kindLabel: 'by', command: 'warm', query: 'now', action: 'Warm up', screen: false,
+    capability: '', author: '',
+};
+for (const [name, inputs] of [['golden', golden], ['cold-tally', cold]]) {
+    test(`the ${name} module registers with no problem, warning or refusal, and shows its capability`, async () => {
+        const { module } = await loadScaffold(scaffoldEntries(inputs).entries, inputs.domain);
+        const def = module.createModule();
+        assert.deepEqual(definitionProblems(def), []);
+        assert.deepEqual(definitionWarnings(def), []);
+        const warnings = [];
+        const warn = console.warn;
+        console.warn = (...args) => warnings.push(args.join(' '));
+        let host;
+        try {
+            host = await createHost({ modules: [def] });
+        } finally {
+            console.warn = warn;
+        }
+        try {
+            assert.deepEqual(warnings.filter(text => text.includes(inputs.moduleId)), []);
+            assert.deepEqual(host.registry.refusals(), []);
+            const entry = host.sdk.modules().find(item => item.id === inputs.moduleId);
+            assert.equal(entry.status, 'ready');
+            assert.deepEqual(entry.capabilities ?? [], inputs.capability ? [inputs.capability] : []);
+        } finally {
+            host.close();
+        }
+    });
+}
 
 test('a narrator line is cut by code, claimed once per reply, rebuilds to the same state and takes back on a swipe', async () => {
     const { module, part } = await loadScaffold(scaffoldEntries(golden).entries);

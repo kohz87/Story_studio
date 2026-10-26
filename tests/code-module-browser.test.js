@@ -80,26 +80,55 @@ test('a valid Download is the bytes of scaffoldZip(EXAMPLE_INPUTS)', { timeout: 
     });
 });
 
-test('focus stays in the field while typing, and hostile text creates no elements', { timeout: 60000 }, async () => {
+test('focus stays in the field while typing, and hostile text creates no elements, in each text control', { timeout: 120000 }, async () => {
+    const hostile = '<img src=x onerror=1><b>x</b><script>1</script>';
     await withPage(SHIPPED, { width: 1280 }, async page => {
         await openCodeModule(page);
-        await page.locator('#cm-author').fill('');
-        await page.locator('#cm-author').click();
-        await page.keyboard.type('<img src=x onerror=1><b>x</b>');
-        await settle(page);
-        const focused = await page.evaluate(() => document.activeElement?.id);
-        assert.equal(focused, 'cm-author');
-        assert.equal(await page.locator('#cm-author').inputValue(), '<img src=x onerror=1><b>x</b>');
-        assert.equal(await page.locator('main img, main b').count(), 0);
+        for (const id of ['cm-author', 'cm-domain', 'cm-kind', 'cm-kind-label', 'cm-step']) {
+            await page.locator(`#${id}`).fill('');
+            await page.locator(`#${id}`).click();
+            await page.keyboard.type(hostile);
+            await settle(page);
+            assert.equal(await page.evaluate(() => document.activeElement?.id), id, `focus stays in ${id}`);
+            assert.equal(await page.locator(`#${id}`).inputValue(), hostile, id);
+            assert.equal(await page.locator('main img, main b, main script').count(), 0, `no element from ${id}`);
+        }
     });
 });
 
-test('Download works from the keyboard alone', { timeout: 60000 }, async () => {
+test('Tab from the last form control reaches Download, and Enter downloads', { timeout: 60000 }, async () => {
     await withPage(SHIPPED, { width: 1280 }, async page => {
         await openCodeModule(page);
-        await page.locator('#cm-download').focus();
+        await page.locator('#cm-screen').focus();
+        await page.keyboard.press('Tab');
+        assert.equal(await page.evaluate(() => document.activeElement?.id), 'cm-download');
         const { name } = await downloadBytes(page, () => page.keyboard.press('Enter'));
         assert.equal(name, 'lantern-oil.zip');
+    });
+});
+
+test('Reset to example restores Ready after a refused field', { timeout: 60000 }, async () => {
+    await withPage(SHIPPED, { width: 1280 }, async page => {
+        await openCodeModule(page);
+        await page.locator('#cm-label').fill('Oil <b>');
+        await settle(page);
+        assert.match(await page.locator('#cm-validation').textContent(), /^Not ready/);
+        await page.getByRole('button', { name: 'Reset to example', exact: true }).click();
+        await page.locator('#cm-validation[data-ok="true"]').waitFor();
+        assert.match(await page.locator('#cm-validation').textContent(), /^Ready: 9 files written by Studio/);
+        assert.equal(await page.locator('#cm-label').inputValue(), 'Oil');
+    });
+});
+
+test('the selected file is kept by path while typing', { timeout: 60000 }, async () => {
+    await withPage(SHIPPED, { width: 1280 }, async page => {
+        await openCodeModule(page);
+        await page.getByRole('button', { name: 'src/module.js', exact: true }).click();
+        await page.locator('#cm-file-name', { hasText: 'src/module.js' }).waitFor();
+        await page.locator('#cm-label').fill('Fuel');
+        await settle(page);
+        assert.equal(await page.locator('#cm-file-name').textContent(), 'src/module.js');
+        assert.equal(await page.locator('ul[aria-label="Files in the zip"] button[aria-pressed="true"]').textContent(), 'src/module.js');
     });
 });
 
