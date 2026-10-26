@@ -13,8 +13,8 @@ import { openPack, exportPack } from '../src/model.js';
 import { validateRulesPack } from '../vendor/story-block/src/v2/packs/rules-v2.js';
 import { smallRulesPack } from './fixtures/smallRulesPack.js';
 
-const RULES_HASH = 'bbcf96a8f04da8e007c2fb3840a3939a1d30e3820ddcb48c3e4632186e816f5b';
-const PACK_HASH = '19d91d55a09d3d21bf9ea865e1cadc63561a44be65745d61530046c39b718625';
+const RULES_HASH = 'abefa51fb43800ffca5fb0c8e5eb92ede0ebfffd2d09e6e334e2badb2342532a';
+const PACK_HASH = '15f199c52dab51676942a834ae2087d678f4b51bfa875744675b012dbfe0f175';
 
 test('the small rules pack opens with the golden hashes', () => {
     const model = openPack(smallRulesPack());
@@ -55,8 +55,8 @@ const bundled = () => JSON.parse(bundledText);
 
 test('SB 2.0.0 bundled Ersveil: original bytes and both hashes survive open/export and edit/undo', () => {
     const initial = parity(bundledText, true);
-    assert.equal(initial.rulesHash, '664ac61f6d3b874d8821a6eb6f3caf32263b8077f96dfa2d727a274a8c3bffc8');
-    assert.equal(initial.packHash, '080b94031135599cee5ff42f48e5e027a317a9cd5b4fc6a5fdea86c97680781a');
+    assert.equal(initial.rulesHash, '05a2c845828dbca962bc58e4ba51759705ce90744ac4087c760e9ebaaa731f25');
+    assert.equal(initial.packHash, 'f0ee9d16ab1c9edf39e592f98da02a305f69177703a6064e6dd2a1ca93fdccf9');
     const bytes = Buffer.from(bundledText);
     assert.equal(bytes.length, 247239);
     assert.equal(createHash('sha256').update(bytes).digest('hex'), 'a5fb1a515a4dfabd824cf7a8d165099fdcf366c1eeebb7c94c999989e90f2934');

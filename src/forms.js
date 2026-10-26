@@ -2,7 +2,7 @@ import { applyEdit } from './apply-edit.js';
 import { safeLabel, el, button, field } from './dom.js';
 import { setSchemaField as setField, renameId } from './edits.js';
 import { records, identity, localId } from './records.js';
-import { referenceTarget, resolveSchema, validateField, validateChange } from './form-schema.js';
+import { referenceTarget, resolveSchema, validateField, validateChange, matchesVariant } from './form-schema.js';
 import { validateRulesPack, RULES_V2_LIMITS, RULES_V2_PROGRESSION } from '../vendor/story-block/src/v2/packs/rules-v2.js';
 
 export function parseNumberInput(raw) {
@@ -86,17 +86,6 @@ export function createDefault(input, options = {}) {
     return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 }
 function display(value) { return safeLabel(value ?? ''); }
-function matches(schema, value) {
-    if (schema.oneOf) return schema.oneOf.some(s => matches(s, value));
-    if (schema.const !== undefined) return Object.is(schema.const, value);
-    if (schema.enum) return schema.enum.some(v => Object.is(v, value));
-    if (schema.type === 'null') return value === null;
-    if (schema.type === 'array') return Array.isArray(value);
-    if (schema.type === 'object') return value !== null && typeof value === 'object' && !Array.isArray(value)
-        && Object.entries(schema.properties || {}).every(([k, s]) => s.const === undefined || Object.is(value[k], s.const));
-    if (schema.type === 'integer') return Number.isInteger(value);
-    return typeof value === schema.type;
-}
 function accept(ctx, schema, value) {
     const result = validateField(schema, value);
     if (!result.ok) ctx.notify(`${result.code}: ${result.message}`);
@@ -206,7 +195,7 @@ export function renderForm(ctx, container, input, value, path, passed = {}) {
     if (schema.oneOf) {
         const group = el(doc, 'fieldset', '', { class: 'form-fieldset union-group', ...attrs });
         group.append(el(doc, 'legend', title));
-        const active = schema.oneOf.findIndex(s => matches(s, value));
+        const active = schema.oneOf.findIndex(s => matchesVariant(s, value));
         const select = el(doc, 'select', '', attrs);
         const placeholder = el(doc, 'option', value === undefined ? '(not set)' : '(invalid current value)', { value: '' });
         placeholder.selected = active < 0; select.append(placeholder);

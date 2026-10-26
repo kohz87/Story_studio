@@ -145,7 +145,7 @@ export function renderPresentation(ctx) {
         state.index = list.length;
         let suffix = 1;
         while (list.some(record => record?.id === `new-${suffix}`)) suffix++;
-        state.draft = state.field === 'screens' ? { id: `new-${suffix}`, title: 'New screen', mounts: ['tab'], template: '<p>{{ q.pc.name }}</p>' }
+        state.draft = state.field === 'screens' ? { id: `new-${suffix}`, title: 'New screen', mounts: ['tab'], data: { pc: { query: 'party.pc' } }, template: '<p>{{ q.pc.name }}</p>' }
             : { id: `new-${suffix}`, title: 'New layout', root: defaultNode('box') };
         ctx.render();
     }));
@@ -183,7 +183,7 @@ export function renderPresentation(ctx) {
             if (step !== null && !steps[step]) step = null;
             sourceSelect.value = step === null ? '' : String(step);
         }
-        const screen = state.field === 'screens' ? state.draft : { layout: state.draft };
+        const screen = state.field === 'screens' ? state.draft : { id: state.draft?.id, mounts: ['tab'], layout: state.draft };
         renderer.update(object(screen) ? screen : {}, parsed.value, step);
     };
     const actions = el(doc, 'div', '', { class: 'row' });

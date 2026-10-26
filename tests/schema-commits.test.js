@@ -37,3 +37,14 @@ test('replacement validation enforces enclosing list bounds, uniqueness and nest
     assert.equal(validateField({ type: 'integer', multipleOf: 10 }, 95).ok, false);
     assert.equal(validateField({ type: 'integer', not: { const: 0 } }, 0).ok, false);
 });
+
+test('variant edits preserve omitted sibling defaults and enforce the selected branch', () => {
+    const schema = { oneOf: [false, true].map(flag => ({ type: 'object', required: ['defaulted', 'name'], properties: {
+        flag: { const: flag }, defaulted: { type: 'string' }, name: { type: 'string', minLength: 1 },
+    } })) };
+    const current = { name: 'Before' };
+    assert.equal(validateChange(schema, current, ['name'], 'After').ok, true);
+    assert.equal(validateChange(schema, current, ['name'], '').ok, false);
+    assert.equal(validateChange(schema, current, ['flag'], true).ok, false);
+    assert.equal(validateField(schema, current).ok, false, 'whole replacements still require all fields');
+});

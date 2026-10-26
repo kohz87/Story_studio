@@ -26,7 +26,7 @@ test('T4-1: schemaForKind resolves shared rules-v2 $defs and host descriptors wi
 
     const questSchema = schemaForKind('quests');
     assert.ok(questSchema);
-    assert.equal(questSchema.properties.name.maxLength, 80);
+    for (const variant of questSchema.oneOf) assert.equal(variant.properties.name.maxLength, 80);
 
     const shopSchema = schemaForKind('shops');
     assert.ok(shopSchema);

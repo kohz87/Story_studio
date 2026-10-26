@@ -53,9 +53,12 @@ export const QUERIES = Object.freeze([
 
 export const SAMPLE = Object.freeze({
     state: { v: 2, meta: {}, domains: { scene: { place: { name: 'Sample village' } } } },
-    q: { pc: { name: 'River', level: 3, hp: { cur: 24, max: 30 } }, rows: [{ id: 'rope', name: 'Rope', qty: 2 }, { id: 'torch', name: 'Torch', qty: 1 }] },
     draft: {}, settings: {}, ops: [],
-    queries: { 'party.pc': { name: 'River', level: 3, hp: { cur: 24, max: 30 } }, 'scene.place': { name: 'Sample village' } },
+    queries: {
+        'party.pc': { name: 'River', level: 3, hp: { cur: 24, max: 30 } },
+        'inventory.items': [{ id: 'rope', name: 'Rope', qty: 2 }, { id: 'torch', name: 'Torch', qty: 1 }],
+        'scene.place': { name: 'Sample village' },
+    },
 });
 
 export function escapeMarkup(value) {

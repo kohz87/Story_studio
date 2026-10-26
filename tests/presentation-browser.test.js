@@ -9,7 +9,7 @@ import { validatePack } from '../vendor/story-block/src/v2/packs/validate.js';
 
 const APP_URL = pathToFileURL(resolve('dist/story-studio.html')).href;
 const base = () => ({ id: 'test', version: '1.0.0', requires: { storyBlock: '^2' }, description: 'Original text',
-    screens: [{ id: 'test-screen', title: 'Test screen', template: '<p>{{ q.pc.name }}</p>' }] });
+    screens: [{ id: 'test-screen', title: 'Test screen', mounts: ['tab'], data: { pc: { query: 'party.pc' }, rows: { query: 'inventory.items' } }, template: '<p>{{ q.pc.name }}</p>' }] });
 async function pageTest(width, action) {
     const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.STUDIO_CHROMIUM_PATH ? { executablePath: process.env.STUDIO_CHROMIUM_PATH } : {}) });
     try {
@@ -50,7 +50,7 @@ for (const width of [1280, 390]) test(`screen form, live host bindings, widgets 
     assert.doesNotMatch(await body().innerText(), /Torch/);
     assert.equal(await page.frameLocator('iframe').locator('ss-widget .ss-w-meter').count(), 1);
     const hostile = '<img src=x onerror="globalThis.pwned=1"><b>literal</b>';
-    await page.locator('#preview-sample').fill(JSON.stringify({ q: { pc: { name: hostile, hp: { cur: 15, max: 30 } }, rows: [] }, queries: {} }));
+    await page.locator('#preview-sample').fill(JSON.stringify({ queries: { 'party.pc': { name: hostile, hp: { cur: 15, max: 30 } }, 'inventory.items': [] } }));
     assert.match(await body().innerText(), /<img src=x onerror=/);
     assert.equal(await page.frameLocator('iframe').locator('img,b,script').count(), 0);
     assert.equal(await page.evaluate(() => globalThis.pwned), undefined);
@@ -83,6 +83,8 @@ test('screen refusals, palette insertion, steps, and inactive commands are visib
     await page.getByRole('button', { name: 'Add query binding', exact: true }).click();
     assert.match(await page.locator('.notice').innerText(), /already exists/);
     await page.locator('#screen-steps').fill(JSON.stringify([{ id: 'first', template: '<p>Step {{ q.pc.name }}</p>' }]));
+    await page.getByRole('checkbox', { name: 'Mount tab', exact: true }).uncheck();
+    await page.getByRole('checkbox', { name: 'Mount dialog', exact: true }).check();
     await page.getByLabel('Preview source', { exact: true }).selectOption('0');
     assert.equal(await page.frameLocator('iframe').locator('body').innerText(), 'Step River');
     await page.getByLabel('Preview source', { exact: true }).selectOption('');
@@ -99,7 +101,8 @@ test('preview prevents external resource writes, CSS escapes and navigation befo
     const template = `<p>Safe</p><img src="${remote}"><img src="#same-document"><img data-bind-attr="src: q.picture"><svg><image href="${remote}"></image></svg><a href="${remote}">Link</a><span style="background:url(${remote})">Style</span><ss-widget name="ss.portrait" data-props='{"src":"${remote}","name":"River"}'></ss-widget><ss-widget name="ss.hero" data-props='{"name":"Hero","portraits":["${remote}"]}'></ss-widget>`;
     await page.locator('#screen-template').fill(template);
     await page.locator('#screen-css').fill(`p { background: url(${remote}); }`);
-    await page.locator('#preview-sample').fill(JSON.stringify({ q: { picture: remote } }));
+    await page.locator('#screen-data').fill(JSON.stringify({ picture: { query: 'sample.picture' } }));
+    await page.locator('#preview-sample').fill(JSON.stringify({ queries: { 'sample.picture': remote } }));
     assert.match(await page.locator('#preview-warnings').innerText(), /omitted/);
     assert.equal(await page.frameLocator('iframe').locator('[src],a[href],image[href]').count(), 0);
     await page.frameLocator('iframe').locator('a').click();
@@ -139,6 +142,8 @@ test('Ersveil stays byte-faithful across defaults refusals, presentation apply/u
     assert.equal(await exported(page), source);
     await nav(page, 'Screen builder');
     await page.getByRole('button', { name: 'New screen', exact: true }).click();
+    assert.deepEqual(JSON.parse(await page.locator('#screen-data').inputValue()), { pc: { query: 'party.pc' } });
+    assert.equal(await page.frameLocator('iframe').locator('body').innerText(), 'River');
     await page.locator('#screen-template').fill('<p>New {{ q.pc.name }}</p>');
     await page.getByRole('button', { name: 'Apply screen', exact: true }).click();
     await page.getByRole('button', { name: 'Undo', exact: true }).click();

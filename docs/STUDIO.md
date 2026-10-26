@@ -761,6 +761,11 @@ Set `STUDIO_SCREENSHOTS_DIR` to change that directory, or `STUDIO_CHROMIUM_PATH`
 
 - Narrator card drafts disappear on page reload; download the card before reloading.
 - Lorebook review decisions stay “accepted” after Undo removes the accepted record from the pack.
+- README does not yet describe the settings-defaults and screen/layout builders.
+- Switching presentation records silently discards unapplied form drafts.
+- Packs cannot supply module settings defaults. Future host transport is needed for RPG Battle starting
+  points, level cap, companion limit, turn order and hit chances, and Story Director dormancy thresholds,
+  due-soon window and maximum time jump.
 
 ## Part 4: settings defaults and screen builder
 
@@ -777,17 +782,18 @@ continue to be editable under **Pack settings** and the existing record editors.
 `economy.scale` is a number from 0.001 to 1000, default 1; it affects built-in money defaults across the
 suite and is distinct from the reader's settings object. Part 4 adds no new pack schema or module settings.
 
-The reference reviewed for this part is Story Block main `cc0b79343fdce3b60fc782cab483c667d1fe3203`:
+The vendored host for this part is Story Block main `cc0b79343fdce3b60fc782cab483c667d1fe3203`:
 `docs/v2/PACKS.md`, `TEMPLATES.md`, `LAYOUTS.md`, `WIDGETS.md`, and `MODULES.md`, plus the module screens
-such as RPG Battle's `src/v2/screens/party.js`. Its pack limits/checker, template/binding/condition code,
-widgets and layout code are byte-identical to Studio's existing host pin
-`708e2ae986361f1aa1ed27617c4957f95efe4343`. Studio retains that pin and its hash goldens; the newer host's
-unrelated open-quest schema migration is outside this part. No vendored source was edited.
+such as RPG Battle's `src/v2/screens/party.js`. It was copied with `npm run sync-sb -- --from ../Story_block`.
+The sync also brings the host's open/closed quest schema and changes the schema-based hash goldens.
+The generic form matcher accepts omitted optional constant fields so existing closed quests remain
+editable with this schema. No vendored source was edited by hand.
 
 ### Author screens and layouts
 
 Select **Screen builder**, then **Screens** or **Layouts**. Choose an existing record, or **New screen** /
 **New layout**. Screen ids may name a module screen to restyle it, such as `rpg-battle/party`.
+New screens bind `data.pc` to `party.pc` for their initial `q.pc.name` template.
 All ten host `SCREEN_FIELDS` are covered:
 
 | Field | Editor |
@@ -828,8 +834,13 @@ host-valid export. Similarly, template compiler warnings never become extra pack
 
 ### Preview and palettes
 
-The preview uses Story Block's own `compileTemplate`, `renderTemplate`, `conditionEvaluator`, condition
-compiler/interpreter and `renderLayout`; Studio does not reimplement the binding language. This includes
+The preview first runs Story Block's `validateScreen` and `resolveData`, then its `createScreenRenderer`.
+Runtime screen refusals (including duplicate template/layout bodies and cyclic or unknown aliases)
+leave the preview empty and show the host's diagnostics, independently of pack-importer acceptance.
+The renderer owns the layout envelope (`{ id: screen.id, root, theme }`), layout validation and
+`layoutEvaluator`, which receives the original state document and requires a boolean `true` result.
+Nested layout metadata is ignored exactly as in the host. Standalone layout records are given a local
+screen wrapper with their id and a tab mount. Template rendering uses the host's binding scope. This includes
 `data-if`, array/record `data-each` with index names, `{{ }}` interpolation, own-property path lookup,
 helpers, `data-bind`, bound attributes/variables/classes, widget props, draft inputs and dialog-step templates.
 The host's strict sanitizer and rendering budgets apply. Malformed expressions produce host warnings.
@@ -842,10 +853,12 @@ alias already in `data` is visibly refused; it is never overwritten. Other modul
 can be authored in source/JSON without an extra Studio allow-list; an unavailable widget reports a preview
 warning. The palettes are examples, not a claim to include every installed module's private registry.
 
-**Sample data JSON** contains `state` (the full state document with `domains`), `q` (query aliases), `draft`,
-`settings`, `ops` and `queries` (results keyed by query name). An explicit `q` alias wins; otherwise the
-screen's `data` query looks up its name in `queries`. Arguments are authored/exported unchanged; this
-sample map supplies one answer per query name, independent of args. Bindings read sample data only.
+**Sample data JSON** contains `state` (the full state document with `domains`), `draft`, `settings`, `ops`
+and `queries` (results keyed by query name). Only the screen's declared `data` bindings populate `q`;
+sample `q` values are ignored, and a missing binding reads blank as it does in Story Block. The host
+resolves alias dependencies and substitutes arguments. Arguments are authored/exported unchanged; the
+offline query stub supplies one answer per query name, independent of args, or null when absent.
+Bindings read sample data only.
 Money/time use the host's deterministic fallback formatters, rather than simulating installed modules.
 Malformed sample JSON shows a local refusal and retains the last valid sample.
 
@@ -878,6 +891,12 @@ conditions/loops, literal hostile data, resource suppression before requests, in
 and step controls, refusals, layouts, history, reload and byte-identical Ersveil exports. Every unexpected
 request and every page/console error fails the test. These tests run in `npm test` with the existing
 parts 2.5/3 browser suites; none are skipped when a browser is missing.
+
+[`tests/preview-parity-browser.test.js`](../tests/preview-parity-browser.test.js) drives both the vendored
+host registry/mount/renderer and Studio's preview in a real browser. It compares missing/declared query
+bindings, duplicate bodies, cyclic/unknown aliases, strict layout conditions with the original state,
+and layout envelope id/root/theme handling despite empty or unknown nested metadata. Each case also
+checks pack-importer acceptance, zero unexpected requests and zero page/console errors.
 
 From a lone clone: `npm ci`, `npx playwright install chromium` (or set `STUDIO_CHROMIUM_PATH` to an existing
 Chromium), `npm run -s check`, then `npm test`. A clean clone already contains the built distribution and

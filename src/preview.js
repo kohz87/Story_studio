@@ -1,14 +1,12 @@
 // The host compiler, condition language and renderers run in a separate, script-disabled document.
 import { compileTemplate, renderTemplate } from '../vendor/story-block/src/v2/view/template/index.js';
-import { conditionEvaluator, makeScope } from '../vendor/story-block/src/v2/view/bind.js';
-import { compile, evaluate } from '../vendor/story-block/src/v2/events/condition.js';
+import { validateScreen, resolveData } from '../vendor/story-block/src/v2/view/screens.js';
+import { createScreenRenderer } from '../vendor/story-block/src/v2/view/render-screen.js';
 import { standardWidgets } from '../vendor/story-block/src/v2/view/widgets/index.js';
 import { themeTokens } from '../vendor/story-block/src/v2/view/theme.js';
 import { scopeCss, themeVars } from '../vendor/story-block/src/v2/view/css.js';
-import { renderLayout } from '../vendor/story-block/src/v2/layout/render.js';
 import { LAYOUT_CSS } from '../vendor/story-block/src/v2/layout/styles.js';
 
-const expression = conditionEvaluator({ compile, evaluate });
 const RESOURCE = /(?:url\s*\(|@import|@font-face|image-set\s*\()/i;
 const LOCAL_IMAGE = /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i;
 
@@ -53,7 +51,7 @@ export function createPreview(frame, onWarnings) {
         if (!messages.includes(text)) messages.push(text);
         onWarnings([...messages]);
     };
-    const destroyView = () => { view?.destroy?.(); view?.dispose?.(); view = null; };
+    const destroyView = () => { view?.(); view = null; };
     const paint = () => {
         if (disposed || !current || !target) return;
         destroyView();
@@ -61,42 +59,54 @@ export function createPreview(frame, onWarnings) {
         const { screen, sample, step } = current;
         target.replaceChildren();
         const doc = target.ownerDocument;
-        const style = doc.createElement('style');
-        const scoped = scopeCss(screen.css ?? '', 'studio-preview');
-        for (const text of scoped.warnings) warn(text);
-        const css = RESOURCE.test(scoped.css) ? '' : scoped.css;
-        if (scoped.css && !css) warn('Preview omitted CSS containing resource loaders; the authored CSS is retained.');
-        style.textContent = css;
-        target.append(style);
+        for (const style of doc.head.querySelectorAll('[id^="ss-css-"]')) style.remove();
         const host = doc.createElement('div');
-        host.setAttribute('data-ss-screen', 'studio-preview');
+        host.setAttribute('data-ss-screen', screen.id);
         const scheme = frame.ownerDocument.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
         for (const [name, value] of themeTokens({ scheme })) host.style.setProperty(name, value);
         host.style.setProperty('color', 'var(--ss-text)');
-        const theme = themeVars(screen.theme);
-        for (const text of theme.warnings) warn(text);
-        for (const [name, value] of theme.vars) host.style.setProperty(name, value);
         target.append(host);
         const query = name => Object.hasOwn(sample.queries ?? {}, name) ? sample.queries[name] : null;
-        const q = { ...(sample.q ?? {}) };
-        for (const [alias, spec] of Object.entries(screen.data ?? {})) {
-            if (!['__proto__', 'constructor', 'prototype'].includes(alias) && !Object.hasOwn(q, alias) && typeof spec?.query === 'string') q[alias] = query(spec.query);
-        }
-        const scope = makeScope({ state: sample.state, q, query, draft: sample.draft, settings: sample.settings, ops: sample.ops });
         const command = () => { warn('Preview only: game commands are inactive.'); return { ok: false, message: 'Preview only: game commands are inactive.' }; };
-        const template = step === null ? screen.template : screen.steps?.[step]?.template;
         try {
-            if (typeof template === 'string') {
-                const compiled = compileTemplate(template);
-                for (const text of compiled.warnings) warn(text);
-                view = renderTemplate(host, compiled, scope, { widgets: standardWidgets, evaluate: expression, command, onWarn: warn, api: { query }, screenId: 'studio-preview' });
-            } else if (screen.layout) {
-                view = renderLayout(host, screen.layout, {
-                    query, widgets: standardWidgets, command,
-                    evaluate: (text, extra) => expression(text, { ...scope, ...extra }),
-                });
-                for (const text of [...(view.errors ?? []), ...(view.problems ?? [])]) warn(text);
-            } else warn('Choose a template, layout, or dialog step to preview.');
+            const errors = validateScreen(screen);
+            if (errors.length) { for (const text of errors) warn(text); return; }
+            const data = resolveData(screen.data, query);
+            if (!data.ok) { warn(data.message); return; }
+            for (const text of data.problems) warn(text);
+            const theme = themeVars(screen.theme);
+            for (const [name, value] of theme.vars) host.style.setProperty(name, value);
+            const renderer = createScreenRenderer({
+                queryAt: query, widgets: () => standardWidgets,
+                templates: {
+                    compileTemplate,
+                    renderTemplate(el, compiled, scope, options) {
+                        for (const text of compiled.warnings) warn(text);
+                        return renderTemplate(el, compiled, scope, { ...options, onWarn: warn });
+                    },
+                    scopeCss(text, id) {
+                        const scoped = scopeCss(text, id);
+                        for (const message of scoped.warnings) warn(message);
+                        if (RESOURCE.test(scoped.css)) {
+                            warn('Preview omitted CSS containing resource loaders; the authored CSS is retained.');
+                            return '';
+                        }
+                        return scoped;
+                    },
+                },
+            });
+            let drawn = screen;
+            if (step !== null) {
+                const { template, layout, steps, ...rest } = screen;
+                drawn = { ...rest, ...steps[step] };
+                // A step keeps the screen's identity, styling and data.
+                drawn.id = screen.id;
+            }
+            view = renderer.render(host, drawn, {
+                state: sample.state, q: data.q, draft: sample.draft, settings: sample.settings,
+                ops: sample.ops, api: { command },
+            });
+            for (const line of host.querySelectorAll('.ss-l-invalid li')) warn(line.textContent);
         } catch (err) { warn(`Preview: ${err.message}`); }
         onWarnings([...messages]);
     };
