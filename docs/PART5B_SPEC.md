@@ -1,6 +1,6 @@
 # Story Studio Part 5b: code-module scaffolding (implementation spec)
 
-Status: proposed. Docs only; nothing here is implemented yet. Branch `spec/part-5b`.
+Status: Implemented in b1d9066 (the M8 commit, the Code module section). Part 5b is in docs/STUDIO.md, "Part 5b: code modules".
 
 A pack author who outgrows data modules (Story Block `docs/v2/DATA_MODULES.md`) fills one form in Studio's new
 **Code module** section and downloads a zip: a starter SillyTavern extension that is a real Story Suite v2 module. It

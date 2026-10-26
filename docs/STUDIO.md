@@ -1087,6 +1087,69 @@ deterministic (build twice, same hash), the page makes no requests, and every pi
 - There is no undo inside an unapplied draft; *Discard draft* drops all of it, and Undo after Apply reverses the whole edit.
 - Screens in a module are copies. Editing the pack screen afterwards does not update the module's copy.
 
+## Part 5b: code modules
+
+The **Code module** section (rail, after Data modules) writes a starter SillyTavern extension that is a real Story Suite v2
+module. The author fills one form, downloads a zip, runs `git init` and `npm test` in the unzipped folder, installs it and
+grows it. Everything runs in the page: no network, no model call. The section works with or without a pack open and never
+reads or changes the pack, its history, its saved draft or its dirty state. The draft is session-only, like the narrator card.
+
+What the form makes (`src/code-module/`, `src/screens/code-module.js`):
+
+- **Inputs.** The 18 keys of part 5b section 3.2 and their rules: identifiers narrower than Story Block's, display text
+  limited to letters, digits, spaces and a few marks, whole numbers from -1000000 to 1000000, and the reserved names of
+  Story Block and the other Story Suite modules. Every message and rule is copied from section 5. Tests:
+  `tests/code-module-inputs.test.js` (every bound on both sides, the exact error list of each named case, reserved names,
+  forbidden Name characters, `jsString` and `mdText`), `tests/code-module-templates.test.js` (the 21 SHA-256 values of
+  section 4.3).
+- **Nine written files:** `.gitignore`, `README.md`, `index.js`, `manifest.json`, `package.json`, `src/module.js`,
+  `src/parts/<state name>.js`, `tests/module.test.js`, `tests/vendor/README.md`. They are rendered from eleven templates in
+  `src/code-module/templates/`. Tests: `tests/code-module-generate.test.js` (the golden inputs give the nine golden files
+  byte for byte, compared with `Buffer.compare`; the variants leave no placeholder), `tests/code-module-render.test.js`
+  (`renderTemplate` refuses unknown names and keeps values unscanned).
+- **The module it writes** registers with Story Block through `StoryBlock.ready`, declares one state field with a
+  validator, one narrator line (its number cut by code), one guarded command, one query, an optional tab screen and an
+  optional capability. Its own six tests pass in a temp folder for the golden inputs and two variants, and for the golden
+  scaffold unpacked from the zip. Tests: `tests/code-module-run.test.js`. On Studio's vendored Story Block host it registers
+  with no problem, warning or refusal, its line is cut and claimed once per reply, its guard holds live and goes off when
+  the reply it needed is deleted, and a guard that asks an undeclared query fails the command with Story Block's sentence.
+  Tests: `tests/code-module-host.test.js`.
+- **Copied Story Block files.** `tests/vendor/story-block/` holds Story Block's testkit and the runtime it imports, taken from
+  Studio's own vendored copy (`vendor/story-block/`, Story Block 2.2.0, commit `a482fd0`), with `VERSION`, `package.json`, and
+  `tests/vendor/LICENSE-story-block` (Studio's root `LICENSE`, AGPL-3.0). `tests/vendor/README.md` says how to refresh them.
+  The copied set is 128 files: the 125-file testkit closure plus `VERSION`, `package.json` and the licence. The generated module
+  `src/code-module/assets.js` is written by `scripts/code-module-assets.mjs` (also called by `scripts/build.mjs`) and is checked
+  against the generator by `tests/code-module-assets.test.js`; the CI artifact check covers it.
+- **The zip.** Entries are STORED, sorted by path, with fixed times and attributes, so the same inputs always give the same
+  bytes. The writer refuses bad paths, duplicate paths, more than 65,535 entries and 4 GiB or more. Tests:
+  `tests/code-module-zip.test.js` (every field of section 3.9 read back, CRC-32 equal to `zlib.crc32`, the refusals,
+  determinism). `unzip -t` and `python3 -m zipfile -t` both accept a sample zip written by the writer (checked by hand while writing M3).
+- **Timing.** On the golden inputs `generateScaffold` took 0.17 ms and `scaffoldZip` 292 ms in Node 22 when measured for M5 (the
+  spec records about 1.1 s under full-suite load). The tests assert under 50 ms and under 5 s; the logged target for the zip is 2 s.
+  Test: `tests/code-module-generate.test.js`.
+- **The section in the page.** The form, the live file list, the part-file viewer, the per-field errors, "Ready" and "Not ready",
+  and the notice bar on a refused Download are built with `createElement` and `textContent` only. Focus stays in a field while
+  typing. A download leaves the pack's Undo and the header Export button as they were. Tests:
+  `tests/code-module-browser.test.js` (at 1280 and 390 px; the existing browser suites pass unchanged).
+- **Size.** The single-file build grows from 1,396,934 bytes to 4,576,241 bytes (about 4.6 MB), and still passes the
+  static scan with no exemptions. Tests: `tests/build.test.js` (one classic script, scan clean, two builds identical).
+  The golden zip is 2,397,094 bytes with 137 entries.
+
+Proof, by file: `tests/code-module-templates.test.js`, `-inputs`, `-zip`, `-assets`, `-generate`, `-render`, `-run`, `-host`
+and `-browser`, all in `npm test`. None of them skips when Chromium is missing.
+
+Known issues (part 5b, the answers to section 11 and the limits that remain):
+
+- The single file is about 4.6 MB (section 11.1, accepted as recommended). It still opens from disk and stays one offline file.
+- The zip carries Story Block's AGPL-3.0 testkit under `tests/vendor/` with its licence and the Phosphor MIT notice, and
+  leaves the module's own licence to the author (section 11.2, accepted). The README the scaffold ships says so.
+- The starter has one state field, one narrator line, one command and one query (section 11.3, accepted). Several fields and
+  parts are left to a later part; the scaffold's README says how to add a part.
+- Drafts are not kept across reloads, and generating from a data module is not offered (section 1.2).
+- The copied testkit is Story Block 2.2.0. Refresh it with `npm run sync-sb` and regenerate `src/code-module/assets.js`
+  (`node scripts/code-module-assets.mjs`); the generated tests then check the new copy.
+- The scaffold's own tests need Node 22 or later. Its `tests/vendor/` is not run by `npm test`.
+
 ## Draft with your own AI (the authoring kit)
 
 Studio has no AI page, takes no keys and makes no requests. A creator who wants an AI to draft a pack from their lore uses
