@@ -188,3 +188,6 @@ button.danger.primary{background:color-mix(in srgb,var(--danger) 78%,#000);color
 
 button.primary:not(:disabled):not(.danger),.btn-export-active{background:color-mix(in srgb,var(--accent) 90%,#000);border-color:color-mix(in srgb,var(--accent) 90%,#000);color:#fff}
 button.primary:not(:disabled):not(.danger):hover{background:color-mix(in srgb,var(--accent) 80%,#000);border-color:color-mix(in srgb,var(--accent) 80%,#000)}
+
+.authoring-form{max-width:960px}.lore-review{display:grid;grid-template-columns:minmax(0,2fr) minmax(180px,1fr);gap:16px;align-items:start}.lore-review section,.lore-entry{min-width:0;overflow-wrap:anywhere}.lore-review .warning{white-space:pre-wrap}.lore-review section[aria-label="Entry decisions"]{max-height:75vh;overflow:auto}.lore-review section[aria-label="Entry decisions"] button{width:100%;text-align:left;overflow-wrap:anywhere}#card-preview{max-height:400px;overflow:auto}
+@media(max-width:760px){.lore-review{grid-template-columns:minmax(0,1fr)}}

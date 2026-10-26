@@ -1,6 +1,28 @@
 import { safeLabel } from './dom.js';
 import { exportPack } from './model.js';
 
+export function downloadFile(ctx, payload, filename, type) {
+    let url;
+    let link;
+    try {
+        const blob = new ctx.win.Blob([payload], { type });
+        url = ctx.win.URL.createObjectURL(blob);
+        link = ctx.doc.createElement('a');
+        link.href = url;
+        link.download = safeLabel(filename).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-');
+        link.hidden = true;
+        ctx.root.append(link);
+        link.click();
+        return true;
+    } catch (err) {
+        ctx.notify(`export-error: ${err.message || 'Could not export file'}`);
+        return false;
+    } finally {
+        link?.remove();
+        if (url) ctx.win.setTimeout(() => ctx.win.URL.revokeObjectURL(url), 1000);
+    }
+}
+
 // The shared engine owns the downloaded bytes, including the final newline.
 export function downloadPack(ctx, filename) {
     let url;

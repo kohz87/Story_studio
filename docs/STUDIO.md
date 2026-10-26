@@ -21,6 +21,8 @@ Part 1 establishes the deterministic pack engine, immutable document model, and 
 
 Part 2 adds the standalone local editor, built as one offline HTML file. See the [application guide](STUDIO_PART2.md) for screens, draft persistence, distribution, and browser verification. The engine and unstyled developer page described here remain available.
 
+Part 3 adds **Narrator card**, **Lorebook**, and **Import lorebook** to the same offline page. See [Character cards and lorebooks](#part-3-character-cards-and-lorebooks) below.
+
 ### 1.2 Progression Hierarchy and Pathway Graph
 
 Story Studio enforces the rules-v2 progression graph defined in the Suite Contract:
@@ -639,6 +641,121 @@ The 247,239-byte bundled pack exports byte-identically untouched and after one e
 unchanged. Browser tests repeat that workflow, restore the source bytes from draft storage, and check that the
 distribution issues no subresource or network requests. Draft storage uses retained source text only when it
 matches the saved editing document.
+
+## Part 3: character cards and lorebooks
+
+Open `dist/story-studio.html` directly from disk and open the pack you are editing. The three authoring screens
+run locally, inside that same file. No service, connection, runtime dependency, external image or installed
+lorebook is consulted. Card/lorebook downloads do not mark unsaved pack edits as saved. Pack export continues
+to use Story Block's checker and the existing lossless export path.
+
+### Narrator card
+
+Select **Narrator card**. Studio derives the name, description, creator and version from pack metadata,
+the opening location from `start.scene.place`, and the opening date/time from `calendar.start` and its era.
+The first message opens at that location and invites the reader to act. Missing location/time metadata is not
+invented; a missing place is shown as a warning. The card's scenario and first message can be edited independently.
+
+Edit **Card name**, **Description and Changes instruction**, **Tone notes**, **Start place and time**, and
+**First message**. Additional card fields expose example messages, creator notes, system prompt, post-history
+instructions, creator and character version. Tone notes use the V2 `personality` field; the current host pack
+schema has no dedicated tone field, so ordinary packs start with empty tone notes. A safe draft's `toneNotes`
+or text `tone`, when present, supplies that default. The JSON preview updates as you type.
+
+The card name must contain non-whitespace text. Both JSON and PNG downloads show an `export-error`
+notice and produce no file while the name is blank. Enter a name to enable a successful export.
+
+**Download card JSON** exports `chara_card_v2`, version `2.0`, with the mandatory V2 fields, empty alternate
+greetings/tags and an empty extensions object. **Download card PNG** contains the exact same UTF-8 JSON,
+base64-encoded in a `chara` PNG `tEXt` chunk before `IEND`. The 128 × 192 book cover, stored DEFLATE scanlines,
+checksums and metadata are produced locally without a canvas, compression library or network. The cover is
+a placeholder; custom avatar import is outside this part. Identical pack data and edits yield identical JSON
+and PNG bytes, with no timestamps or random IDs.
+
+The default description copies the line shape, operators and five examples from
+[Story Block SPEC §4.4](https://github.com/kohz87/Story_block/blob/708e2ae986361f1aa1ed27617c4957f95efe4343/docs/v2/SPEC.md#44-the-change-line-grammar):
+`op kind Name[ — text][ | label: value]*`. It requests one `<Changes>` block at the end of a reply when
+something changed and only kinds supplied by installed suite modules. The examples demonstrate syntax;
+they do not add those example records to the pack or lorebook. Per-module kind instructions still come
+from the installed suite. No new change-line protocol is introduced.
+
+Card edits survive navigation during the current session. **Reset card from pack** discards overrides and
+uses the current metadata again. Opening another pack or reloading the page clears card edits. Download the
+card before closing; card edits are separate from the pack's saved draft and Undo history.
+
+The output follows the [Character Card V2 specification](https://github.com/malfoyslastname/character-card-spec-v2/blob/main/spec_v2.md)
+and SillyTavern's [PNG metadata reader](https://github.com/SillyTavern/SillyTavern/blob/release/src/character-card-parser.js).
+Import the JSON or PNG through SillyTavern's character importer.
+
+### Lorebook export
+
+Select **Lorebook**, inspect the per-record previews, then **Download World Info JSON**. Import this file
+through SillyTavern's World Info editor. The native `entries` object follows SillyTavern's
+[World Info implementation](https://github.com/SillyTavern/SillyTavern/blob/release/public/scripts/world-info.js).
+
+Studio emits one entry per record in `content.places`, `content.factions`, `content.npcs`, `content.creatures`
+and `content.items`, in that fixed kind order and each collection's authored order. Keys are the record name
+followed by distinct aliases. Content consists of labeled string fields, string arrays and nested text fields,
+sorted by field name; a place's region is included. IDs, pack wrappers and aliases are excluded from content,
+and numeric mechanics are not turned into invented prose. References are never followed. Quest givers,
+start-scene names, installed lorebooks, other packs and external NPC references do not create extra entries.
+
+Entries use sequential numeric UIDs/display indices, keyword activation, order 100, insertion before the
+character, probability 100%, whole-word matching and no recursion. Each has a `story_studio` kind hint in
+`extensions`, used only to suggest a draft type on reimport. Empty packs export an empty `entries` object;
+malformed records produce a visible export refusal rather than silently disappearing.
+
+The pinned host schema has no dedicated `factions` or `npcs` content collections. If they exist in a safe
+invalid draft, this lorebook exporter includes their authored text; the ordinary pack checker still reports
+those unsupported collections. Studio does not alter the vendored schema or fabricate lore for absent records.
+
+### World Info import and draft review
+
+Select **Import lorebook** and choose a World Info JSON file. The importer accepts a native `entries` object
+or array, up to 1,000 entries and 2 MiB of UTF-8 JSON; a leading byte order mark is accepted. Parsing creates
+review drafts only. Nothing changes in the pack until **Accept draft** is clicked for that entry.
+
+For each entry, inspect the source comment and choose **Place**, **NPC / creature**, or **Item**. Edit its
+name, record ID, aliases, text and (for a place) region. A primary key supplies the initial name, falling back
+to the comment when absent. Secondary primary keys become aliases. The full content is kept as draft text;
+Studio does not execute scripts, expand macros, or apply World Info activation settings. A Studio kind hint
+suggests the matching type; otherwise the default is Place and the author chooses. There is no semantic
+classifier or automatic merge.
+
+**Accept draft** adds one record through the existing edit/history engine. Places get neutral coordinates
+`0, 0`; items start as common, stackable goods with value 0. Duplicate IDs are refused, leaving the existing
+record untouched. Long text, names, aliases and region values are refused under host limits; text is never
+silently shortened. In particular, place/item note text must fit 500 characters. Edit the draft explicitly or
+skip it. Malformed entries have individual visible refusals; valid neighboring entries remain reviewable.
+Malformed/unsafe/oversized files show an import refusal and preserve the current pack and review queue.
+
+NPCs use narrative `content.creatures` drafts with name, aliases and note. Ordinary packs allow these open
+records. A rules-v2 pack requires combat creature fields and does not accept narrative note/alias fields:
+accepting an NPC there deliberately creates a safe **invalid draft**, shows a notice and Problems, and disables
+pack export until the author resolves those problems or uses Undo. Combat statistics and skills are never
+fabricated. Use a place/item type when that fits the entry, or skip NPC entries that the pack cannot represent.
+
+**Skip entry** leaves the pack alone. The decision list retains accepted/skipped/refused states and refusal
+messages; select a refused entry to edit and retry. Decisions record review actions, so Undo restores the pack
+without rewriting that decision history. Opening another pack or reloading clears the review queue; accepted
+pack edits remain in the normal saved draft and can be undone/redone during the session. All imported labels,
+comments and text are rendered through text nodes or form values, including HTML-like input.
+
+### Verification
+
+`npm run -s build` rebuilds the single-file distribution. Run `npm run -s check` and `npm run -s test:dot`
+before committing. The Ersveil source fixture is unchanged. Reviewed golden exports live in
+[`tests/golden/ersveil-narrator.json`](../tests/golden/ersveil-narrator.json) and
+[`tests/golden/ersveil-world-info.json`](../tests/golden/ersveil-world-info.json); tests compare exact bytes.
+PNG tests independently check chunk CRCs, inflate the image and decode the UTF-8 card metadata. Tests cover
+determinism, local-only records, all import types, refusal isolation, duplicate protection and unchanged packs.
+
+[`tests/authoring-browser.test.js`](../tests/authoring-browser.test.js) exercises all three flows from the
+distribution on a `file:` URL, blocks every other request, checks literal hostile-text rendering and collects
+page/console errors. It also checks that the browser decodes the PNG, that imported drafts undo correctly,
+and that card/lorebook export does not clear unsaved pack edits. Screenshots are written to the ignored
+`artifacts/part-3/narrator-card.png`, `artifacts/part-3/lorebook.png` and `artifacts/part-3/lore-import.png`.
+Set `STUDIO_SCREENSHOTS_DIR` to change that directory, or `STUDIO_CHROMIUM_PATH` to use an existing browser.
 
 ## Known issues
 
