@@ -1,0 +1,113 @@
+// The {{domain}} part of the {{moduleId}} module (Story Block docs/v2/MODULES.md §A): its state, its narrator
+// line, one command, one query and the replay guard of that command. Story Studio wrote it as a starting
+// point: change the rules freely and keep the shape.
+//
+// State (this module is its only writer):   {{domain}} = { {{field}}: a whole number from {{min}} to {{max}} }
+// Narrator line:   ~ {{kind}} Name — what happened | {{kindLabel}}: +N or -N
+//   Code sets the number: the change is cut to {{step}} either way, the result stays from {{min}} to {{max}}, and only the
+//   first such line of a reply counts.
+// Command (the reader's action):   {{commandType}} { amount }   takes `amount` away and is refused when there
+//   is not that much. It is guarded (docs/v2/REPLAY.md): on replay it applies only while the state before
+//   it still has that much.
+// Query:   {{queryName}} → { value, min, max }   (reads the state alone, so the guard may ask it on replay)
+
+export const MODULE_ID = '{{moduleId}}';
+export const DOMAIN = '{{domain}}';
+export const FIELD = '{{field}}';
+export const LABEL = {{labelJs}};
+export const MIN = {{min}};
+export const MAX = {{max}};
+export const INITIAL = {{initial}};
+export const STEP = {{step}};
+export const KIND = '{{kind}}';
+export const KIND_LABEL = '{{kindLabel}}';
+export const COMMAND = '{{commandType}}';
+export const ACTION = {{actionJs}};
+export const QUERY = '{{queryName}}';
+export const SCREEN = '{{screenId}}';
+
+const isWhole = value => Number.isSafeInteger(value);
+const sliceOf = state => state?.domains?.[DOMAIN] ?? initial();
+// A name from the story as one short line: spaces folded, cut at 40 characters (whole code points).
+const flat = text => [...String(text ?? '').replace(/\s+/g, ' ').trim()].slice(0, 40).join('');
+
+export function initial() {
+    return { [FIELD]: INITIAL };
+}
+
+// docs/v2/SPEC.md §2.5: any error rejects the whole command, and nothing is saved.
+export function validate(slice) {
+    if (!slice || typeof slice !== 'object') return [`The ${LABEL} record is damaged.`];
+    const value = slice[FIELD];
+    if (!isWhole(value)) return [`${LABEL} is not a whole number.`];
+    if (value < MIN || value > MAX) return [`${LABEL} must stay from ${MIN} to ${MAX}.`];
+    return [];
+}
+
+// ---- the narrator line (docs/v2/SPEC.md §4.2, §4.4) ---------------------------------------------------
+
+// Runs as a story command. The story proposes a change; code cuts it, keeps the value in range and lets one
+// line count per reply (the claim is keyed on the reply's sid, so a swipe or a Re-read starts afresh).
+export function applyLine(ctx, line) {
+    const written = String(line?.labels?.[KIND_LABEL] ?? '').trim();
+    if (!/^[+-]?\d{1,9}$/.test(written)) ctx.fail('INVALID', `Write the change as a whole number, like "| ${KIND_LABEL}: +1".`);
+    const reply = ctx.carrier?.sid ?? ctx.reply?.sid ?? null;
+    if (!reply) ctx.fail('INVALID', `There is no reply to keep this ${KIND} line on.`);
+    if (!ctx.claim(`${MODULE_ID}:${reply}:${KIND}`)) ctx.fail('CLAIMED', `Only the first ${KIND} line of a reply counts.`);
+    const asked = Number(written);
+    const slice = ctx.draft(DOMAIN);
+    const before = slice[FIELD];
+    const after = Math.max(MIN, Math.min(MAX, before + Math.max(-STEP, Math.min(STEP, asked))));
+    slice[FIELD] = after;
+    const result = { summary: `${flat(line?.name) || LABEL}: ${LABEL} ${before} → ${after}.`, narrate: false, data: { before, after } };
+    if (after - before !== asked) result.problem = `${LABEL} changed by ${after - before}, not ${asked}: a line moves it by ${STEP} at most and keeps it from ${MIN} to ${MAX}.`;
+    return result;
+}
+
+// ---- the command and its replay guard (docs/v2/SPEC.md §3.2, docs/v2/REPLAY.md) -----------------------
+
+// The guard a block carries: what must still hold on replay, hashed with the reply it is stored on.
+function guardOf(hash, epoch, source, predicate, inputs) {
+    return { owner: MODULE_ID, version: 2, epoch, rulesHash: null, inputHash: hash({ predicate, inputs, source }), predicate };
+}
+
+export function command(ctx, payload = {}) {
+    const amount = payload?.amount;
+    if (!isWhole(amount) || amount < 1 || amount > MAX - MIN) ctx.fail('INVALID', `Say how much ${LABEL} to take, a whole number from 1 to ${MAX - MIN}.`);
+    const slice = ctx.draft(DOMAIN);
+    const before = slice[FIELD];
+    if (before - amount < MIN) ctx.fail('NOT_ENOUGH', `There is not that much ${LABEL}: ${before} now.`);
+    ctx.replayGuard(guardOf(ctx.hash, ctx.epoch, ctx.source, { kind: COMMAND, amount }, { enough: true }), { before });
+    slice[FIELD] = before - amount;
+    return { summary: `${LABEL}: ${before} → ${before - amount}.`, narrate: true, data: { before, after: before - amount } };
+}
+
+// Asked on replay with the state before the block (the replay rule, docs/v2/REPLAY.md "Guards are pure"): it
+// reads that state through this module's own replay query, the guard and what the command recorded; never
+// settings, the clock, another module or receipts. Undefined for a guard another part made.
+export function replayGuard(view, info) {
+    const guard = info?.guard;
+    if (guard?.predicate?.kind !== COMMAND) return undefined;
+    const amount = guard.predicate.amount;
+    const now = view.query(QUERY);
+    const enough = isWhole(amount) && isWhole(now?.value) && now.value - amount >= MIN;
+    if (guardOf(view.hash, guard.epoch, info.source, guard.predicate, { enough }).inputHash === guard.inputHash) return { ok: true };
+    return { ok: false, reason: `There is no longer ${amount} ${LABEL} to take: ${now?.value} now, ${info?.recorded?.before} when it was done.` };
+}
+
+// ---- the query and the screen (docs/v2/SPEC.md §6, §13; docs/v2/TEMPLATES.md) -------------------------
+
+export function read(state) {
+    return { value: sliceOf(state)[FIELD], min: MIN, max: MAX };
+}
+
+{{@screenConst}}
+export const part = {
+    domains: { [DOMAIN]: { initial, validate, counters: [FIELD] } },
+    commands: { [COMMAND]: command },
+    queries: { [QUERY]: read },
+    replayQueries: [QUERY],
+    kinds: { [KIND]: { grammar: `~ ${KIND} Name — what happened | ${KIND_LABEL}: +N or -N`, apply: applyLine } },
+    replayGuard,
+    screens: {{screens}},
+};
