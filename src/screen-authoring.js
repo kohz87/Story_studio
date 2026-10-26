@@ -1,5 +1,5 @@
 // Authoring goes through the pack importer, including its deliberately open layout envelope.
-import { validatePack } from '../vendor/story-block/src/v2/packs/validate.js';
+import { validatePack } from './data-modules/sb-adapter.js';
 import { SCREEN_FIELDS, MOUNTS, PACK_FIELDS } from '../vendor/story-block/src/v2/packs/limits.js';
 import { standardWidgets } from '../vendor/story-block/src/v2/view/widgets/index.js';
 import { NODE_TYPES } from '../vendor/story-block/src/v2/layout/schema.js';

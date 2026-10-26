@@ -4,7 +4,7 @@ import {
     rulesV2Schema,
     RULES_V2_LIMITS,
 } from '../vendor/story-block/src/v2/packs/rules-v2.js';
-import { validatePack } from '../vendor/story-block/src/v2/packs/validate.js';
+import { validatePack } from './data-modules/sb-adapter.js';
 import { LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 import { foldKey } from '../vendor/story-block/src/text.js';
 

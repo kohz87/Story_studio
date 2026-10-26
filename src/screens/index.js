@@ -7,9 +7,10 @@ import { renderRecords } from './records.js';
 import { renderCheck } from './problems.js';
 import { KINDS } from '../records.js';
 import { renderNarrator, renderLorebook, renderLoreImport } from './authoring.js';
+import { renderDataModules } from './dm/index.js';
 
 export function renderScreen(ctx) {
-    const authoring = { presentation: renderPresentation, defaults: renderSettingsDefaults, narrator: renderNarrator, lorebook: renderLorebook, 'lore-import': renderLoreImport };
+    const authoring = { presentation: renderPresentation, defaults: renderSettingsDefaults, narrator: renderNarrator, lorebook: renderLorebook, 'lore-import': renderLoreImport, 'data-modules': renderDataModules };
     if (Object.hasOwn(authoring, ctx.selection.kind) && ctx.model?.document) {
         authoring[ctx.selection.kind](ctx);
         return;
