@@ -1,3 +1,4 @@
+import { renderPresentation, renderSettingsDefaults } from './presentation.js';
 import { renderPackSettings } from './pack-settings.js';
 import { el } from '../dom.js';
 import { renderClasses } from './classes.js';
@@ -8,7 +9,7 @@ import { KINDS } from '../records.js';
 import { renderNarrator, renderLorebook, renderLoreImport } from './authoring.js';
 
 export function renderScreen(ctx) {
-    const authoring = { narrator: renderNarrator, lorebook: renderLorebook, 'lore-import': renderLoreImport };
+    const authoring = { presentation: renderPresentation, defaults: renderSettingsDefaults, narrator: renderNarrator, lorebook: renderLorebook, 'lore-import': renderLoreImport };
     if (Object.hasOwn(authoring, ctx.selection.kind) && ctx.model?.document) {
         authoring[ctx.selection.kind](ctx);
         return;
