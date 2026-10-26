@@ -272,17 +272,27 @@ export function validateField(input, value) {
     return { ok: true };
 }
 
+export function matchesVariant(schema, value) {
+    if (schema.oneOf) return schema.oneOf.some(s => matchesVariant(s, value));
+    if (schema.const !== undefined) return Object.is(schema.const, value);
+    if (schema.enum) return schema.enum.some(v => Object.is(v, value));
+    if (schema.type === 'null') return value === null;
+    if (schema.type === 'array') return Array.isArray(value);
+    if (schema.type === 'object') return value !== null && typeof value === 'object' && !Array.isArray(value)
+        && Object.entries(schema.properties || {}).every(([k, s]) => s.const === undefined
+            || (!Object.hasOwn(value, k) && !schema.required?.includes(k)) || Object.is(value[k], s.const));
+    if (schema.type === 'integer') return Number.isInteger(value);
+    return typeof value === schema.type;
+}
+
 /** Validates a replacement and its enclosing lists before any edit or draft change. */
 export function validateChange(input, current, path, value) {
     const schema = resolveSchema(input) || {};
     if (!path.length) return validateField(schema, value);
     if (schema.oneOf) {
-        const next = JSON.parse(JSON.stringify(current));
-        let parent = next;
-        for (const part of path.slice(0, -1)) parent = parent?.[part];
-        if (!parent || typeof parent !== 'object') return { ok: false, code: 'bad-value', message: 'Initialize the variant first' };
-        parent[path.at(-1)] = value;
-        return validateField(schema, next);
+        const active = schema.oneOf.find(part => matchesVariant(part, current));
+        if (!active) return { ok: false, code: 'bad-value', message: 'Initialize the variant first' };
+        return validateChange(active, current, path, value);
     }
     const [key, ...rest] = path;
     const child = schema.type === 'array' ? schema.items : schema.properties?.[key];

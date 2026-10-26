@@ -761,3 +761,144 @@ Set `STUDIO_SCREENSHOTS_DIR` to change that directory, or `STUDIO_CHROMIUM_PATH`
 
 - Narrator card drafts disappear on page reload; download the card before reloading.
 - Lorebook review decisions stay “accepted” after Undo removes the accepted record from the pack.
+- README does not yet describe the settings-defaults and screen/layout builders.
+- Switching presentation records silently discards unapplied form drafts.
+- Packs cannot supply module settings defaults. Future host transport is needed for RPG Battle starting
+  points, level cap, companion limit, turn order and hit chances, and Story Director dormancy thresholds,
+  due-soon window and maximum time jump.
+
+## Part 4: settings defaults and screen builder
+
+**Settings defaults** shows the pack boundary for each suite module. The pinned Story Block importer
+accepts **zero per-module settings defaults**: `PACK_FIELDS` contains no `settings`, `defaults`,
+`settingsDefaults`, or `moduleSettings` transport. Consequently there are no pack-settable module setting
+names, types, ranges or host defaults to list. The screen makes this explicit for Story Block, RPG Battle,
+Story Director and NPC State Delta, and displays the importer's `UNKNOWN_FIELD` refusals for proposed JSON.
+Checking a request never changes the document, history, saved draft or export. Reader-only settings cannot
+be shipped by renaming them, adding an extension field, or embedding executable code.
+
+Existing pack-supported economy, currency, calendar, weather, start state, terms, ranks, crafts and rules
+continue to be editable under **Pack settings** and the existing record editors. For example, the supported
+`economy.scale` is a number from 0.001 to 1000, default 1; it affects built-in money defaults across the
+suite and is distinct from the reader's settings object. Part 4 adds no new pack schema or module settings.
+
+The vendored host for this part is Story Block main `cc0b79343fdce3b60fc782cab483c667d1fe3203`:
+`docs/v2/PACKS.md`, `TEMPLATES.md`, `LAYOUTS.md`, `WIDGETS.md`, and `MODULES.md`, plus the module screens
+such as RPG Battle's `src/v2/screens/party.js`. It was copied with `npm run sync-sb -- --from ../Story_block`.
+The sync also brings the host's open/closed quest schema and changes the schema-based hash goldens.
+The generic form matcher accepts omitted optional constant fields so existing closed quests remain
+editable with this schema. No vendored source was edited by hand.
+
+### Author screens and layouts
+
+Select **Screen builder**, then **Screens** or **Layouts**. Choose an existing record, or **New screen** /
+**New layout**. Screen ids may name a module screen to restyle it, such as `rpg-battle/party`.
+New screens bind `data.pc` to `party.pc` for their initial `q.pc.name` template.
+All ten host `SCREEN_FIELDS` are covered:
+
+| Field | Editor |
+|---|---|
+| `id` | Text; checked by the importer, including pack-local duplicates. |
+| `title`, `icon` | Text; the importer checks the 80-character bound. |
+| `mounts` | Checkboxes for `tab`, `screen`, `card`, `hud`, `dialog`. Existing duplicates/order remain until explicitly edited. |
+| `template` | Live HTML-template source with an element and widget palette. |
+| `layout` | JSON plus a form for the layout nodes. |
+| `css` | CSS source, using host scoping/filtering in preview. |
+| `theme` | Custom-property JSON. |
+| `data` | Named-query JSON plus a documented-query palette and alias/args controls. |
+| `steps` | Dialog-step JSON; **Preview source** switches between the screen and each step. |
+
+Optional fields stay omitted until edited; **Omit** removes a field explicitly. **Whole record JSON**
+retains unknown keys and gives a repair path for shapes the form cannot represent. Use **Use record JSON**
+to transfer that text into the form draft. No unknown key or malformed value is silently dropped.
+
+**Apply screen** / **Apply layout** validates the complete candidate pack with the vendored `validatePack`.
+A refusal shows the host's exact code/path/message and preserves the previous pack, Undo/Redo and saved
+backup. Invalid JSON fields also block Apply. **Discard draft** returns to the saved record.
+**Delete record** removes that record in one history step. Successful applies/deletes use normal history,
+autosave, dirty tracking and pack export. Opening a different record, discarding, Undo/Redo, or loading
+another pack resets its form draft. Form drafts and sample data are session-only until Apply; they are
+not included in exported packs or automatically restored after reload.
+
+The node form uses the host's `NODE_TYPES` catalogue: `box`, `row`, `col`, `grid`, `text`, `meter`, `list`,
+`image`, `badge`, `button`, `tabs`, `when`, plus the 18 standard widget types. Choose a node, change its
+type/fields, add children/pages, or use **Use node JSON** for an arbitrary node. Changing a type explicitly
+replaces that selected node; other nodes remain as authored. JSON fields handle bindings, props, payloads
+and theme tokens. All top-level layout object keys remain available through whole-record JSON.
+
+Pack validation accepts `layouts` as a list of safe plain objects, and a screen's `layout` as a safe plain
+object. It does **not** enforce the renderer's node schema. The builder preserves that distinction:
+**Accepted by Story Block** describes importer acceptance; preview warnings can still explain an unknown
+node, missing root, unknown widget or other renderer restriction. Those warnings do not block an otherwise
+host-valid export. Similarly, template compiler warnings never become extra pack-validation errors.
+
+### Preview and palettes
+
+The preview first runs Story Block's `validateScreen` and `resolveData`, then its `createScreenRenderer`.
+Runtime screen refusals (including duplicate template/layout bodies and cyclic or unknown aliases)
+leave the preview empty and show the host's diagnostics, independently of pack-importer acceptance.
+The renderer owns the layout envelope (`{ id: screen.id, root, theme }`), layout validation and
+`layoutEvaluator`, which receives the original state document and requires a boolean `true` result.
+Nested layout metadata is ignored exactly as in the host. Standalone layout records are given a local
+screen wrapper with their id and a tab mount. Template rendering uses the host's binding scope. This includes
+`data-if`, array/record `data-each` with index names, `{{ }}` interpolation, own-property path lookup,
+helpers, `data-bind`, bound attributes/variables/classes, widget props, draft inputs and dialog-step templates.
+The host's strict sanitizer and rendering budgets apply. Malformed expressions produce host warnings.
+No author JavaScript is evaluated.
+
+The template palette provides plain elements, condition/repeat fields, every standard `ss.*` widget,
+and the documented query examples from the references above. Widget prop types/defaults come directly
+from each vendored widget's `props`. Query names, owners and descriptions appear in the picker. A query
+alias already in `data` is visibly refused; it is never overwritten. Other module widgets and query names
+can be authored in source/JSON without an extra Studio allow-list; an unavailable widget reports a preview
+warning. The palettes are examples, not a claim to include every installed module's private registry.
+
+**Sample data JSON** contains `state` (the full state document with `domains`), `draft`, `settings`, `ops`
+and `queries` (results keyed by query name). Only the screen's declared `data` bindings populate `q`;
+sample `q` values are ignored, and a missing binding reads blank as it does in Story Block. The host
+resolves alias dependencies and substitutes arguments. Arguments are authored/exported unchanged; the
+offline query stub supplies one answer per query name, independent of args, or null when absent.
+Bindings read sample data only.
+Money/time use the host's deterministic fallback formatters, rather than simulating installed modules.
+Malformed sample JSON shows a local refusal and retains the last valid sample.
+
+Preview lives in a separate iframe document with scripts disabled. Templates are compiled with the host's
+strict allow-list, then constructed through DOM methods and text nodes. The iframe isolates author CSS
+from the editor. A guard on its DOM resource writes rejects external `src`/`href`, including dynamic
+bindings, SVG images and widget portraits, before the browser can request them. Raster data images and
+fragment references are local. Resource-bearing inline styles/variables are omitted; a stylesheet containing
+resource loaders is omitted as a whole with a warning. Authored source remains unchanged. Links cannot
+navigate, forms cannot submit, and game commands return a visible **Preview only** refusal. Widgets may
+edit the local draft, but no game, module, network connection or host application is invoked.
+
+### Preservation and proof
+
+Unedited source text, including the Ersveil fixture, still exports byte for byte. Presentation edits preserve
+all unrelated raw authored subtrees, omitted defaults, key spelling/order and array order. Undo returns
+the exact prior snapshot and original source bytes. Preview, settings probes, card/lorebook export and
+refused applies never edit the pack. The single offline HTML has no network loader, dependency on sibling
+checkouts or runtime build step, and uses no HTML injection APIs or executable expressions.
+
+[`tests/presentation.test.js`](../tests/presentation.test.js) compares accept/refuse results and exact
+error arrays against the vendored importer for every screen field, code/name/id limits, loops, steps,
+CSS/theme safety, open layout objects, and unsupported settings transports. It also covers Ersveil
+preservation/history and escaped palette snippets. Some importer-accepted inputs are intentionally only
+renderer warnings (e.g. an encoded attribute spelling); preview still sanitizes them.
+
+[`tests/presentation-browser.test.js`](../tests/presentation-browser.test.js) runs against the committed
+single-file distribution on a `file:` URL at 1280px and 390px. It checks actual host rendering, widgets,
+conditions/loops, literal hostile data, resource suppression before requests, inactive commands, palette
+and step controls, refusals, layouts, history, reload and byte-identical Ersveil exports. Every unexpected
+request and every page/console error fails the test. These tests run in `npm test` with the existing
+parts 2.5/3 browser suites; none are skipped when a browser is missing.
+
+[`tests/preview-parity-browser.test.js`](../tests/preview-parity-browser.test.js) drives both the vendored
+host registry/mount/renderer and Studio's preview in a real browser. It compares missing/declared query
+bindings, duplicate bodies, cyclic/unknown aliases, strict layout conditions with the original state,
+and layout envelope id/root/theme handling despite empty or unknown nested metadata. Each case also
+checks pack-importer acceptance, zero unexpected requests and zero page/console errors.
+
+From a lone clone: `npm ci`, `npx playwright install chromium` (or set `STUDIO_CHROMIUM_PATH` to an existing
+Chromium), `npm run -s check`, then `npm test`. A clean clone already contains the built distribution and
+vendored host. For a reproducible rebuild, run `npm run -s build` twice and compare the SHA-256 of
+`dist/story-studio.html` and `src/assets/drawings.js`; finally run `git diff --check`.

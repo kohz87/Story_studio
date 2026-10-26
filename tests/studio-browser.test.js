@@ -10,8 +10,8 @@ import { makeValidExtendedPack } from './fixtures/builders.js';
 import { openPack, exportPack } from '../src/model.js';
 
 const URL = pathToFileURL(resolve('dist/story-studio.html')).href;
-const RULES_HASH = 'bbcf96a8f04da8e007c2fb3840a3939a1d30e3820ddcb48c3e4632186e816f5b';
-const PACK_HASH = '19d91d55a09d3d21bf9ea865e1cadc63561a44be65745d61530046c39b718625';
+const RULES_HASH = 'abefa51fb43800ffca5fb0c8e5eb92ede0ebfffd2d09e6e334e2badb2342532a';
+const PACK_HASH = '15f199c52dab51676942a834ae2087d678f4b51bfa875744675b012dbfe0f175';
 
 async function withPage(options, action) {
     const browser = await chromium.launch({
