@@ -1,7 +1,6 @@
 // Pack model: openPack, exportPack, and indexReferences (pure).
 
 import {
-    exportRulesV2,
     rulesV2Schema,
     RULES_V2_LIMITS,
 } from '../vendor/story-block/src/v2/packs/rules-v2.js';
@@ -128,13 +127,12 @@ function safeClone(value) {
                     if (typeof key !== 'string' || UNSAFE_KEYS.has(key)) return null;
                 }
 
-                const sortedKeys = [...ownKeys].sort();
                 totalBytes += 1; // '{'
                 if (totalBytes > MAX_BYTES) return null;
 
                 const out = {};
-                for (let i = 0; i < sortedKeys.length; i++) {
-                    const key = sortedKeys[i];
+                for (let i = 0; i < ownKeys.length; i++) {
+                    const key = ownKeys[i];
                     if (key.length > MAX_STRING) return null;
 
                     if (i > 0) {
@@ -668,16 +666,6 @@ function checkPack(input) {
     catch { return { ok: false, errors: [{ code: 'NOT_PLAIN', path: '', message: 'Cannot read pack data' }] }; }
 }
 
-// Canonicalization can fold host-owned Unicode-distinct keys together. Use it only when
-// the host confirms that the result still represents the same rules and pack fingerprints.
-function canonicalTextOf(document, checked) {
-    const exported = document.content?.rules ? exportRulesV2(document) : null;
-    if (!exported?.ok) return null;
-    const reopened = checkPack(exported.text);
-    return reopened.ok && reopened.rulesHash === checked.rulesHash && reopened.packHash === checked.packHash
-        ? exported.text : null;
-}
-
 /** Original file text retained for draft persistence; absent for object inputs and edited snapshots. */
 export function sourceTextOf(model) { return sourceTexts.get(model); }
 
@@ -686,13 +674,9 @@ export function openPack(json) {
     const checked = checkPack(json);
     let document = null;
     if (checked.ok) {
+        // Edit the detached authored structure, never the host's normalized runtime copy.
+        // Normalization can merge distinct keys even when both fingerprints stay equal.
         document = checked.raw;
-        // Keep the established canonical model when SB's exporter can represent it.
-        // Source bytes remain attached to this snapshot, separately from normalized editing data.
-        if (document.content?.rules) {
-            const canonical = canonicalTextOf(document, checked);
-            if (canonical !== null) document = JSON.parse(canonical);
-        }
     } else {
         let parsed = json;
         if (typeof json === 'string') {
@@ -745,9 +729,7 @@ export function exportPack(model) {
     }
 
     if (source !== undefined) return source;
-    const canonical = canonicalTextOf(model.document, checked);
-    if (canonical !== null) return canonical;
-    // Host-valid data may exceed canonical indentation size or use host-only text spellings.
+    // Serialize raw data so unrelated edits cannot re-key, trim, or add defaults to subtrees.
     const document = checked.raw;
     const pretty = JSON.stringify(document, null, 2) + '\n';
     if (new TextEncoder().encode(pretty).length <= MAX_BYTES) return pretty;

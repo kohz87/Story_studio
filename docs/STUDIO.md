@@ -13,7 +13,7 @@ This document details the architecture, data models, editing operations, history
 Part 1 establishes the deterministic pack engine, immutable document model, and unstyled developer testing interface:
 
 - **Shared Frozen Schema and Checker**: The rules schema comes from `vendor/story-block/src/v2/packs/rules-v2.js`; imports use Story Block's `validatePack` in `packs/validate.js`, which checks both ordinary packs and rules packs. Story Studio never duplicates or forks pack validation logic.
-- **Canonical Model**: Pure document loading, deep freezing, reference indexing, and deterministic canonical JSON serialization ([`src/model.js`](../src/model.js)).
+- **Authored Model**: Pure document loading, deep freezing, reference indexing, and deterministic JSON serialization that preserves raw authored structure ([`src/model.js`](../src/model.js)).
 - **Pure Editing Operations**: Graph-aware mutation primitives with full undo capabilities ([`src/edits.js`](../src/edits.js)).
 - **Bounded History Controller**: Stateful snapshot-based undo/redo stack controller over immutable pack model snapshots ([`src/history.js`](../src/history.js)).
 - **Unstyled Developer UI**: Standard-compliant DOM interface and headless smoke test harness ([`src/dev.js`](../src/dev.js), [`src/dev.html`](../src/dev.html)).
@@ -48,8 +48,8 @@ Story Studio enforces the rules-v2 progression graph defined in the Suite Contra
 Story Studio guarantees stable, deterministic pack serialization:
 
 - **Array Preservation**: Authored order of arrays (classes, skills, branches, effects, transforms, loot, requirements, objectives) is strictly preserved.
-- **Key Sorting**: Object keys are normalized to Unicode NFC and sorted alphabetically at every level.
-- **Formatting**: Opening a JSON file retains its original text on the immutable snapshot. Exporting it untouched, or after edit/undo, preserves every UTF-8 byte, including whitespace and omitted defaults. Object inputs and edited packs use Story Block's canonical export when it preserves both host fingerprints. Host-valid inputs that the standalone exporter cannot represent retain their authored structure and key spelling; they use 2-space JSON, or compact JSON if indentation would exceed the pack byte limit. Pin transports and runtime-only fields are refused by Story Block's authoring schema.
+- **Raw Data Preservation**: Editing uses the original parsed structure, with authored key spelling, key order, text and omitted defaults intact. Unicode NFC and NFD sibling keys remain distinct. The host's normalized runtime data is used for checking and fingerprints, never as the export source. Matching fingerprints do not prove a lossless export; tests compare bytes and structure directly.
+- **Formatting**: Opening a JSON file retains its original text on the immutable snapshot. Exporting it untouched, or after edit/undo, preserves every UTF-8 byte, including whitespace and omitted defaults. Object inputs and edited packs serialize the raw authored structure as 2-space JSON, or compact JSON if indentation would exceed the pack byte limit. Pin transports and runtime-only fields are refused by Story Block's authoring schema.
 - **Dual Hash Structure**:
   - `rulesHash`: The contract's H (rules fingerprint). A SHA-256 hash computed over the normalized authored rules manifest (`content.rules[0]`), owned definitions (`creatures`, `quests`, `shops`, `recipes`, etc.), the frozen schema, and engine constants. Modifying pack envelope metadata (e.g., pack name or description) preserves `rulesHash`.
   - `packHash`: A SHA-256 hash computed over the entire canonical pack document (envelope, currency, manifests, and content) alongside schema and constants. Changing the pack envelope name updates `packHash` while keeping `rulesHash` unchanged.
@@ -113,9 +113,9 @@ function exportPack(model: object): string;
 ```
 
 - Rejects a model marked invalid or missing a document. Arbitrary supplied objects may omit `validation`; their document is always checked through Story Block before export. Normal `openPack` snapshots always have `validation`.
-- Revalidates through `validatePack`. An untouched file returns its original text. Otherwise Studio tries `exportRulesV2`, using its output only if the host confirms both fingerprints are unchanged. If the canonical exporter refuses valid host text or changes host-owned Unicode-distinct keys, Studio serializes the detached authored data directly, preserving key spelling and array order.
+- Revalidates through `validatePack`. An untouched file returns its original text. Otherwise Studio serializes the detached authored data directly, preserving key spelling, text, omitted defaults and array order. The shared fingerprints describe runtime behavior; they are not used to decide whether export preserves authored data.
 - Returns original source text for an untouched file snapshot; otherwise returns a deterministic JSON string as described in §1.3.
-- **Errors**: Throws an `Error` containing an `errors` property (`err.errors`) if the model is missing, invalid, or fails canonical serialization.
+- **Errors**: Throws an `Error` containing an `errors` property (`err.errors`) if the model is missing or invalid.
 
 #### `indexReferences(document)`
 
@@ -753,3 +753,8 @@ page/console errors. It also checks that the browser decodes the PNG, that impor
 and that card/lorebook export does not clear unsaved pack edits. Screenshots are written to the ignored
 `artifacts/part-3/narrator-card.png`, `artifacts/part-3/lorebook.png` and `artifacts/part-3/lore-import.png`.
 Set `STUDIO_SCREENSHOTS_DIR` to change that directory, or `STUDIO_CHROMIUM_PATH` to use an existing browser.
+
+## Known issues
+
+- Narrator card drafts disappear on page reload; download the card before reloading.
+- Lorebook review decisions stay “accepted” after Undo removes the accepted record from the pack.

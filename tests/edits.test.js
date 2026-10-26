@@ -588,6 +588,7 @@ test('moveClass coherently updates tiers, descendant tiers, and rejects cycles/o
 
 test('setField is pure, replaces leaf values, and exposes intermediate validation errors', () => {
     const pack = smallRulesPack();
+    pack.content.rules[0].statLabels = {};
     const model = openPack(pack);
     assert.equal(model.validation.ok, true, JSON.stringify(model.validation.errors));
 
@@ -1010,6 +1011,7 @@ test('setField refuses array > 1000, depth > 16, and file byte budget limits', (
 
 test('validateAndCloneValue handles hostile proxy and getters without invocation', () => {
     const pack = smallRulesPack();
+    pack.content.rules[0].statLabels = {};
     const model = openPack(pack);
 
     // 1. Throwing ownKeys / getPrototypeOf trap

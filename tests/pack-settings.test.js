@@ -29,7 +29,7 @@ test('screen code edits use SB code limits and retain reference indexing and und
     assert.equal(edited.ok, true);
     assert.equal(edited.model.validation.ok, true);
     assert.ok(edited.model.references.length > 0);
-    assert.equal(openPack(exportPack(edited.model)).document.screens[0].template, template.trim());
+    assert.equal(openPack(exportPack(edited.model)).document.screens[0].template, template);
     assert.equal(edited.undo(), model);
     assert.equal(setField(model, ['screens', 0, 'template'], 'x'.repeat(LIMITS.code + 1)).ok, false);
 });
