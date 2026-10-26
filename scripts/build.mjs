@@ -4,6 +4,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { Script } from 'node:vm';
 import { firstReference } from './dist-scan.mjs';
+import { offlineRuntime } from './offline-runtime.mjs';
 import { ASSETS, SB_ICONS } from '../src/assets/index.js';
 import { ICON_SET } from '../vendor/story-block/src/v2/view/icons/set.js';
 
@@ -36,7 +37,7 @@ const previewCss = await readFile('vendor/story-block/src/v2/view/glass.css', 'u
 // cannot do, and the page must stay one classic inline script. The bundle is built as ESM, which allows it, its one
 // trailing export (the entry's own, unused by the page) is dropped, and the code runs inside an async function: the same
 // code in the same order, in a scope of its own like an IIFE.
-const result = await build({ define: { __STUDIO_GLASS_CSS__: JSON.stringify(previewCss) }, entryPoints: [entry], bundle: true, format: 'esm', target: 'es2022', write: false, minify: true, legalComments: 'none' });
+const result = await build({ plugins: [offlineRuntime], define: { __STUDIO_GLASS_CSS__: JSON.stringify(previewCss) }, entryPoints: [entry], bundle: true, format: 'esm', target: 'es2022', write: false, minify: true, legalComments: 'none' });
 const TRAILING_EXPORT = /export\s*\{[^{}]*\}\s*;?\s*$/;
 const body = result.outputFiles[0].text;
 const bundle = body.replace(TRAILING_EXPORT, '');
@@ -46,7 +47,7 @@ new Script(wrapped);
 const css = await readFile('src/studio.css', 'utf8');
 const credits = await readFile('src/credits.txt', 'utf8');
 const escape = text => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-const script = wrapped.replace(/<\/script/gi, '<\\/script').replaceAll('https://', 'https:\\u002f\\u002f');
+const script = wrapped.replace(/<\/script/gi, '<\\/script').replace(/https?:\/\//g, url => url.replaceAll('/', '\\u002f'));
 const html = `<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'"><title>Story Studio</title><style>\n${css}</style></head><body><div id="studio"></div><details class="credits"><summary>Credits and licences</summary><pre>${escape(credits)}</pre></details><script>\n${script}</script></body></html>\n`;
 const reference = firstReference(html);
 if (reference) throw new Error(`Distribution contains a network or loader reference: ${reference}`);
