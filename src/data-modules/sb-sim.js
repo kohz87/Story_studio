@@ -3,7 +3,8 @@
 // A simulation builds a whole Story Block host on a disposable in-memory chat (the real store, command bus, capture,
 // replay and data-module part, wired as the vendored testkit's createHost wires them), installs the pack, pins the module the way Setup does
 // and plays the scenario's replies through it. Nothing here evaluates a line or a condition: the fields, refusals,
-// timer cursors, inactive blocks and cold-replay comparison are what Story Block's runtime reports. The only part
+// timer cursors, inactive blocks and cold-replay comparison (including no-op write and import prefix witnesses) are
+// what Story Block's runtime reports. The only part
 // Studio supplies is the sample Story Director's published state (sim-director.js), because data modules read time and
 // actors from it.
 //

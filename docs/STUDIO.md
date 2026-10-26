@@ -928,7 +928,7 @@ a key Story Block adds or drops follows after the next `npm run sync-sb`. What s
 control grouping, slot types for choosing a control and the labels in [`hints.js`](../src/data-modules/hints.js).
 `sync-sb` also copies Story Block's data-module fixtures (the two worked examples and one refusal vector per `DM_*`
 code) into `vendor/story-block-fixtures/`, so the parity tests run from a lone clone. The vendored runtime is the
-`stage6/data-modules` work in progress; `vendor/story-block/VERSION` names the commit.
+finished `stage6/data-modules` runtime; `vendor/story-block/VERSION` names the commit.
 
 A copy that cannot check data modules (an older sync) shows "This needs Story Block with data-modules-v1", keeps the
 record as a safe invalid draft and never claims a pass. A copy with the checker but no runtime shows "This needs Story
@@ -997,7 +997,7 @@ use the real store options `checkpointEvery: 2` and `receiptKeep: 3`, matching t
 chat) show what Story Block does, including blocks it skips with `REPLAY_PREREQUISITE`; each reports which steps
 changed status. Nothing in Studio evaluates a line, a condition or a timer.
 
-The vendored runtime is the finished `stage6/data-modules` at `1e8ade4` (see `vendor/story-block/VERSION`). Pinning reads
+The vendored runtime is the finished `stage6/data-modules` at `be84639` (see `vendor/story-block/VERSION`). Pinning reads
 `dataModules.setup` and passes its `module`, `hash` and `packHash` to `dm.pin`, with attached actor IDs as `subjects`.
 Snapshots use `dataModules.view`; cross-module imports are resolved by the runtime's `dataModules.public` projection.
 The host also exposes `dataModules.offers`, `dataModules.presentation` and `dataModules.actors`, and the reader commands
@@ -1008,6 +1008,12 @@ Conditions are recorded as answers in this runtime. Deleting example A's second 
 the later Watch loss stays active because its rule answer is unchanged. Deleting the first gain makes only the second
 gain inactive (`REPLAY_PREREQUISITE`); Watch still reaches -5. A condition that changes its answer invalidates its action.
 The unpinned `dm` capture kind is undeclared (`UNKNOWN_KIND`), as are other kinds or queries with `enabled: false`.
+
+Every write now witnesses its original destination, including no-op sets, clamped adds and clamps; repeated writes keep
+the original prefix witness. Clock and actor imports remain live prerequisites even in recorded mode. Public imports
+witness export and subject availability, and modules with eligibility expressions also witness projected public values
+(including eligibility reached through writes or reward bindings). The simulator delegates all these decisions to the
+runtime; its regression tests delete source replies and assert the resulting fields, inactive actions and cold replay.
 
 There is still no data-module `hooks.replyCard` or card-text query in the finished runtime. `summaryOf` is the current
 state for the prompt tail, not a reply's changes. Studio therefore composes the reply-card field diff and uses the exact
@@ -1053,6 +1059,9 @@ deterministic (build twice, same hash), the page makes no requests, and every pi
   the design's numbers (example A Guild 0, 3, 6 with the title and Watch -5; example B 12/0, 16/2, 0/2, the 59/60/61
   minute boundaries and remainders), refusals (`DM_LABEL`, `CLAIMED`), delete/Re-read/Swipe/Reload what-ifs,
   `REPLAY_PREREQUISITE`, two modules in one pack, request errors, no side effects and repeatability.
+- [`data-modules-witnesses`](../tests/data-modules-witnesses.test.js): deleting source replies retracts no-op writes
+  and rewards, clock-gated kinds/rules/rewards and recorded public eligibility, including eligibility through a write;
+  repeated writes retain their original prefix. Every scenario also checks cold replay.
 - [`data-modules-browser`](../tests/data-modules-browser.test.js): the shipped page at 1280px and 390px, plus the
   waiting-state page. Both worked examples are authored end to end through the forms and expression editor (screens
   through the JSON repair view) and the exported modules equal Story Block's fixtures exactly; then the real simulator

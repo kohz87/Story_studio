@@ -13,6 +13,7 @@
 //          or { ok: false, errors: [{ code, path, message }] }
 //   replyCard  Studio composes the field diff with runtime refusal reasons and notes (no data-module card hook).
 //   replay     compares live state and Problems with fresh stores over saved records, with and without later checkpoints.
+//              Runtime witnesses decide whether no-op writes and recorded clock/actor/eligibility inputs still apply.
 //   status   applied | refused | advanced | inactive (a stored block Story Block now skips, with its code)
 import { simulate } from './sb-adapter.js';
 import { moduleId, entries, isObject, list, clone } from './dm-model.js';
