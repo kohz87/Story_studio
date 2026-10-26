@@ -74,12 +74,12 @@ for (const mode of ['recorded', 'prefix']) for (const gate of ['kind', 'rule', '
     });
 }
 
-for (const indirect of [false, true]) test(`simulator: recorded public eligibility ${indirect ? 'through a write' : 'in a condition'} needs its source`, async () => {
+for (const mode of ['recorded', 'prefix']) for (const indirect of [false, true]) test(`simulator: ${mode} public eligibility ${indirect ? 'through a write' : 'in a condition'} needs its source`, async () => {
     const source = definition();
     source.exports = { score: { fields: ['score'] } };
     source.kinds.prime = kind([set('score', 5)]);
     const d = definition(); d.slug = 'follower';
-    d.imports = { source: { query: 'dataModules.public', args: { module: 'pack.witness/counter', export: 'score' }, mode: 'recorded', projection: ['score'] } };
+    d.imports = { source: { query: 'dataModules.public', args: { module: 'pack.witness/counter', export: 'score' }, mode, projection: ['score'] } };
     const input = ['input', 'source', 'score'];
     d.kinds.earn = kind(indirect ? [set('score', input)] : []);
     d.rules = [{ id: 'eligible', when: ['ge', indirect ? ['get', ['score']] : input, 5], then: [set('title', true)] }];

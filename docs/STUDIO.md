@@ -1060,7 +1060,7 @@ deterministic (build twice, same hash), the page makes no requests, and every pi
   minute boundaries and remainders), refusals (`DM_LABEL`, `CLAIMED`), delete/Re-read/Swipe/Reload what-ifs,
   `REPLAY_PREREQUISITE`, two modules in one pack, request errors, no side effects and repeatability.
 - [`data-modules-witnesses`](../tests/data-modules-witnesses.test.js): deleting source replies retracts no-op writes
-  and rewards, clock-gated kinds/rules/rewards and recorded public eligibility, including eligibility through a write;
+  and rewards, clock-gated kinds/rules/rewards and public eligibility in both import modes, including eligibility through a write;
   repeated writes retain their original prefix. Every scenario also checks cold replay.
 - [`data-modules-browser`](../tests/data-modules-browser.test.js): the shipped page at 1280px and 390px, plus the
   waiting-state page. Both worked examples are authored end to end through the forms and expression editor (screens
