@@ -158,4 +158,3 @@ function drawSection(S, host) {
         default: return sections.identity(S, host);
     }
 }
-

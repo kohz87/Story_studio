@@ -222,4 +222,3 @@ export function removeTarget(document, target) {
     }
     return finish(document, plain);
 }
-

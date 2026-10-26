@@ -113,4 +113,3 @@ export function attachPresentation(model, index, field, id, { move = false } = {
     const extra = move ? { [field]: source.filter(item => item !== record) } : {};
     return replaceModules(model, modules, { extra });
 }
-

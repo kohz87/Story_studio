@@ -51,4 +51,3 @@ export function schemaControls(doc, host, schema, ctx, { labelMode = false, scal
             host.append(note(doc, `Unknown type "${schema.type}". Choose a type above, or fix it in the record JSON.`, 'warning'));
     }
 }
-
