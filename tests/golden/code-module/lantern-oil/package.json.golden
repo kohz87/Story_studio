@@ -1,0 +1,13 @@
+{
+  "name": "lantern-oil",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Counts the oil left in the party's lantern.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\""
+  }
+}
