@@ -1,0 +1,132 @@
+// The lantern-oil module on a real Story Block host: the testkit vendored in tests/vendor/story-block/ (Story Block
+// docs/v2/SPEC.md §10) runs the whole host on a fake SillyTavern. `npm test` runs this file.
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createHost } from './vendor/story-block/testkit/index.js';
+import { definitionProblems, definitionWarnings } from './vendor/story-block/src/v2/registry.js';
+import { validateScreen } from './vendor/story-block/src/v2/view/screens.js';
+import { compileTemplate } from './vendor/story-block/src/v2/view/template/index.js';
+import { createModule, MODULE_ID } from '../src/module.js';
+import { start } from '../index.js';
+import { COMMAND, DOMAIN, FIELD, INITIAL, KIND, KIND_LABEL, MAX, MIN, QUERY, STEP } from '../src/parts/lantern.js';
+
+const lineOf = change => `~ ${KIND} Test — a test line | ${KIND_LABEL}: ${change > 0 ? '+' : ''}${change}`;
+const replyWith = (...lines) => `The story goes on.\n\n<Changes>\n${lines.join('\n')}\n</Changes>`;
+const valueOf = host => host.head().domains[DOMAIN][FIELD];
+// What a full replay from the first reply gives must be what the live host holds (docs/v2/SPEC.md §2.2).
+function assertRebuildIsLive(host) {
+    const live = structuredClone(host.head());
+    host.store.rebuild();
+    assert.deepEqual(host.head(), live);
+}
+const guardProblems = host => host.store.problems().filter(problem => /may ask on replay|replayGuard/.test(`${problem.why} ${problem.message}`));
+
+async function hostWithModule() {
+    return createHost({ modules: [createModule()] });
+}
+
+test('the definition is one Story Block accepts, with no field it does not know', () => {
+    const def = createModule();
+    assert.deepEqual(definitionProblems(def), []);
+    assert.deepEqual(definitionWarnings(def), []);
+    for (const screen of def.screens) {
+        assert.deepEqual(validateScreen(screen), [], screen.id);
+        assert.deepEqual(compileTemplate(screen.template).warnings, [], screen.id);
+    }
+});
+
+test('it registers through StoryBlock.ready and is ready, with nothing refused', async () => {
+    const host = await createHost();
+    try {
+        await start({ ready: Promise.resolve(host.sdk) });
+        assert.equal(host.registry.has(MODULE_ID), true);
+        assert.deepEqual(host.registry.refusals(), []);
+        const entry = host.sdk.modules().find(item => item.id === MODULE_ID);
+        assert.equal(entry.status, 'ready');
+        assert.deepEqual(host.sdk.query(QUERY), { value: INITIAL, min: MIN, max: MAX });
+    } finally {
+        host.close();
+    }
+});
+
+test('a narrator line moves the value by code, once a reply, and replays the same', async () => {
+    const host = await hostWithModule();
+    try {
+        await host.send('Go on.', replyWith(lineOf(STEP + 1), lineOf(1)));
+        const expected = Math.max(MIN, Math.min(MAX, INITIAL + STEP));
+        assert.equal(valueOf(host), expected);
+        assertRebuildIsLive(host);
+        await host.swipe('The story goes on another way.');
+        assert.equal(valueOf(host), INITIAL, 'a swipe without the line takes its change back');
+        assertRebuildIsLive(host);
+    } finally {
+        host.close();
+    }
+});
+
+test('the command takes away, refuses what is not there and leaves the state as it was', async () => {
+    const host = await hostWithModule();
+    try {
+        await host.send('Go on.', replyWith(lineOf(-STEP)));
+        await host.send('Go on.', replyWith(lineOf(STEP)));
+        const before = valueOf(host);
+        const too = await host.sdk.command(COMMAND, { amount: before - MIN + 1 });
+        assert.equal(too.ok, false);
+        assert.equal(valueOf(host), before);
+        const done = await host.sdk.command(COMMAND, { amount: 1 });
+        assert.equal(done.ok, true, done.message);
+        assert.equal(valueOf(host), before - 1);
+        assertRebuildIsLive(host);
+    } finally {
+        host.close();
+    }
+});
+
+test('the guard keeps a command off once the change it needed is deleted, and obeys the replay rule', async () => {
+    const host = await hostWithModule();
+    try {
+        await host.send('Go on.', replyWith(lineOf(-STEP)));
+        const low = valueOf(host);
+        await host.send('Go on.', replyWith(lineOf(STEP)));
+        const high = valueOf(host);
+        assert.ok(high > low);
+        await host.send('Go on.', 'Nothing changes.');
+        const done = await host.sdk.command(COMMAND, { amount: high - MIN });
+        assert.equal(done.ok, true, done.message);
+        assert.equal(valueOf(host), MIN);
+        assertRebuildIsLive(host);
+        assert.deepEqual(guardProblems(host), []);
+
+        // The reply that raised the value goes: the command no longer has what it took, so it stays off.
+        await host.st.deleteMessage(4);
+        assert.equal(valueOf(host), low);
+        assert.ok(host.store.problems().some(problem => problem.code === 'REPLAY_PREREQUISITE'));
+        assertRebuildIsLive(host);
+        assert.equal(valueOf(host), low);
+    } finally {
+        host.close();
+    }
+});
+
+test('the replay guard asks only its own replay queries', () => {
+    const def = createModule();
+    const asked = [];
+    const state = { v: 2, meta: { rev: 1, claims: {} }, domains: { [DOMAIN]: { [FIELD]: MAX } } };
+    const view = Object.freeze({
+        state,
+        hash: value => JSON.stringify(value),
+        query(name, args) {
+            asked.push(name);
+            if (!def.replayQueries.includes(name)) throw new Error(`"${name}" is not a query a guard may ask on replay`);
+            return def.queries[name](state, args);
+        },
+    });
+    const source = { sid: 'sr_aaaaaaaa', swipeKey: 'sw_aaaaaaaa', evidence: 'ev_aaaaaaaa', ordinal: 0 };
+    const predicate = { kind: COMMAND, amount: 1 };
+    const guard = { owner: MODULE_ID, version: 2, epoch: 'ep_00000000', rulesHash: null, inputHash: view.hash({ predicate, inputs: { enough: true }, source }), predicate };
+    assert.deepEqual(def.hooks.replayGuard(view, { guard, source, recorded: { before: MAX } }), { ok: true });
+    assert.ok(asked.length > 0);
+    for (const name of asked) assert.ok(def.replayQueries.includes(name), name);
+    assert.equal(def.hooks.replayGuard(view, { guard: { ...guard, predicate: { kind: 'other' } }, source }).ok, false);
+});
