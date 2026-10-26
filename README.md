@@ -18,12 +18,20 @@ Download [dist/story-studio.html](dist/story-studio.html) and double-click it to
 - **Problems and Export**: Review live Story Block validation diagnostics, jump directly to problem fields with "Go to", verify rules and pack fingerprints, and export authored pack files the game engine accepts unchanged.
 - **Session & Offline Safety**: Automatic draft saving to `localStorage` (with graceful fallback when storage is denied), unsaved change protection, and strict DOM safety with zero runtime network requests.
 
+## Draft with your own AI
+
+Studio has no AI of its own. To have an AI draft a pack from your lore, use your own coding agent or chat with the
+[authoring kit](authoring-kit/README.md): prompts, instructions, references and a checker you run on your own machine.
+Put your lore in `authoring-kit/work/lore/`, let your agent follow `AGENTS.md`, check with
+`node check.mjs work/pack.json` in that folder until it prints OK, then open the file here.
+
 ## Development and Build
 
 Use Node.js 24. Run npm ci and npx playwright install --with-deps chromium before testing.
 Browser tests are required and open the built file directly from disk.
 
 - `npm start`: Serves `src/` for local development.
+- `npm run sync-kit -- --from <Story Block checkout>`: Copies Story Block's authoring kit into `authoring-kit/` (`npm run sync-sb` does it too).
 - `npm run build`: Bundles the standalone single-file application into `dist/story-studio.html`.
 - `npm run check`: Syntax-checks all project scripts and test modules.
 - `npm test` or `npm run test:dot`: Runs the complete test suite under `tests/` using `node:test`, including Playwright browser tests.
@@ -34,6 +42,7 @@ Browser tests are required and open the built file directly from disk.
 - `dist/`: Committed single-file application (`story-studio.html`).
 - `vendor/story-block/`: Synchronized copy of Story Block v2 runtime (pack checker, data-module checker, schema, icons), with its data-module fixtures in `vendor/story-block-fixtures/`. Never edited by hand.
 - `tests/`: Automated unit, integration, fixture, safety, and Playwright browser tests.
+- `authoring-kit/`: Synchronized copy of Story Block's authoring kit (prompts, agent instructions, references, checker) with a `VERSION` stamp (`npm run sync-kit`). Never edited by hand.
 - `docs/`: Architecture and specification documentation (`STUDIO.md`, `STUDIO_PART2.md`).
 
 ## Licence
