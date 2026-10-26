@@ -15,6 +15,7 @@ Download [dist/story-studio.html](dist/story-studio.html) and double-click it to
 - **Skill Paths**: Explore tier-3 skill progression across a base and 12 pathway forms in 3 columns, distinguishing 8 written editable pathway forms from 4 generated read-only forms with live power budget meters. Lower-tier classes display skills as a clean list.
 - **Other Pack Kinds**: Edit items, creatures/foes, places, quests, shops, recipes, trainers, routes, events, and presets with schema-driven forms and reference pickers.
 - **Data modules**: Author data-defined modules (typed fields, narrator kinds, rules, rewards, timers, exports, additive migrations, screens) with a structured expression editor, a live narrator grammar preview, typed reference rename/remove and a simulator panel. Story Block's checker gives every verdict and its own runtime runs the simulator.
+- **Code module**: Write a starter SillyTavern extension that is a real Story Suite v2 module: a form makes nine files, a copy of Story Block's testkit and tests that pass, downloaded as one zip.
 - **Problems and Export**: Review live Story Block validation diagnostics, jump directly to problem fields with "Go to", verify rules and pack fingerprints, and export authored pack files the game engine accepts unchanged.
 - **Session & Offline Safety**: Automatic draft saving to `localStorage` (with graceful fallback when storage is denied), unsaved change protection, and strict DOM safety with zero runtime network requests.
 

@@ -65,3 +65,7 @@ test('the static scan rejects network and code loading with no default-function 
     }
     assert.equal(firstReference(html), null);
 });
+
+test('the single-file distribution stays under 5 MB (part 5b section 11.1 accepts about 4.6 MB)', () => {
+    assert.ok(Buffer.byteLength(html) < 5_000_000, `dist is ${Buffer.byteLength(html)} bytes`);
+});

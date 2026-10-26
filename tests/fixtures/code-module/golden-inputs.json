@@ -1,0 +1,20 @@
+{
+  "moduleId": "lantern-oil",
+  "name": "Lantern Oil",
+  "description": "Counts the oil left in the party's lantern.",
+  "author": "Example Author",
+  "capability": "lantern-oil",
+  "domain": "lantern",
+  "field": "oil",
+  "label": "Oil",
+  "min": 0,
+  "max": 20,
+  "initial": 10,
+  "step": 5,
+  "kind": "oil",
+  "kindLabel": "change",
+  "command": "pour",
+  "action": "Pour out one",
+  "query": "oil",
+  "screen": true
+}

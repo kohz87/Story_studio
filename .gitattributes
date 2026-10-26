@@ -1,0 +1,2 @@
+# screen-const.js.tmpl ends with a blank line on purpose (PART5B_SPEC 3.6); its bytes are pinned.
+screen-const.js.tmpl whitespace=-blank-at-eof

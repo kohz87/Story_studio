@@ -203,3 +203,21 @@ button.primary:not(:disabled):not(.danger):hover{background:color-mix(in srgb,va
 .mount-choices { display: flex; flex-wrap: wrap; gap: 12px; border: 1px solid var(--border); border-radius: 10px; }
 .mount-choices .field { display: flex; flex-direction: row; align-items: center; gap: 8px; }
 .mount-choices input { min-height: 24px; width: 24px; height: 24px; }
+
+/* Code module section (docs/PART5B_SPEC.md §7.6) */
+.code-module-workspace fieldset{border:1px solid var(--border);border-radius:14px;background:var(--card);box-shadow:var(--shadow);padding:12px;margin:0;display:flex;flex-direction:column;gap:10px;min-width:0}
+.code-module-workspace legend{font-size:15px;font-weight:800;padding:0 6px;color:var(--text)}
+.cm-numbers{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px}
+.cm-prefixed{display:flex;align-items:center;gap:6px;min-width:0}.cm-prefixed .mono{color:var(--muted);white-space:nowrap}
+.cm-error{color:var(--danger-text);font-size:12px;font-weight:600}
+.code-module-workspace [aria-invalid=true]{border-color:var(--danger)}
+.cm-check{flex-direction:row;align-items:center;gap:10px;color:var(--text);font-size:14px}.cm-check input{width:24px;height:24px;min-height:24px}
+#cm-line-example{margin:0;padding:8px 10px;background:var(--field);border:1px solid var(--border);border-radius:10px}
+#cm-validation{margin:0}#cm-validation[data-ok=true]{color:var(--good)}#cm-validation[data-ok=false]{color:var(--warn-text)}
+.cm-files{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.cm-files button{width:100%;text-align:left;font-family:ui-monospace,monospace;font-weight:400;font-size:13px;overflow-wrap:anywhere;border-color:transparent}
+.cm-copied{color:var(--muted);font-size:12px;padding:8px 10px;border:1px dashed var(--border);border-radius:10px;overflow-wrap:anywhere}
+#cm-download{display:inline-flex;align-items:center;gap:8px}
+#cm-file{max-height:420px;overflow:auto;white-space:pre;overflow-wrap:normal;margin:0;padding:12px;background:var(--field);border:1px solid var(--border);border-radius:10px;font-size:12px;line-height:1.45}
+.code-module-workspace textarea{font-family:inherit;min-height:64px}
+@media(min-width:1101px){.code-module-workspace>section[aria-label="Files"]{position:sticky;top:0}}

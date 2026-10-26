@@ -1,0 +1,21 @@
+// The {{moduleId}} module for SillyTavern: a Story Suite v2 module. It uses nothing from Story Block but its public sdk
+// (globalThis.StoryBlock.ready, Story Block docs/v2/SPEC.md §3.1 and §6).
+
+import { createModule, MODULE_NAME } from './src/module.js';
+
+/** Registers the module once Story Block is up. Without Story Block v2 it says so once and stays off. */
+export function start(host = globalThis.StoryBlock) {
+    if (!host?.ready || typeof host.ready.then !== 'function') {
+        console.warn(`[${MODULE_NAME}] Story Block v2 is needed; this module stays off.`);
+        return Promise.resolve(null);
+    }
+    return host.ready
+        .then(sdk => sdk.registerModule(createModule()))
+        .catch(error => {
+            console.error(`[${MODULE_NAME}] Could not register with Story Block:`, error);
+            return null;
+        });
+}
+
+// SillyTavern loads this file as an extension; the tests import it without starting it.
+if (globalThis.SillyTavern) start();

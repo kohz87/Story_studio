@@ -1,0 +1,66 @@
+# {{nameMd}}
+
+**What it does:** {{descriptionMd}}
+
+A starter module for **Story Block v2** (Story Suite for SillyTavern), made by Story Studio. It is its own
+SillyTavern extension and talks to Story Block only through Story Block's public sdk
+(`globalThis.StoryBlock.ready`). It needs Story Block 2.1.0 or later.
+
+## Install
+
+1. Put this folder into SillyTavern as a third-party extension, next to Story Block:
+   `public/scripts/extensions/third-party/{{moduleId}}/` (Story Block is `third-party/Story_block`).
+   Or push it to a git repository of your own and use SillyTavern's **Install extension** with its URL.
+2. Reload SillyTavern. `manifest.json` names Story Block as a dependency, so SillyTavern loads it first.
+   Without Story Block v2 the module logs one line and stays off.
+
+## What it adds
+
+| Part | Name | What it does |
+|---|---|---|
+| State | domain `{{domain}}`, field `{{field}}` | A whole number from {{min}} to {{max}}, starting at {{initial}}. Only this module writes it. |
+| Narrator line | `~ {{kind}}` | `~ {{kind}} Someone — what happened \| {{kindLabel}}: +{{step}}` moves it by at most {{step}}; only the first such line of a reply counts. |
+| Command | `{{commandType}}` | The reader's action `{ amount }`: takes that much away, refused when there is not that much. Guarded on replay. |
+| Query | `{{queryName}}` | `{ value, min, max }`, read from the state alone. |
+{{@screenRow}}
+{{@capabilityRow}}
+
+## Files
+
+- `manifest.json`: the SillyTavern extension; it depends on `third-party/Story_block`.
+- `index.js`: waits for `StoryBlock.ready`, then registers the module.
+- `src/module.js`: the module definition, put together from its parts.
+- `src/parts/{{domain}}.js`: the part with everything listed above.
+- `tests/module.test.js`: tests on a real Story Block host (the vendored testkit).
+- `tests/vendor/`: Story Block's testkit and runtime, copied by Story Studio (see `tests/vendor/README.md`).
+
+## Tests
+
+Node.js 22 or later, no install step:
+
+```
+npm test
+```
+
+The tests register the module on a whole Story Block host running on a fake SillyTavern: the definition
+is accepted, a narrator line is applied by code and replays the same, the command is refused when it
+should be, and the replay guard keeps a command off once the change it needed is deleted.
+
+## Growing it
+
+- Story Block's rules for modules: `docs/v2/SPEC.md` §0, §2.2 and §6, and `docs/v2/MODULES.md` §A and §F.
+  In short: code sets the numbers and the story only proposes; handlers are synchronous and use `ctx`
+  alone (no `Math.random`, no `Date.now()`, no model calls); replay must give what the live story gave;
+  buttons are for bookkeeping, never for story actions.
+- A command whose result depends on an earlier reply attaches a replay guard (`docs/v2/REPLAY.md`). On
+  replay a guard may read only the state before its block, what the command recorded, `story.evidence`
+  and the queries the module lists in `replayQueries`.
+- An optional mechanic is a feature (`docs/v2/MODULES.md` §F100).
+- More parts: write `src/parts/<name>.js` like the first one and add it to `PARTS` in `src/module.js`.
+- Refresh the testkit after updating Story Block: from a Story Block checkout,
+  `npm run sync-testkit -- <this folder>`.
+
+## Licence
+
+Choose a licence for your module and add a `LICENSE` file. The copy of Story Block in `tests/vendor/`
+keeps its own licence (AGPL-3.0-only); see `tests/vendor/README.md`.

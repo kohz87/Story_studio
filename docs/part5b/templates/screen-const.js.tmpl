@@ -1,0 +1,17 @@
+// A tab and game-view screen. Its text is fixed; the numbers come from the query (q.value).
+export const screen = {
+    id: SCREEN,
+    title: LABEL,
+    icon: 'fa-cube',
+    mounts: ['tab', 'screen'],
+    data: { value: { query: QUERY } },
+    template: [
+        '<section class="ss-glass box">',
+        `  <p class="ss-label">${LABEL}</p>`,
+        '  <p class="value"><b>{{ q.value.value }}</b> / {{ q.value.max }}</p>',
+        `  <button data-command="${COMMAND}" data-payload='{"amount":1}' data-if="q.value.value > q.value.min">${ACTION}</button>`,
+        '</section>',
+    ].join('\n'),
+    css: '.box { padding: 12px; } .value b { font-size: 1.4em; }',
+};
+

@@ -281,14 +281,14 @@ export function mountStudio(root) {
             more.append(el(doc, 'summary', 'More kinds'));
             for (const kind of KINDS.slice(8)) more.append(button(doc, `${LABELS[kind]} (${records(model, kind).length})`, () => ctx.select(kind)));
             rail.append(more, button(doc, 'Pack settings', () => ctx.select('settings')));
-            for (const [kind, label] of [['defaults', 'Settings defaults'], ['presentation', 'Screen builder'], ['data-modules', 'Data modules'], ['narrator', 'Narrator card'], ['lorebook', 'Lorebook'], ['lore-import', 'Import lorebook']]) {
+            for (const [kind, label] of [['defaults', 'Settings defaults'], ['presentation', 'Screen builder'], ['data-modules', 'Data modules'], ['code-module', 'Code module'], ['narrator', 'Narrator card'], ['lorebook', 'Lorebook'], ['lore-import', 'Import lorebook']]) {
                 rail.append(button(doc, label, () => ctx.select(kind), { 'aria-current': selection.kind === kind ? 'page' : 'false' }));
             }
             rail.append(check);
             ctx.previewCleanup?.();
             ctx.previewCleanup = null;
             main.replaceChildren(); inspectorBody.replaceChildren();
-            inspector.hidden = !model?.document || ['check', 'defaults', 'presentation', 'data-modules', 'narrator', 'lorebook', 'lore-import'].includes(selection.kind);
+            inspector.hidden = !model?.document || ['check', 'defaults', 'presentation', 'data-modules', 'code-module', 'narrator', 'lorebook', 'lore-import'].includes(selection.kind);
             renderScreen(ctx);
         },
         destroy() {

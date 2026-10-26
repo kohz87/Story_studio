@@ -1,0 +1,71 @@
+// The lantern-oil module: the one module definition Story Block registers (Story Block docs/v2/SPEC.md §6), put
+// together from its parts (docs/v2/MODULES.md §A). To add a part, write src/parts/<name>.js the way the
+// first one is written and list it in PARTS.
+//
+// - domains, commands, queries, capture kinds and screens: every part's as they are; a name two parts
+//   claim is a mistake, refused here before Story Block ever sees it.
+// - capture: one apply that hands each line to the part that owns its kind.
+// - replayGuard: each part answers the guards it made and gives undefined for the rest; a guard no part
+//   answers fails closed.
+
+import { part as mainPart } from './parts/lantern.js';
+
+export const MODULE_ID = 'lantern-oil';
+export const MODULE_NAME = 'Lantern Oil';
+export const VERSION = '0.1.0';
+export const DESCRIPTION = 'Counts the oil left in the party\'s lantern.';
+const PARTS = [mainPart];
+
+export function createModule() {
+    const domains = {};
+    const commands = {};
+    const queries = {};
+    const kinds = {};
+    const screens = [];
+    const replayQueries = [];
+    const claim = (table, name, what) => {
+        if (Object.hasOwn(table, name)) throw new Error(`${MODULE_NAME}: two parts claim the ${what} "${name}".`);
+    };
+    for (const part of PARTS) {
+        for (const [name, domain] of Object.entries(part.domains ?? {})) { claim(domains, name, 'domain'); domains[name] = domain; }
+        for (const [type, handler] of Object.entries(part.commands ?? {})) { claim(commands, type, 'command'); commands[type] = handler; }
+        for (const [name, query] of Object.entries(part.queries ?? {})) { claim(queries, name, 'query'); queries[name] = query; }
+        for (const [kind, spec] of Object.entries(part.kinds ?? {})) { claim(kinds, kind, 'capture kind'); kinds[kind] = spec; }
+        for (const screen of part.screens ?? []) {
+            if (screens.some(other => other.id === screen.id)) throw new Error(`${MODULE_NAME}: two parts claim the screen "${screen.id}".`);
+            screens.push(screen);
+        }
+        replayQueries.push(...(part.replayQueries ?? []));
+    }
+    const guards = PARTS.map(part => part.replayGuard).filter(fn => typeof fn === 'function');
+    return {
+        id: MODULE_ID,
+        name: MODULE_NAME,
+        version: VERSION,
+        description: DESCRIPTION,
+        requires: { storyBlock: '>=2.1.0' },
+        capabilities: ['lantern-oil'],
+        domains,
+        commands,
+        queries,
+        replayQueries,
+        capture: {
+            kinds: Object.fromEntries(Object.entries(kinds).map(([kind, spec]) => [kind, { grammar: spec.grammar }])),
+            apply(ctx, line) {
+                const spec = kinds[line?.kind];
+                if (!spec) ctx.fail('INVALID', `${MODULE_NAME} has no "${line?.kind}" line.`);
+                return spec.apply(ctx, line);
+            },
+        },
+        hooks: {
+            replayGuard(view, info) {
+                for (const guard of guards) {
+                    const answer = guard(view, info);
+                    if (answer !== undefined) return answer;
+                }
+                return { ok: false, reason: `${MODULE_NAME} does not know this guard.` };
+            },
+        },
+        screens,
+    };
+}

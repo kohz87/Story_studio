@@ -39,6 +39,6 @@ jobs:
       - name: Build distribution
         run: npm run build
       - name: Verify committed build artifact
-        run: git diff --exit-code -- dist/story-studio.html src/assets/drawings.js
+        run: git diff --exit-code -- dist/story-studio.html src/assets/drawings.js src/code-module/assets.js
       - name: Built-file safety scan
         run: node --test tests/build.test.js
