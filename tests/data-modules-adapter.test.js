@@ -1,6 +1,6 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { factionsText, survivalText } from './fixtures/data-modules/index.js';
+import { factionsText, survivalText, factions, survival } from './fixtures/data-modules/index.js';
 import { backend as stub, oldBackend } from './helpers/dm-stub-backend.js';
 import { DM_DESCRIPTORS, DM_LIMITS, DM_DIAGNOSTICS } from '../vendor/story-block/src/v2/data-modules/check.js';
 import { backend as vendored } from '../src/data-modules/sb-backend.js';
@@ -74,4 +74,32 @@ test('test-only stand-in: the checker is still Story Block\u2019s, only the simu
     assert.equal(stub.validatePack, vendored.validatePack);
     assert.equal(adapter.descriptors(), DM_DESCRIPTORS);
     assert.equal(adapter.isWaitingError({ code: 'UNKNOWN_KIND', path: 'content.dataModules' }), false);
+});
+
+test('migration check: Story Block compares two checked definitions and its own errors come back', () => {
+    adapter.useBackendForTests(null);
+    const earlier = survival();
+    const next = survival();
+    const [module] = next.content.dataModules;
+    module.stateVersion = 2;
+    module.state.thirst = { type: 'int', min: 0, max: 100, default: 0 };
+    module.migrations = [{ from: 1, to: 2, add: { thirst: { type: 'int', min: 0, max: 100, default: 0 } } }];
+    assert.deepEqual(adapter.checkMigration(earlier, next, 'survival'), { ok: true, errors: [], add: { thirst: { type: 'int', min: 0, max: 100, default: 0 } } });
+    // A narrower bound is not additive: the checker's own diagnostic is returned untouched.
+    module.state.hunger.max = 50;
+    const narrower = adapter.checkMigration(earlier, next, 'survival');
+    assert.equal(narrower.ok, false);
+    assert.ok(narrower.errors.some(error => error.code === 'DM_SCHEMA' && error.path === 'state.hunger' && /cannot be removed, retyped, reset or have changed bounds/.test(error.message)), JSON.stringify(narrower.errors));
+    // Either pack must itself be accepted, and must hold the module.
+    const broken = survival();
+    broken.content.dataModules[0].mystery = 1;
+    assert.match(adapter.checkMigration(broken, next, 'survival').errors[0].message, /^earlier version: /);
+    assert.equal(adapter.checkMigration(earlier, factions(), 'survival').errors[0].message, 'The current draft has no data module "survival".');
+    const invalidDraft = survival();
+    invalidDraft.content.dataModules[0].kinds.rest.labels.hours.max = 'eight';
+    const refusedDraft = adapter.checkMigration(earlier, invalidDraft, 'survival');
+    assert.equal(refusedDraft.ok, false);
+    assert.match(refusedDraft.errors[0].message, /^current draft: /);
+    old();
+    assert.deepEqual(adapter.checkMigration(earlier, next, 'survival'), { ok: false, waiting: true, message: adapter.WAITING_MESSAGE, errors: [] });
 });

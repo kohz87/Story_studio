@@ -27,7 +27,9 @@ const sameError = (a, b) => a.code === b.code && a.path === b.path;
 export function replaceModules(model, modules, { extra = {}, addCapability = true } = {}) {
     if (!model?.document || !Array.isArray(modules)) return edit(model, 'bad-edit', 'Open a pack before editing data modules.');
     if (modules.some(module => !isObject(module))) return edit(model, 'bad-edit', 'Each data module must be a JSON object.');
-    const v11 = modules.flatMap(module => v11Findings(module));
+    // Story Block's checker refuses v1.1 features itself (DM_SCHEMA, "needs data-modules v1.1"), so its verdict stands.
+    // Only a copy that cannot check data modules at all gets Studio's own fixed refusal, so nothing slips through unflagged.
+    const v11 = !status().checker ? modules.flatMap(module => v11Findings(module)) : [];
     if (v11.length) return refuse(model, v11.map(({ code, path, message }) => ({ code, path, message })));
     const content = { ...(isObject(model.document.content) ? model.document.content : {}) };
     if (modules.length) content.dataModules = clone(modules);
@@ -58,7 +60,7 @@ export function checkModules(model, modules, { addCapability = true } = {}) {
     let checked;
     try { checked = validatePack(candidate); } catch { checked = { ok: false, errors: [{ code: 'NOT_PLAIN', path: '', message: 'Cannot read pack data' }] }; }
     const errors = (checked.errors ?? []).filter(error => !(waiting && isWaitingError(error)));
-    return { ok: checked.ok === true, errors, waiting, v11: modules.flatMap(module => v11Findings(module)) };
+    return { ok: checked.ok === true, errors, waiting, v11: waiting ? modules.flatMap(module => v11Findings(module)) : [] };
 }
 
 export function setModule(model, index, record) {

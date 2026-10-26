@@ -60,10 +60,12 @@ export function checkControl(doc, parent, title, checked, change) {
 }
 
 /** A list of short strings edited one per line (enum values, map keys, projections). */
-export function linesControl(doc, parent, title, values, change, { id } = {}) {
+export function linesControl(doc, parent, title, values, change, { id, commit } = {}) {
     const input = el(doc, 'textarea', '', { 'aria-label': title, rows: '3', ...(id ? { id } : {}) });
     input.value = Array.isArray(values) ? values.map(safeLabel).join('\n') : '';
     input.addEventListener('input', () => change(input.value.split('\n').map(line => line.trim()).filter(Boolean)));
+    // `commit` runs once the box loses focus, for controls (an enum's default) that depend on the list.
+    if (commit) input.addEventListener('change', commit);
     return labelled(doc, parent, title, input);
 }
 

@@ -43,10 +43,10 @@ export function newRangeTable(binding, schema, previous) {
     return { binding, table };
 }
 
-/** Keeps an enum schema's default among its values after the value list changes. */
+/** Keeps an enum schema's default among its values after the value list changes. Labels and bindings have none. */
 export function setEnumValues(schema, values) {
     schema.values = values;
-    if (!values.includes(schema.default)) schema.default = values[0] ?? '';
+    if (own(schema, 'default') && !values.includes(schema.default)) schema.default = values[0] ?? '';
 }
 
 /** Keeps a map's declared keys unique; returns the map keys written. */

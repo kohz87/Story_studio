@@ -24,9 +24,19 @@ export function renderDataModules(ctx) {
     const state = ctx.authoring.dm ??= { index: 0, section: 'identity' };
     const model = ctx.model;
     const saved = modulesOf(model.document);
-    if (state.base !== model) { state.base = model; state.draft = undefined; state.sim = undefined; state.refRefused = undefined; state.presentation = undefined; }
+    // One draft per module, kept while its saved record is unchanged, so a draft Story Block refuses is never lost by
+    // switching module or section. `from` is the saved record the draft was copied from (null for a new module).
+    const drafts = state.drafts ??= {};
+    if (state.base !== model) {
+        state.base = model; state.sim = undefined; state.refRefused = undefined; state.presentation = undefined;
+        for (const [key, item] of Object.entries(drafts)) {
+            const at = Number(key);
+            if (item.from === null ? at < saved.length : at >= saved.length || JSON.stringify(saved[at]) !== item.from) delete drafts[key];
+        }
+    }
     if (state.index > saved.length) state.index = saved.length;
-    if (state.draft === undefined && state.index < saved.length) state.draft = clone(saved[state.index]);
+    if (!drafts[state.index] && state.index < saved.length) drafts[state.index] = { record: clone(saved[state.index]), from: JSON.stringify(saved[state.index]) };
+    state.draft = drafts[state.index]?.record;
 
     main.append(el(doc, 'h1', 'Data modules'), note(doc, 'Define a module as data: typed fields, the lines a narrator may write, rules, rewards and timers. Story Block checks and runs the definition; Studio edits it.'));
     const unavailable = !status().checker;
@@ -35,10 +45,10 @@ export function renderDataModules(ctx) {
     }
 
     const picker = el(doc, 'div', '', { class: 'row', 'aria-label': 'Data modules' });
-    saved.forEach((module, index) => picker.append(button(doc, `${index + 1}. ${safeLabel(module?.name ?? module?.slug ?? 'Module')}`, () => { state.index = index; state.draft = undefined; state.sim = undefined; ctx.render(); }, { 'aria-pressed': String(state.index === index && state.draft !== undefined) })));
+    saved.forEach((module, index) => picker.append(button(doc, `${index + 1}. ${safeLabel(module?.name ?? module?.slug ?? 'Module')}`, () => { state.index = index; state.sim = undefined; ctx.render(); }, { 'aria-pressed': String(state.index === index && state.draft !== undefined) })));
     picker.append(button(doc, 'New module', () => {
         state.index = saved.length;
-        state.draft = newModule(saved.map(module => module?.slug));
+        drafts[saved.length] ??= { record: newModule(saved.map(module => module?.slug)), from: null };
         state.sim = undefined;
         ctx.render();
     }));
@@ -117,7 +127,7 @@ export function renderDataModules(ctx) {
         if (applyEdit(ctx, result) && result.waiting) ctx.notify(`${WAITING_MESSAGE}. The module is kept in the pack as a draft Story Block has not checked; export stays off until it can.`);
     }, { class: 'primary', id: 'dm-apply' });
     const actions = row(doc, apply,
-        button(doc, 'Discard draft', () => { state.draft = undefined; state.sim = undefined; if (state.index >= saved.length) state.index = Math.max(0, saved.length - 1); ctx.render(); }),
+        button(doc, 'Discard draft', () => { delete drafts[state.index]; state.draft = undefined; state.sim = undefined; if (state.index >= saved.length) state.index = Math.max(0, saved.length - 1); ctx.render(); }),
         ...(state.index < saved.length ? [button(doc, 'Delete module', () => {
             if (applyEdit(ctx, deleteModule(ctx.model, state.index))) state.index = Math.max(0, Math.min(state.index, modulesOf(ctx.model.document).length - 1));
         })] : []));

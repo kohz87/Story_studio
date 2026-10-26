@@ -4,12 +4,13 @@
 //   validatePack  the whole-pack importer; its checker for `content.dataModules` is Story Block's
 //   descriptors   DM_DESCRIPTORS, the closed authoring contract the forms are built from
 //   limits        DM_LIMITS, the version 1 budgets
+//   migration     validateDataMigration, which compares two checked definitions for additive compatibility
 // Still waiting for Story Block: the runtime entry points, so `grammar` and `simulate` stay null and the adapter
 // reports them as unavailable instead of answering from a Studio copy of the interpreter.
 // Support is detected by asking the checker, so an older vendored copy (UNKNOWN_KIND for the content kind) keeps
 // the "needs Story Block with data-modules-v1" state without a code change.
 import { validatePack } from '../../vendor/story-block/src/v2/packs/validate.js';
-import { DM_DESCRIPTORS, DM_LIMITS, DM_DIAGNOSTICS } from '../../vendor/story-block/src/v2/data-modules/check.js';
+import { DM_DESCRIPTORS, DM_LIMITS, DM_DIAGNOSTICS, validateDataMigration } from '../../vendor/story-block/src/v2/data-modules/check.js';
 
 const PROBE = Object.freeze({
     id: 'probe', version: '1.0.0', name: 'Probe',
@@ -33,6 +34,7 @@ export const backend = Object.freeze({
     descriptors: () => DM_DESCRIPTORS,
     limits: () => DM_LIMITS,
     diagnostics: () => DM_DIAGNOSTICS,
+    validateDataMigration,
     grammar: null,
     simulate: null,
 });

@@ -25,7 +25,7 @@ export function schemaControls(doc, host, schema, ctx, { labelMode = false, scal
             if (!labelMode) checkControl(doc, host, 'Default is true', schema.default === true, v => { schema.default = v; ctx.touch(); });
             break;
         case 'enum':
-            linesControl(doc, host, 'Values (one per line)', schema.values, values => { setEnumValues(schema, values); ctx.touch(); });
+            linesControl(doc, host, 'Values (one per line)', schema.values, values => { setEnumValues(schema, values); ctx.touch(); }, { commit: () => ctx.redraw() });
             if (!labelMode) selectControl(doc, host, 'Default', list(schema.values).map(String), typeof schema.default === 'string' ? schema.default : '', v => { schema.default = v; ctx.touch(); }, { blank: 'choose' });
             break;
         case 'text':

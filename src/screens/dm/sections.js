@@ -8,7 +8,8 @@ import { schemaControls } from './schema.js';
 import { SCOPES, FIELD_TYPES, LINE_OPS, PICKS, IMPORT_MODES, IMPORT_ADAPTERS, MOUNTS, V11_MESSAGE } from '../../data-modules/hints.js';
 import { isRangeTable, newRangeTable, defaultSchema, newKind, newLabel, newRule, newTemplate, newTimer, newMigration, newImport, adapterOf, makeTarget, uniqueName } from '../../data-modules/forms.js';
 import { entries, list, own, isObject, clone, modulesOf, moduleId, shortRef, renameKey } from '../../data-modules/dm-model.js';
-import { limits, status } from '../../data-modules/sb-adapter.js';
+import { limits, status, checkMigration } from '../../data-modules/sb-adapter.js';
+import { parseJsonInput } from '../../forms.js';
 
 const keysOf = value => Object.keys(isObject(value) ? value : {});
 const obj = (draft, key) => { if (!isObject(draft[key])) draft[key] = {}; return draft[key]; };
@@ -399,6 +400,25 @@ export function exportsSection(S, host) {
     host.append(adder);
 }
 
+/** Asks Story Block whether this draft is an additive migration of an earlier published pack (nothing is stored). */
+function migrationCheck(S) {
+    const { doc, draft } = S;
+    const box = card(doc, heading(doc, 'Check against an earlier version', 'h4'),
+        note(doc, 'Paste the pack JSON you published before. Story Block compares the module in it with this draft and says whether the change is an additive migration; anything else needs a new timeline.'));
+    const earlier = textControl(doc, box, 'Earlier pack JSON', '', () => {}, { multiline: true, rows: 4, id: 'dm-migration-earlier' });
+    const result = el(doc, 'div', '', { id: 'dm-migration-result', role: 'status', 'aria-live': 'polite' });
+    box.append(button(doc, 'Check migration', () => {
+        result.replaceChildren();
+        const parsed = parseJsonInput(earlier.value);
+        if (!parsed.ok || !isObject(parsed.value)) { result.append(note(doc, `JSON refused: ${parsed.ok ? 'a pack is a JSON object' : parsed.error}`, 'warning')); return; }
+        const verdict = checkMigration(parsed.value, S.candidateDocument(), draft.slug);
+        if (verdict.waiting) result.append(note(doc, `${verdict.message}.`, 'warning'));
+        else if (verdict.ok) result.append(note(doc, `Compatible: an additive migration${Object.keys(verdict.add ?? {}).length ? ` adding ${Object.keys(verdict.add).join(', ')}` : ''}.`, 'muted'));
+        else for (const error of verdict.errors.slice(0, 20)) result.append(el(doc, 'p', `${safeLabel(error.code)} \u00b7 ${safeLabel(error.path)}: ${safeLabel(error.message)}`, { class: 'warning' }));
+    }), result);
+    return box;
+}
+
 export function migrations(S, host) {
     const { doc, draft } = S;
     const all = arr(draft, 'migrations');
@@ -420,6 +440,7 @@ export function migrations(S, host) {
         S.redraw();
     }));
     host.append(helper);
+    host.append(migrationCheck(S));
     all.forEach((step, index) => {
         const box = card(doc);
         box.setAttribute('data-migration', String(index));

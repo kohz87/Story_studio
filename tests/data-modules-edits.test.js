@@ -8,6 +8,7 @@ import { openPack, exportPack } from '../src/model.js';
 import { createHistory } from '../src/history.js';
 import { replaceModules, checkModules, setModule, deleteModule, renameDataModuleTarget, removeDataModuleTarget, attachPresentation, CAPABILITY } from '../src/data-modules/dm-edits.js';
 import { modulesOf } from '../src/data-modules/dm-model.js';
+import { validatePack } from '../vendor/story-block/src/v2/packs/validate.js';
 
 after(() => adapter.useBackendForTests(null));
 const waiting = () => adapter.useBackendForTests(oldBackend);
@@ -55,20 +56,29 @@ test('waiting: a new unrelated problem still refuses, and the pack stays as it w
     assert.ok(result.errors.some(error => error.code !== 'UNKNOWN_KIND'));
 });
 
-test('v1.1 features are refused with the fixed message in every mode, before any checker runs', () => {
-    for (const mode of [waiting, ready]) {
-        mode();
-        const model = openPack(JSON.stringify(plain));
-        const record = survival().content.dataModules[0];
-        record.kinds.meal.check = { skill: 'survival', stat: 'wis', dc: 10 };
-        record.kinds.rest.effects.push({ op: 'grantCoin', amount: 2 });
-        const result = replaceModules(model, [record]);
-        assert.equal(result.ok, false);
-        assert.equal(result.model, model);
-        assert.deepEqual(result.errors.map(error => error.code), ['NEEDS_V1_1', 'NEEDS_V1_1']);
-        assert.ok(result.errors.every(error => error.message.endsWith('needs data-modules v1.1')));
-        assert.equal(checkModules(model, [record]).v11.length, 2);
-    }
+test('v1.1 features: Story Block\u2019s own refusal stands when it checks; a copy that cannot check gets the fixed refusal', () => {
+    const record = () => {
+        const next = survival().content.dataModules[0];
+        next.kinds.meal.check = { skill: 'survival', stat: 'wis', dc: 10 };
+        next.kinds.rest.effects.push({ op: 'grantCoin', amount: 2 });
+        return next;
+    };
+    ready();
+    const model = openPack(JSON.stringify({ ...plain, id: 'ersveil-survival' }));
+    const result = replaceModules(model, [record()]);
+    assert.equal(result.ok, false);
+    assert.equal(result.model, model);
+    const sb = validatePack({ ...model.document, requires: { ...model.document.requires, capabilities: ['data-modules-v1'] }, content: { dataModules: [record()] } });
+    assert.deepEqual(result.errors, sb.errors);
+    assert.ok(result.errors.length >= 2 && result.errors.every(error => error.code === 'DM_SCHEMA' && /needs data-modules v1\.1/.test(error.message)), JSON.stringify(result.errors));
+    assert.deepEqual(checkModules(model, [record()]).v11, []);
+    waiting();
+    const old = openPack(JSON.stringify({ ...plain, id: 'ersveil-survival' }));
+    const fixed = replaceModules(old, [record()]);
+    assert.equal(fixed.ok, false);
+    assert.deepEqual(fixed.errors.map(error => error.code), ['NEEDS_V1_1', 'NEEDS_V1_1']);
+    assert.ok(fixed.errors.every(error => error.message.endsWith('needs data-modules v1.1')));
+    assert.equal(checkModules(old, [record()]).v11.length, 2);
 });
 
 test('ready: both worked examples open valid and export their original bytes untouched', () => {

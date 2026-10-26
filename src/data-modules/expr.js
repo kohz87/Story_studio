@@ -50,6 +50,11 @@ export function typeOfExpression(expression, context = {}) {
     return result === 'any' ? null : { type: result };
 }
 
+/** The literal a slot starts with when the author picks "literal": true for a condition, else a whole number. */
+export function defaultLiteral(slotType) {
+    return slotType === 'bool' ? true : slotType === 'positiveInt' ? 1 : 0;
+}
+
 /** A starting expression for a slot, using the first declared field where one fits. */
 export function defaultExpression(slotType, module) {
     if (slotType === 'bool') return true;

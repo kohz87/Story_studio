@@ -14,6 +14,7 @@ Download [dist/story-studio.html](dist/story-studio.html) and double-click it to
 - **Classes**: View the 4-tier class progression tree, inspect classes, re-parent with cycle protection, manage the 3 required skills per class, and remove classes with an exact cascade preview and full undo.
 - **Skill Paths**: Explore tier-3 skill progression across a base and 12 pathway forms in 3 columns, distinguishing 8 written editable pathway forms from 4 generated read-only forms with live power budget meters. Lower-tier classes display skills as a clean list.
 - **Other Pack Kinds**: Edit items, creatures/foes, places, quests, shops, recipes, trainers, routes, events, and presets with schema-driven forms and reference pickers.
+- **Data modules**: Author data-defined modules (typed fields, narrator kinds, rules, rewards, timers, exports, additive migrations, screens) with a structured expression editor, a live narrator grammar preview, typed reference rename/remove and a simulator panel. Story Block's checker gives every verdict; the simulator waits for Story Block's data-modules runtime.
 - **Problems and Export**: Review live Story Block validation diagnostics, jump directly to problem fields with "Go to", verify rules and pack fingerprints, and export authored pack files the game engine accepts unchanged.
 - **Session & Offline Safety**: Automatic draft saving to `localStorage` (with graceful fallback when storage is denied), unsaved change protection, and strict DOM safety with zero runtime network requests.
 
@@ -31,7 +32,7 @@ Browser tests are required and open the built file directly from disk.
 
 - `src/`: Studio source code, UI screens, components, assets, and styles.
 - `dist/`: Committed single-file application (`story-studio.html`).
-- `vendor/story-block/`: Synchronized copy of Story Block v2 runtime (pack checker, schema, icons). Never edited by hand.
+- `vendor/story-block/`: Synchronized copy of Story Block v2 runtime (pack checker, data-module checker, schema, icons), with its data-module fixtures in `vendor/story-block-fixtures/`. Never edited by hand.
 - `tests/`: Automated unit, integration, fixture, safety, and Playwright browser tests.
 - `docs/`: Architecture and specification documentation (`STUDIO.md`, `STUDIO_PART2.md`).
 

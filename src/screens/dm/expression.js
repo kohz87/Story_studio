@@ -4,7 +4,7 @@
 import { el, selectControl, textControl, intControl, note } from './ui.js';
 import { OPERATORS, V11_MESSAGE } from '../../data-modules/hints.js';
 import { isExpression, own, list, isObject } from '../../data-modules/dm-model.js';
-import { OPERATOR_GROUPS, operatorsFor, changeOperator, defaultExpression, typeOfExpression, measure } from '../../data-modules/expr.js';
+import { OPERATOR_GROUPS, operatorsFor, changeOperator, defaultLiteral, typeOfExpression, measure } from '../../data-modules/expr.js';
 
 const LITERAL = '';
 const literalKind = value => (typeof value === 'number' ? 'number' : typeof value === 'boolean' ? 'bool' : typeof value === 'string' ? 'text' : 'other');
@@ -47,7 +47,7 @@ function operatorSelect(doc, box, value, slot, context, replace) {
     select.value = current;
     select.addEventListener('change', () => {
         const next = select.value;
-        replace(next === LITERAL ? (slot === 'bool' ? true : defaultExpression(slot, context.module)) : changeOperator(value, next, context.module));
+        replace(next === LITERAL ? defaultLiteral(slot) : changeOperator(value, next, context.module));
     });
     box.append(select);
 }
@@ -65,11 +65,19 @@ function fill(doc, box, value, slot, commit, context, depth, render) {
     }
     const slots = el(doc, 'div', '', { class: 'expr-slots' });
     box.append(slots);
+    const compared = ['eq', 'ne'].includes(name);
+    const sides = () => JSON.stringify([1, 2].map(i => typeOfExpression(value[i], context)));
+    const shown = compared ? sides() : null;
     spec.slots.forEach((type, index) => {
         const holder = el(doc, 'div', '', { class: 'expr-slot', 'data-slot': type });
         slots.append(holder);
         holder.append(el(doc, 'span', slotLabel(name, index, type), { class: 'muted expr-slot-label' }));
-        const set = next => { value[index + 1] = next; commit(value); };
+        const set = next => {
+            value[index + 1] = next;
+            commit(value);
+            // The other side of a comparison offers literals of this side's type, so redraw when a side's type changes.
+            if (compared && sides() !== shown) render();
+        };
         const expect = ['eq', 'ne'].includes(name) ? typeOfExpression(value[index === 0 ? 2 : 1], context) : null;
         namedSlot(doc, holder, type, value[index + 1], set, { ...context, expect }, value, depth, render);
     });

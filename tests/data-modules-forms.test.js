@@ -5,7 +5,7 @@ import {
     defaultSchema, newModule, newLabel, newKind, newRule, newTemplate, newTimer, newMigration, newImport, adapterOf, newEffect, effectOps,
     setEnumValues, setMapKeys, syncBindings, renameInRecord, removeInRecord, makeTarget, uniqueName, unknownPaths, starterScreen, sampleView, replaceContents,
 } from '../src/data-modules/forms.js';
-import { operatorsFor, changeOperator, defaultExpression, fieldSchema, typeOfExpression, measure, slotTypes } from '../src/data-modules/expr.js';
+import { operatorsFor, changeOperator, defaultExpression, defaultLiteral, fieldSchema, typeOfExpression, measure, slotTypes } from '../src/data-modules/expr.js';
 import { OPERATORS, EFFECTS, IMPORT_ADAPTERS, FIELD_TYPES } from '../src/data-modules/hints.js';
 import { walkModuleExpressions, getAt, setAt, deleteAt, renameKey, pathText } from '../src/data-modules/dm-model.js';
 
@@ -35,6 +35,10 @@ test('enum edits keep the default among the values; map keys stay unique', () =>
     assert.equal(schema.default, 'x');
     setEnumValues(schema, []);
     assert.equal(schema.default, '');
+    // A line label or reward binding has no default; editing its values must not invent one.
+    const label = newLabel('enum');
+    setEnumValues(label, ['guild', 'watch']);
+    assert.deepEqual(label, { type: 'enum', values: ['guild', 'watch'] });
     const map = defaultSchema('map');
     setMapKeys(map, ['a', 'b', 'a']);
     assert.deepEqual(map.keys, ['a', 'b']);
@@ -135,6 +139,8 @@ test('every operator has fixed arity, and changing operator keeps arguments that
     assert.equal(defaultExpression('bool', module), true);
     assert.equal(defaultExpression('positiveInt', module), 1);
     assert.equal(defaultExpression('int', {}), 0);
+    // Choosing "literal" in an editor always gives a plain value, even when the module has an int field to read.
+    assert.deepEqual(['bool', 'int', 'positiveInt', 'any'].map(defaultLiteral), [true, 0, 1, 0]);
     assert.deepEqual(defaultExpression('int', survival().content.dataModules[0]), ['get', ['hunger']]);
 });
 

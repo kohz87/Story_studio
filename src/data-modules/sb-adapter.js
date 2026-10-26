@@ -55,6 +55,26 @@ export function diagnostics() {
     return status().checker && typeof backend.diagnostics === 'function' ? backend.diagnostics() : null;
 }
 
+/**
+ * Story Block's additive-migration comparison between an earlier published pack and the current one, for one module.
+ * Both packs go through Story Block's checker first; its `validateDataMigration` then compares the two checked
+ * definitions. Returns { ok, errors, add? } with Story Block's own errors, or { waiting } without data-module support.
+ */
+export function checkMigration(earlier, current, slug) {
+    if (!status().checker || typeof backend.validateDataMigration !== 'function') return { ok: false, waiting: true, message: WAITING_MESSAGE, errors: [] };
+    const checked = [['earlier version', earlier], ['current draft', current]].map(([label, input]) => {
+        const verdict = backend.validatePack(input);
+        const found = verdict.ok ? (verdict.pack?.content?.dataModules ?? []).find(item => item?.slug === slug) : null;
+        return { label, verdict, found };
+    });
+    for (const { label, verdict, found } of checked) {
+        if (!verdict.ok) return { ok: false, errors: (verdict.errors ?? []).map(error => ({ ...error, message: `${label}: ${error.message}` })) };
+        if (!found) return { ok: false, errors: [{ code: 'DM_SCHEMA', path: 'content.dataModules', message: `The ${label} has no data module "${slug}".` }] };
+    }
+    const result = backend.validateDataMigration(checked[0].found, checked[1].found);
+    return result.ok ? { ok: true, errors: [], add: result.add } : { ok: false, errors: result.errors };
+}
+
 /** Story Block's narrator grammar for a definition when exported, else null (Studio previews its own wording). */
 export function grammar(pack, module) {
     return status().grammar ? backend.grammar(pack, module) : null;
