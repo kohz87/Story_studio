@@ -6,7 +6,7 @@
 // The folder is replaced as a whole. Plain Node, no dependencies. `--from` defaults to $STORY_BLOCK.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -25,7 +25,7 @@ try {
     const target = resolve('vendor', 'story-block');
     rmSync(target, { recursive: true, force: true });
     mkdirSync(resolve('vendor'), { recursive: true });
-    renameSync(join(scratch, 'tests', 'vendor', 'story-block'), target);
+    cpSync(join(scratch, 'tests', 'vendor', 'story-block'), target, { recursive: true });
     console.log(`sync-sb: vendor/story-block from ${from}`);
 } finally {
     rmSync(scratch, { recursive: true, force: true });

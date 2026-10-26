@@ -15,7 +15,7 @@ test('initial history state has current model and empty undo/redo stacks', () =>
     assert.equal(model.validation.ok, true, JSON.stringify(model.validation.errors));
     assert.ok(typeof model.rulesHash === 'string' && model.rulesHash.length === 64);
     assert.ok(typeof model.packHash === 'string' && model.packHash.length === 64);
-    assert.deepEqual(model.document.content.rules[0].statLabels, {});
+    assert.equal(Object.hasOwn(model.document.content.rules[0], 'statLabels'), false);
 
     const history = createHistory(model);
 

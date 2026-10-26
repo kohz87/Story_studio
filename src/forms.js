@@ -317,7 +317,7 @@ export function renderForm(ctx, container, input, value, path, passed = {}) {
     });
 }
 
-function renderJson(ctx, container, value, path, options, title) {
+export function renderJson(ctx, container, value, path, options, title) {
     const control = el(ctx.doc, 'textarea', '', { ...pathAttrs(path, options), class: 'mono json-textarea' });
     control.value = JSON.stringify(value, null, 2) ?? '';
     control.addEventListener('change', () => {

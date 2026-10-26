@@ -278,7 +278,7 @@ export function mountStudio(root) {
             more.open = KINDS.slice(8).includes(selection.kind);
             more.append(el(doc, 'summary', 'More kinds'));
             for (const kind of KINDS.slice(8)) more.append(button(doc, `${LABELS[kind]} (${records(model, kind).length})`, () => ctx.select(kind)));
-            rail.append(more, check);
+            rail.append(more, button(doc, 'Pack settings', () => ctx.select('settings')), check);
             main.replaceChildren(); inspectorBody.replaceChildren();
             inspector.hidden = !model?.document || selection.kind === 'check';
             renderScreen(ctx);

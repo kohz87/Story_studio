@@ -12,8 +12,8 @@ This document details the architecture, data models, editing operations, history
 
 Part 1 establishes the deterministic pack engine, immutable document model, and unstyled developer testing interface:
 
-- **Shared Frozen Schema and Checker**: Imported directly from Story Block via `vendor/story-block/src/v2/packs/rules-v2.js`. Story Studio never duplicates or forks validation logic; Story Block remains the sole authority on pack validity.
-- **Canonical Model**: Pure document loading, deep freezing, reference indexing, and deterministic canonical JSON serialization ([`src/model.js`](../src/model.js)).
+- **Shared Frozen Schema and Checker**: The rules schema comes from `vendor/story-block/src/v2/packs/rules-v2.js`; imports use Story Block's `validatePack` in `packs/validate.js`, which checks both ordinary packs and rules packs. Story Studio never duplicates or forks pack validation logic.
+- **Authored Model**: Pure document loading, deep freezing, reference indexing, and deterministic JSON serialization that preserves raw authored structure ([`src/model.js`](../src/model.js)).
 - **Pure Editing Operations**: Graph-aware mutation primitives with full undo capabilities ([`src/edits.js`](../src/edits.js)).
 - **Bounded History Controller**: Stateful snapshot-based undo/redo stack controller over immutable pack model snapshots ([`src/history.js`](../src/history.js)).
 - **Unstyled Developer UI**: Standard-compliant DOM interface and headless smoke test harness ([`src/dev.js`](../src/dev.js), [`src/dev.html`](../src/dev.html)).
@@ -46,8 +46,8 @@ Story Studio enforces the rules-v2 progression graph defined in the Suite Contra
 Story Studio guarantees stable, deterministic pack serialization:
 
 - **Array Preservation**: Authored order of arrays (classes, skills, branches, effects, transforms, loot, requirements, objectives) is strictly preserved.
-- **Key Sorting**: Object keys are normalized to Unicode NFC and sorted alphabetically at every level.
-- **Formatting**: Output is UTF-8 encoded with 2-space indentation and a terminating newline. Timestamps, machine-generated identifiers, expanded forms, and self-hashes are excluded from export.
+- **Raw Data Preservation**: Editing uses the original parsed structure, with authored key spelling, key order, text and omitted defaults intact. Unicode NFC and NFD sibling keys remain distinct. The host's normalized runtime data is used for checking and fingerprints, never as the export source. Matching fingerprints do not prove a lossless export; tests compare bytes and structure directly.
+- **Formatting**: Opening a JSON file retains its original text on the immutable snapshot. Exporting it untouched, or after edit/undo, preserves every UTF-8 byte, including whitespace and omitted defaults. Object inputs and edited packs serialize the raw authored structure as 2-space JSON, or compact JSON if indentation would exceed the pack byte limit. Pin transports and runtime-only fields are refused by Story Block's authoring schema.
 - **Dual Hash Structure**:
   - `rulesHash`: The contract's H (rules fingerprint). A SHA-256 hash computed over the normalized authored rules manifest (`content.rules[0]`), owned definitions (`creatures`, `quests`, `shops`, `recipes`, etc.), the frozen schema, and engine constants. Modifying pack envelope metadata (e.g., pack name or description) preserves `rulesHash`.
   - `packHash`: A SHA-256 hash computed over the entire canonical pack document (envelope, currency, manifests, and content) alongside schema and constants. Changing the pack envelope name updates `packHash` while keeping `rulesHash` unchanged.
@@ -62,7 +62,7 @@ Story Studio guarantees stable, deterministic pack serialization:
   - `generatePowerUp(form)` applies deterministic power upgrades (+20 power, +1 stat magnitude, or +1 condition round).
   - Budget closure validation verifies form scores against `classBudget` (`[12, 24, 36, 48]`) and `pathBudgetIncrement` (`12`).
 - **Runtime Proofs and Provenance**: Story Studio does not implement runtime proof generation, event replay, or damage calculation interpreters; these run downstream in Story Director and RPG Battle. Authored legendary items in a rules pack are valid; extra injected provenance authoring metadata is rejected by the closed authoring schema. Runtime provenance verification and generated legendary enforcement are downstream RPG Battle (B3) responsibilities and are not validated or proven by Story Studio authoring tests.
-- **Host Integration**: The `content.rules` manifest and `rb-rules-v2` capability have landed in vendored Story Block commit `b7f6ec57ec8f4290ad7dd9792ad4bdf5bfac77f5`. Story Studio checks packs directly against this vendored release. Any pack with a `content.rules` manifest must declare `rb-rules-v2` in `requires.capabilities`.
+- **Host Integration**: The vendored runtime is Story Block 2.0.0 with the shared authoring-limit exports on `studio/limits` (commit recorded in `vendor/story-block/VERSION`). Story Studio checks packs through that runtime's importer. Any pack with a `content.rules` manifest must declare `rb-rules-v2` in `requires.capabilities`.
 
 ---
 
@@ -97,23 +97,23 @@ function openPack(json: string | object): Readonly<{
 }>;
 ```
 
-- **Valid Packs**: Returns `document` populated with the canonical raw envelope, empty `validation.errors`, extracted typed `references`, and valid 64-character hex strings for `rulesHash` and `packHash`.
+- **Valid Packs**: Returns a frozen detached editing document, empty `validation.errors`, and extracted typed `references`. Rules packs carry Story Block's 64-character `rulesHash` and `packHash`; ordinary packs have `null` hashes, matching the absence of rules fingerprints in Story Block. Canonical editing data is used only when the host confirms both fingerprints survive; source text is retained separately for byte-identical export.
 - **Invalid Packs**: When the pack fails validation but remains a safe plain object within structural limits, `document` preserves the authored structure with sorted keys for continued editing in Studio. `validation.ok` is `false`, `validation.errors` lists issues bounded by shared validation limits (`limits.errors`, up to 20), and both hashes are `null`.
 - **Unsafe / Hostile Input**: Inputs with invalid JSON syntax, non-object roots, cyclic structures, property getters, prototype pollutions (`__proto__`), nesting exceeding depth 16, or payloads exceeding 512 KiB return `document: null`.
 
 #### `exportPack(model)`
 
-Serializes an open model to canonical raw envelope JSON text.
+Serializes a valid open model to pack JSON text, retaining original file bytes when available.
 
 ```ts
 // Illustrative type signature
 function exportPack(model: object): string;
 ```
 
-- Rejects a model marked invalid, then revalidates its document through the shared exporter. It does not require a `validation` property to be present on an arbitrary supplied object (rejecting `model.validation.ok === false` when `validation` exists), then always revalidates its document through shared `exportRulesV2`. Normal `openPack` models always have `validation` and this is recommended usage.
-- Runs the canonical export pipeline: validates the envelope, strips internal runtime wrapper fields from definition records (`id`, `pack`), preserves top-level `envelope.id`, shortens same-pack references to local slugs, preserves authored array ordering, and sorts object keys.
-- Returns a UTF-8 JSON string indented with 2 spaces and ending in a newline (`\n`).
-- **Errors**: Throws an `Error` containing an `errors` property (`err.errors`) if the model is missing, invalid, or fails canonical serialization.
+- Rejects a model marked invalid or missing a document. Arbitrary supplied objects may omit `validation`; their document is always checked through Story Block before export. Normal `openPack` snapshots always have `validation`.
+- Revalidates through `validatePack`. An untouched file returns its original text. Otherwise Studio serializes the detached authored data directly, preserving key spelling, text, omitted defaults and array order. The shared fingerprints describe runtime behavior; they are not used to decide whether export preserves authored data.
+- Returns original source text for an untouched file snapshot; otherwise returns a deterministic JSON string as described in §1.3.
+- **Errors**: Throws an `Error` containing an `errors` property (`err.errors`) if the model is missing or invalid.
 
 #### `indexReferences(document)`
 
@@ -444,7 +444,7 @@ The developer page preserves engine diagnostics and uses these fallback codes:
 Story Studio enforces limits defined across Story Block and the Suite Contract:
 
 Editing imports slug and ID patterns from `rulesV2Schema`, slug limits from `RULES_V2_LIMITS`, and tiers, choices, and pathway steps from `RULES_V2_PROGRESSION`.
-The separate 52-character skill-slug limit is still private in Story Block. The lead needs to export it, for example as `RULES_V2_LIMITS.skillSlug`, before Studio can remove its remaining local constant. No vendored files are edited for this follow-up.
+The skill-slug bound comes from `RULES_V2_LIMITS.skillSlug`. Host descriptors use `LIMITS`, `RECORD_LIMITS`, `ITEM_CARRY`, and `EVENT_LIMITS`; class and skill controls use `RULES_V2_PROGRESSION`, `RULES_V2_CONSTANTS`, and schema bounds. Safety limits are imported directly without copied fallbacks.
 
 | Metric | Boundary Limit | Scope / Details |
 |---|---|---|
@@ -608,27 +608,39 @@ npm run sync-sb -- --from /tmp/s1work/Story_block
 - **Mechanism**: [`scripts/sync-sb.mjs`](../scripts/sync-sb.mjs) invokes Story Block's `scripts/sync-testkit.mjs` to synchronize the runtime pack checker and views directly into `vendor/story-block/`.
 - **Commit Pinning**: `vendor/story-block/VERSION` records the exact Story Block commit:
   ```text
-  Story Block 2.0.0-beta.2
-  commit b7f6ec57ec8f4290ad7dd9792ad4bdf5bfac77f5
-  files 163
-  matrix 1
+  Story Block 2.0.0
+  commit 708e2ae986361f1aa1ed27617c4957f95efe4343
+  files 177
+  matrix 2
   ```
 - **Integrity Rule**: Files under `vendor/story-block/` are never edited manually.
 
 
-## Remaining shared-constant follow-ups
+## Part 2.5: release parity and lossless files
 
-The checker and rules schema remain authoritative. These local copies still need consolidation with upstream exports:
+Studio imports through Story Block's `validatePack`, the same entry point used to install a pack. The standalone
+rules checker remains available for rules previews; it deliberately has stricter host-text rules and is not the
+import gate. JSON duplicate keys follow Story Block's last-key-wins semantics, and diagnostics retain the host's
+codes, paths and order. A canonical export exceeding 512 KiB no longer invalidates an otherwise valid pack.
 
-- `src/edits.js`: the skill-slug limit `52` has no dedicated export. Safety fallbacks repeat depth `16`, array `1000`,
-  keys `200`, string `4000`, and pack bytes `512 * 1024`; normal execution uses `RULES_V2_LIMITS`.
-- `src/model.js` and `src/dev.js`: fallback safety limits remain beside the shared limits.
-- `src/screens/classes.js`: tier columns `0–3`, the three-skill UI count, four generated-path suffixes, and the
-  child-slug truncation length `54` remain local. `src/screens/skills.js` similarly carries the tier-3 check,
-  the fixed pathway layout and counts, cost bounds `0–999`, power bounds `1–1000`, and budget fallbacks `12 * (tier + 1)` and step increment `12`.
-- `src/form-schema.js`: host descriptors still repeat host name/slug/note lengths (`80`, `64`, `500`), slug patterns,
-  and host-specific field bounds. The rules-owned descriptors already resolve directly from the shared schema.
+**Pack settings** exposes every editable envelope field: `version`, `name`, `author`, `description`, `requires`,
+`currency` (including `coins` and rules-v2 `display`), `economy`, `calendar` (including `holidays`), `weather`,
+`start`, `layouts`, `screens`, and `theme`. The pack ID remains fixed. The same screen exposes the host collections
+without dedicated record screens (`terms`, `ranks`, `crafts`, `meterPresets`, `markets`) and manifest options
+`name`, `statLabels` and `memory`. Nested fields are edited as JSON and checked by Story Block, including recipe crafting
+fields, screen templates/CSS/data/steps, meter bands/drift/stages, market factors and calendar/weather tables.
+Pin transport fields (`resolved`, `rulesHash`, `packHash`, `packKey`, `packVersion`, `progression`, `constantsHash`,
+`defs`) are runtime data, not extra authoring fields, and remain refused exactly as in Story Block.
 
-The new skill operation uses `RULES_V2_PROGRESSION` for the skill count, maximum tier, pathway depth, and choices.
-Its minimal base effect and written transforms are authoring defaults; the shared checker validates their behavior
-and generated budget closure before export.
+The unchanged [Ersveil fixture](../tests/fixtures/ersveil-bluewatch.md) records its upstream release commit and byte
+checksum. Golden tests compare Studio's acceptance, diagnostics and fingerprints with the vendored importer,
+including host entities/controls, long screen code, large layouts, Unicode-distinct keys, and runtime-field refusals.
+The 247,239-byte bundled pack exports byte-identically untouched and after one edit plus undo, with both hashes
+unchanged. Browser tests repeat that workflow, restore the source bytes from draft storage, and check that the
+distribution issues no subresource or network requests. Draft storage uses retained source text only when it
+matches the saved editing document.
+
+## Known issues
+
+- Narrator card drafts disappear on page reload; download the card before reloading.
+- Lorebook review decisions stay “accepted” after Undo removes the accepted record from the pack.

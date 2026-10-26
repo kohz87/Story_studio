@@ -161,7 +161,7 @@ test('dev page smoke test in Chromium', async t => {
         assert.equal(await page.locator('#undo').isEnabled(), true);
         assert.equal(await page.locator('#redo').isDisabled(), true);
 
-        // Export and download canonical JSON
+        // Export and download the authored structure with only the requested edit.
         const downloadPromise = page.waitForEvent('download');
         await page.click('#export-pack');
         const download = await downloadPromise;
@@ -173,10 +173,10 @@ test('dev page smoke test in Chromium', async t => {
         }
         const exportedText = Buffer.concat(downloadedChunks).toString('utf8');
 
-        // Compare downloaded bytes to shared exportRulesV2({...golden, name: newName}).text
+        assert.equal(exportedText, JSON.stringify({ ...goldenPack, name: newName }, null, 2) + '\n');
+        assert.deepEqual(JSON.parse(exportedText), { ...goldenPack, name: newName });
         const expectedExport = exportRulesV2({ ...goldenPack, name: newName });
         assert.equal(expectedExport.ok, true, 'Shared exportRulesV2 should succeed');
-        assert.equal(exportedText, expectedExport.text, 'Downloaded bytes must match shared exportRulesV2 text');
 
         // Reopen downloaded file in page and verify both hashes on reopen
         await page.setInputFiles('#pack-file', {

@@ -5,7 +5,9 @@ import assert from 'node:assert/strict';
 
 import { smallRulesPack } from './fixtures/smallRulesPack.js';
 
+import { validatePack } from '../vendor/story-block/src/v2/packs/validate.js';
 import { openPack, exportPack, indexReferences, rulesV2Schema } from '../src/model.js';
+import { setField } from '../src/edits.js';
 import {
     exportRulesV2,
     validateRulesPack,
@@ -37,7 +39,7 @@ test('golden seed tree structure: 4 tiers, 3 skills/class (12 total), 24 branche
     assert.ok(typeof model.packHash === 'string' && model.packHash.length === 64);
 });
 
-test('canonical round trip twice equals shared exporter and hash parity', () => {
+test('raw round trip twice preserves authored structure and shared hash parity', () => {
     const pack = smallRulesPack();
     const sharedExp = exportRulesV2(pack);
     assert.equal(sharedExp.ok, true);
@@ -49,9 +51,10 @@ test('canonical round trip twice equals shared exporter and hash parity', () => 
     assert.equal(model1.packHash, sharedExp.packHash);
 
     const text1 = exportPack(model1);
-    assert.equal(text1, sharedExp.text);
+    assert.equal(text1, JSON.stringify(pack, null, 2) + '\n');
+    assert.deepEqual(JSON.parse(text1), pack);
 
-    // Second round trip: open exported canonical text -> export again
+    // Second round trip: open exported text -> export again
     const model2 = openPack(text1);
     assert.equal(model2.validation.ok, true);
     assert.equal(model2.rulesHash, model1.rulesHash);
@@ -60,7 +63,7 @@ test('canonical round trip twice equals shared exporter and hash parity', () => 
 
     const text2 = exportPack(model2);
     assert.equal(text2, text1);
-    assert.equal(text2, sharedExp.text);
+    assert.deepEqual(JSON.parse(text2), pack);
 });
 
 test('authored class/skill/branch/effect/transform array order is strictly retained', () => {
@@ -103,10 +106,9 @@ test('authored class/skill/branch/effect/transform array order is strictly retai
         );
     }
 
-    // Object keys are sorted alphabetically
+    // Object keys retain their authored spelling and order.
     const keys = Object.keys(docManifest.classes[0]);
-    const sortedKeys = [...keys].sort();
-    assert.deepEqual(keys, sortedKeys);
+    assert.deepEqual(keys, Object.keys(origManifest.classes[0]));
 });
 
 test('caller inputs are never mutated; returned model is immutable snapshot', () => {
@@ -148,7 +150,7 @@ test('malformed JSON returns null document, structured errors, and export throws
     assert.equal(model.packHash, null);
     assert.deepEqual(model.references, []);
     assert.ok(model.validation.errors.length > 0);
-    assert.equal(model.validation.errors[0].code, 'bad-schema');
+    assert.equal(model.validation.errors[0].code, 'NOT_JSON');
 
     // Exporting invalid model throws Error with errors property
     assert.throws(
@@ -156,7 +158,7 @@ test('malformed JSON returns null document, structured errors, and export throws
         err => {
             assert.ok(err instanceof Error);
             assert.ok(Array.isArray(err.errors));
-            assert.equal(err.errors[0].code, 'bad-schema');
+            assert.equal(err.errors[0].code, 'NOT_JSON');
             return true;
         }
     );
@@ -658,7 +660,7 @@ test('safeClone handles 10,000 nested objects without RangeError, returning null
     const model = openPack(deep);
     assert.equal(model.document, null);
     assert.equal(model.validation.ok, false);
-    assert.ok(model.validation.errors.some(e => e.code === 'too-large'));
+    assert.ok(model.validation.errors.some(e => ['TOO_DEEP', 'TOO_MANY', 'TOO_LARGE'].includes(e.code)));
     assert.deepEqual(model.references, []);
 
     // indexReferences on deep document also safely returns [] without throwing
@@ -732,7 +734,7 @@ test('oversized array (> 1000 items) yields document null with checker errors', 
     const model = openPack(doc);
     assert.equal(model.document, null);
     assert.equal(model.validation.ok, false);
-    assert.ok(model.validation.errors.some(e => e.code === 'too-large'));
+    assert.ok(model.validation.errors.some(e => ['TOO_DEEP', 'TOO_MANY', 'TOO_LARGE'].includes(e.code)));
 });
 
 test('unsupported function values yield document null', () => {
@@ -1053,51 +1055,21 @@ test('route names and aliases use shared place folding while qualified foreign I
     assert.equal(indexReferences(pack).find(ref => ref.path.join('.') === 'content.routes.0.from').targetId, 'pack.foreign/haven');
 });
 
-// Regression 9: Canonical export exceeding 512 KiB handled as immutable invalid model preserving authored document
-test('canonical export exceeding 512 KiB handled as immutable invalid model preserving authored document', () => {
-    const places = Array.from({ length: 900 }, (_, i) => ({
-        slug: `p-${i}`,
-        name: 'Place',
-        x: i,
-        y: 0,
-        note: 'x'.repeat(480),
-    }));
-
-    const pack = smallRulesPack({ places });
-
-    // Raw input is compact (489,292 bytes < 512 KiB) and passes validateRulesPack
-    const checkRes = validateRulesPack(pack);
-    assert.equal(checkRes.ok, true);
-
-    // exportRulesV2 fails with too-large due to 2-space canonical indentation
-    const exportRes = exportRulesV2(pack);
-    assert.equal(exportRes.ok, false);
-    assert.ok(exportRes.errors.some(e => e.code === 'too-large'));
-
-    // openPack handles export failure as immutable invalid model: never parses undefined or throws
+// Canonical indentation must not turn an SB-valid input into an invalid pack.
+test('SB-valid compact pack still exports when canonical indentation exceeds 512 KiB', () => {
+    const pack = smallRulesPack({ places: Array.from({ length: 900 }, (_, i) => ({
+        slug: `p-${i}`, name: 'Place', x: i, y: 0, note: 'x'.repeat(480),
+    })) });
+    assert.equal(validatePack(pack).ok, true);
+    assert.equal(exportRulesV2(pack).ok, false);
     const model = openPack(pack);
-    assert.equal(model.validation.ok, false);
-    assert.equal(model.rulesHash, null);
-    assert.equal(model.packHash, null);
-    assert.deepEqual(model.validation.errors, exportRes.errors);
-
-    // Authored document preserved for editing
-    assert.ok(model.document !== null);
-    assert.equal(model.document.content.places.length, 900);
-    assert.ok(Array.isArray(model.references));
-
-    // exportPack refuses with same errors
-    assert.throws(
-        () => exportPack(model),
-        err => {
-            assert.ok(err instanceof Error);
-            assert.deepEqual(err.errors, exportRes.errors);
-            return true;
-        }
-    );
+    assert.equal(model.validation.ok, true);
+    const output = exportPack(model);
+    assert.ok(Buffer.byteLength(output) <= 512 * 1024);
+    assert.equal(validatePack(output).ok, true);
+    assert.equal(openPack(output).packHash, model.packHash);
 });
 
-// Regression 10: Hostile proxy trap does not throw in openPack or indexReferences
 test('hostile proxy trap does not throw in openPack or indexReferences', () => {
     const hostile = new Proxy({}, {
         getPrototypeOf() {
@@ -1156,13 +1128,51 @@ test('rules packs must declare the shared capability, including safe invalid dra
     assert.equal(openPack(pack).validation.ok, true);
 });
 
-test('JSON text keeps shared duplicate-key validation before editing', () => {
-    const text = JSON.stringify(smallRulesPack()).replace('"id":"fixture"', '"id":"fixture","id":"fixture"');
-    const checked = validateRulesPack(text);
+test('JSON text follows SB duplicate-key semantics before editing', () => {
+    const text = JSON.stringify(smallRulesPack()).replace('"id":"fixture"', '"id":"first","id":"fixture"');
+    const checked = validatePack(text);
     const model = openPack(text);
-    assert.equal(checked.ok, false);
-    assert.equal(model.validation.ok, false);
-    assert.deepEqual(model.validation.errors, checked.errors);
-    assert.ok(model.validation.errors.some(e => e.code === 'dup-id'));
-    assert.throws(() => exportPack(model));
+    assert.equal(checked.ok, true);
+    assert.equal(model.validation.ok, true);
+    assert.equal(model.packHash, checked.packHash);
+    assert.equal(exportPack(model), text);
+});
+
+test('unrelated name edits preserve raw NFC/NFD sibling keys and every untouched subtree', () => {
+    const nfc = 'caf\u00e9', nfd = 'cafe\u0301';
+    for (const rules of [true, false]) {
+        const pack = rules ? smallRulesPack() : {
+            id: 'local', version: '1.0.0', name: 'Local', requires: { storyBlock: '^2' }, content: {},
+        };
+        pack.layouts = [{ [nfc]: 1, [nfd]: 2 }];
+        pack.screens = [{ id: 'camp', layout: { [nfc]: '  caf\u00e9\r\n', [nfd]: ' cafe\u0301 ' },
+            data: { [nfc]: { query: 'party.pc' }, [nfd]: { query: 'party.all' } } }];
+        for (const input of [pack, JSON.stringify(pack)]) {
+            const model = openPack(input);
+            assert.equal(model.validation.ok, true);
+            assert.deepEqual(model.document, pack);
+            const edited = setField(model, ['name'], 'Renamed');
+            assert.equal(edited.ok, true);
+            const output = exportPack(edited.model);
+            const parsed = JSON.parse(output);
+            assert.deepEqual(parsed, { ...pack, name: 'Renamed' });
+            for (const key of Object.keys(pack).filter(key => key !== 'name')) {
+                assert.deepEqual(Buffer.from(JSON.stringify(parsed[key])), Buffer.from(JSON.stringify(pack[key])), key);
+            }
+            for (const record of [parsed.layouts[0], parsed.screens[0].layout, parsed.screens[0].data]) {
+                assert.deepEqual(Object.keys(record).map(key => Buffer.from(key)), [Buffer.from(nfc), Buffer.from(nfd)]);
+            }
+            assert.equal(exportPack(openPack(output)), output);
+            if (rules) {
+                const invalid = setField(edited.model, ['content', 'rules', 0, 'classes', 0, 'tier'], 9);
+                assert.equal(invalid.ok, true);
+                assert.equal(invalid.model.validation.ok, false);
+                const repaired = setField(invalid.model, ['content', 'rules', 0, 'classes', 0, 'tier'], 0);
+                assert.equal(repaired.ok, true);
+                assert.equal(exportPack(repaired.model), output, 'Invalid drafts also preserve raw keys and order');
+            }
+            assert.equal(edited.undo(), model);
+            if (typeof input === 'string') assert.equal(exportPack(edited.undo()), input);
+        }
+    }
 });

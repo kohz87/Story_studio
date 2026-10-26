@@ -176,9 +176,9 @@ test('loadText renders broken JSON error without crashing and disables export', 
     assert.equal(errorsList.children.length, 1);
 
     const errItem = errorsList.children[0];
-    assert.equal(errItem.dataset.code, 'bad-schema');
-    assert.match(errItem.textContent, /bad-schema/);
-    assert.match(errItem.textContent, /Invalid JSON/);
+    assert.equal(errItem.dataset.code, 'NOT_JSON');
+    assert.match(errItem.textContent, /NOT_JSON/);
+    assert.match(errItem.textContent, /not valid JSON/);
 
     assert.equal(byId('export-pack').disabled, true);
     assert.equal(byId('contents').children.length, 0);
@@ -329,10 +329,10 @@ test('adversarial markup is rendered strictly as text', () => {
     const errorsList = byId('errors');
     assert.ok(errorsList.children.length > 0);
 
-    const xssError = errorsList.children.find(c => c.dataset.code === 'unsafe-markup');
-    assert.ok(xssError, 'unsafe-markup error must be present');
+    const xssError = errorsList.children.find(c => c.dataset.code === 'UNSAFE_HTML');
+    assert.ok(xssError, 'UNSAFE_HTML error must be present');
     assert.equal(xssError.dataset.path, 'name');
-    assert.match(xssError.textContent, /^unsafe-markup name: Text has an HTML tag that can run code/);
+    assert.match(xssError.textContent, /^UNSAFE_HTML name: name has an HTML tag that can run code/);
     assert.equal(xssError.children.length, 0, 'Error node must contain no HTML element children');
 
     // Input pack name retains literal string in input.value

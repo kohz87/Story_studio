@@ -3,7 +3,12 @@ import { safeLabel, el, button, field } from '../dom.js';
 import { KINDS, LABELS, records, identity, localId } from '../records.js';
 import { add, addClassSkill, resetClassSkills, renameId, remove, moveClass, setSchemaField as setField } from '../edits.js';
 import { schemaForKind, validateField } from '../form-schema.js';
-import { validateRulesPack } from '../../vendor/story-block/src/v2/packs/rules-v2.js';
+import { validateRulesPack, RULES_V2_LIMITS, RULES_V2_PROGRESSION } from '../../vendor/story-block/src/v2/packs/rules-v2.js';
+
+const TIERS = RULES_V2_PROGRESSION.tiers;
+const MAX_TIER = Math.max(...TIERS);
+const SKILLS_PER_CLASS = RULES_V2_PROGRESSION.skillsPerClass;
+const GENERATED_CHOICE = RULES_V2_PROGRESSION.generatedChoice;
 
 // Sets or replaces a field on a class record by slug.
 export function classField(model, classSlug, fieldName, value) {
@@ -129,38 +134,19 @@ export function cascadeChanges(beforeModel, previewModel, _targetSlug = null) {
             });
 
             const owningClass = beforeClasses.find(c => Array.isArray(c.skills) && c.skills.some(s => s && localId(beforeModel, s) === skillSlug));
-            if (owningClass && owningClass.tier === 3) {
-                changes.push({
-                    kind: 'forms',
-                    id: `${baseSlug}-g`,
-                    name: `${baseSlug}-g`,
-                    label: `${baseSlug}-g (Generated form)`,
-                });
-                changes.push({
-                    kind: 'forms',
-                    id: `${baseSlug}-g-g`,
-                    name: `${baseSlug}-g-g`,
-                    label: `${baseSlug}-g-g (Generated form)`,
-                });
-
-                for (const b of beforeBranches) {
-                    if (b.skill && localId(beforeModel, b.skill) === skillSlug && b.fromForm && localId(beforeModel, b.fromForm) === baseSlug) {
-                        if (b.choice === 'a') {
-                            changes.push({
-                                kind: 'forms',
-                                id: `${baseSlug}-a-g`,
-                                name: `${baseSlug}-a-g`,
-                                label: `${baseSlug}-a-g (Generated form)`,
-                            });
-                        } else if (b.choice === 'b') {
-                            changes.push({
-                                kind: 'forms',
-                                id: `${baseSlug}-b-g`,
-                                name: `${baseSlug}-b-g`,
-                                label: `${baseSlug}-b-g (Generated form)`,
-                            });
-                        }
+            if (owningClass && owningClass.tier === MAX_TIER) {
+                let parents = [baseSlug];
+                for (let step = 0; step < RULES_V2_PROGRESSION.pathwaySteps; step++) {
+                    const next = [];
+                    for (const parent of parents) {
+                        const generated = `${parent}-${GENERATED_CHOICE}`;
+                        changes.push({ kind: 'forms', id: generated, name: generated, label: `${generated} (Generated form)` });
+                        next.push(generated);
+                        next.push(...beforeBranches.filter(b => b.skill && localId(beforeModel, b.skill) === skillSlug
+                            && b.fromForm && localId(beforeModel, b.fromForm) === parent
+                            && RULES_V2_PROGRESSION.writtenChoices.includes(b.choice)).map(b => localId(beforeModel, b.slug)));
                     }
+                    parents = next;
                 }
             }
         }
@@ -168,8 +154,8 @@ export function cascadeChanges(beforeModel, previewModel, _targetSlug = null) {
         for (const branchId of removedBranches) {
             const b = beforeBranches.find(r => r.slug && localId(beforeModel, r.slug) === branchId);
             if (b && b.skill && !removedSkills.has(localId(beforeModel, b.skill))) {
-                if (b.choice && (b.choice === 'a' || b.choice === 'b') && typeof b.fromForm === 'string' && b.fromForm.endsWith('-base')) {
-                    const genFormId = `${safeLabel(branchId)}-g`;
+                if (b.choice && RULES_V2_PROGRESSION.writtenChoices.includes(b.choice) && typeof b.fromForm === 'string' && b.fromForm.endsWith('-base')) {
+                    const genFormId = `${safeLabel(branchId)}-${GENERATED_CHOICE}`;
                     if (!changes.some(c => c.kind === 'forms' && c.id === genFormId)) {
                         changes.push({
                             kind: 'forms',
@@ -231,13 +217,13 @@ function getUniqueClassSlug(model, base = 'new-class') {
             }
         }
     }
-    base = base.slice(0, 54).replace(/-+$/, '');
-    if (!existing.has(base)) return base;
-    let n = 1;
-    while (existing.has(`${base}-${n}`)) {
-        n++;
+    base = base.slice(0, RULES_V2_LIMITS.slug).replace(/-+$/, '');
+    let candidate = base;
+    for (let n = 1; existing.has(candidate); n++) {
+        const suffix = `-${n}`;
+        candidate = `${base.slice(0, RULES_V2_LIMITS.slug - suffix.length).replace(/-+$/, '')}${suffix}`;
     }
-    return `${base}-${n}`;
+    return candidate;
 }
 
 // Renders the Classes screen, Inspector, and Cascade Removal dialog.
@@ -269,7 +255,7 @@ export function renderClasses(ctx) {
 
     const header = el(doc, 'div', '', { class: 'classes-header' });
     const title = el(doc, 'h1', 'Classes');
-    const subtitle = el(doc, 'div', 'Tier 0 → 3 · every class has exactly 3 skills · every leaf is tier 3', { class: 'classes-subtitle' });
+    const subtitle = el(doc, 'div', `Tier ${TIERS[0]} → ${MAX_TIER} · every class has exactly ${SKILLS_PER_CLASS} skills · every leaf is tier ${MAX_TIER}`, { class: 'classes-subtitle' });
     const addRootBtn = button(doc, '+ Root class', () => {
         const slug = getUniqueClassSlug(ctx.model, 'new-class');
         const newRecord = {
@@ -291,27 +277,21 @@ export function renderClasses(ctx) {
     header.append(title, subtitle, addRootBtn);
 
     const tierLabels = el(doc, 'div', '', { class: 'classes-tier-labels' });
-    const TIER_TITLES = ['TIER 0 · START', 'TIER 1', 'TIER 2', 'TIER 3 · ADVANCED'];
-    for (let t = 0; t < 4; t++) {
+    const TIER_TITLES = TIERS.map(tier => `TIER ${tier}${tier === TIERS[0] ? ' · START' : tier === MAX_TIER ? ' · ADVANCED' : ''}`);
+    for (let t = 0; t < TIERS.length; t++) {
         tierLabels.append(el(doc, 'div', TIER_TITLES[t]));
     }
 
     const columnsContainer = el(doc, 'div', '', { class: 'classes-columns' });
-    const tierColumns = [
-        el(doc, 'div', '', { class: 'classes-column' }),
-        el(doc, 'div', '', { class: 'classes-column' }),
-        el(doc, 'div', '', { class: 'classes-column' }),
-        el(doc, 'div', '', { class: 'classes-column' }),
-    ];
-
-    const tierBuckets = [[], [], [], []];
+    const tierColumns = TIERS.map(() => el(doc, 'div', '', { class: 'classes-column' }));
+    const tierBuckets = TIERS.map(() => []);
     for (const item of validClasses) {
         const cls = item.cls;
-        const tier = typeof cls.tier === 'number' && Number.isInteger(cls.tier) && cls.tier >= 0 && cls.tier <= 3 ? cls.tier : 0;
+        const tier = typeof cls.tier === 'number' && Number.isInteger(cls.tier) && cls.tier >= 0 && cls.tier <= MAX_TIER ? cls.tier : 0;
         tierBuckets[tier].push(item);
     }
 
-    for (let t = 1; t < 4; t++) {
+    for (let t = 1; t < TIERS.length; t++) {
         const parentOrder = new Map(tierBuckets[t - 1].map((item, i) => [localId(model, item.cls.slug), i]));
         tierBuckets[t].sort((a, b) => {
             const pA = a.cls.parent ? parentOrder.get(localId(model, a.cls.parent)) ?? 999 : 999;
@@ -320,7 +300,7 @@ export function renderClasses(ctx) {
         });
     }
 
-    for (let t = 0; t < 4; t++) {
+    for (let t = 0; t < TIERS.length; t++) {
         for (const { cls, idx } of tierBuckets[t]) {
             const isSelected = ctx.selection.id !== null && localId(model, ctx.selection.id) === localId(model, cls.slug);
             const problems = getClassProblems(model, cls, idx);
@@ -343,7 +323,7 @@ export function renderClasses(ctx) {
             }
 
             const skillCount = Array.isArray(cls.skills) ? cls.skills.length : 0;
-            const meta = el(doc, 'span', `${safeLabel(cls.slug || '')} · ${skillCount}/3 skills`, { class: 'class-card-meta' });
+            const meta = el(doc, 'span', `${safeLabel(cls.slug || '')} · ${skillCount}/${SKILLS_PER_CLASS} skills`, { class: 'class-card-meta' });
 
             let relText = '';
             if (cls.tier === 0) {
@@ -470,9 +450,9 @@ export function renderClasses(ctx) {
 
     const currentSkills = Array.isArray(cls.skills) ? [...cls.skills] : [];
     const skillsHeader = el(doc, 'div', '', { class: 'skills-header' });
-    const skillsTitle = el(doc, 'span', 'SKILLS · EXACTLY 3');
-    const skillsCount = el(doc, 'span', `${currentSkills.length} / 3`);
-    if (currentSkills.length !== 3) skillsCount.classList.add('warn-count');
+    const skillsTitle = el(doc, 'span', `SKILLS · EXACTLY ${SKILLS_PER_CLASS}`);
+    const skillsCount = el(doc, 'span', `${currentSkills.length} / ${SKILLS_PER_CLASS}`);
+    if (currentSkills.length !== SKILLS_PER_CLASS) skillsCount.classList.add('warn-count');
     skillsHeader.append(skillsTitle, skillsCount);
     skillsGroup.append(skillsHeader);
     if (!Array.isArray(cls.skills)) {
@@ -480,7 +460,7 @@ export function renderClasses(ctx) {
     }
 
     const availableSkills = records(ctx.model, 'skills').filter(s => s && typeof s === 'object');
-    const slotCount = Math.max(3, currentSkills.length);
+    const slotCount = Math.max(SKILLS_PER_CLASS, currentSkills.length);
 
     for (let slotIdx = 0; slotIdx < slotCount; slotIdx++) {
         const currentSlotSkill = localId(ctx.model, currentSkills[slotIdx]) || '';
@@ -542,7 +522,7 @@ export function renderClasses(ctx) {
     }
 
     const addSkill = button(doc, '+ Skill', () => applyEdit(ctx, addClassSkill(ctx.model, cls.slug)));
-    addSkill.disabled = currentSkills.length >= 3;
+    addSkill.disabled = currentSkills.length >= SKILLS_PER_CLASS;
     skillsGroup.append(addSkill);
 
     const clsProblems = getClassProblems(ctx.model, cls, cIdx);
@@ -571,9 +551,9 @@ export function renderClasses(ctx) {
             ctx.notify((result.errors || [{ code: 'add-failed', message: 'Could not add child class' }]).map(e => `${e.code}: ${e.message}`).join('\n'));
         }
     });
-    if (cls.tier >= 3) {
+    if (cls.tier >= MAX_TIER) {
         childBtn.disabled = true;
-        childBtn.title = 'Cannot add child class beyond tier 3';
+        childBtn.title = `Cannot add child class beyond tier ${MAX_TIER}`;
     }
 
     const removeBtn = button(doc, 'Remove…', () => openCascadeDialog(ctx, cls, removeBtn), { class: 'danger' });

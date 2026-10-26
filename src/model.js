@@ -1,20 +1,23 @@
 // Pack model: openPack, exportPack, and indexReferences (pure).
 
 import {
-    validateRulesPack,
-    exportRulesV2,
     rulesV2Schema,
     RULES_V2_LIMITS,
 } from '../vendor/story-block/src/v2/packs/rules-v2.js';
+import { validatePack } from '../vendor/story-block/src/v2/packs/validate.js';
+import { LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 import { foldKey } from '../vendor/story-block/src/text.js';
 
 export { rulesV2Schema };
 
-const MAX_DEPTH = RULES_V2_LIMITS?.depth ?? 16;
-const MAX_ARRAY = RULES_V2_LIMITS?.array ?? 1000;
-const MAX_KEYS = RULES_V2_LIMITS?.keys ?? 200;
-const MAX_STRING = RULES_V2_LIMITS?.string ?? 4000;
-const MAX_BYTES = RULES_V2_LIMITS?.packBytes ?? (512 * 1024);
+const MAX_DEPTH = RULES_V2_LIMITS.depth;
+const MAX_ARRAY = RULES_V2_LIMITS.array;
+const MAX_KEYS = RULES_V2_LIMITS.keys;
+const MAX_STRING = RULES_V2_LIMITS.string;
+const MAX_BYTES = RULES_V2_LIMITS.packBytes;
+// Original text belongs to the frozen snapshot; undo restores the same snapshot and bytes.
+const sourceTexts = new WeakMap();
+
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 /** Deeply freezes an object, array, and nested structures recursively without mutation. */
@@ -45,7 +48,7 @@ function safeClone(value) {
         const seen = new Set();
         const encoder = new TextEncoder();
 
-        function clone(val, depth) {
+        function clone(val, depth, key = '') {
             if (val === null) {
                 totalBytes += 4;
                 if (totalBytes > MAX_BYTES) return null;
@@ -67,7 +70,7 @@ function safeClone(value) {
             }
 
             if (type === 'string') {
-                if (val.length > MAX_STRING) return null;
+                if (val.length > (key === 'template' || key === 'css' ? LIMITS.code : MAX_STRING)) return null;
                 totalBytes += encoder.encode(JSON.stringify(val)).length;
                 if (totalBytes > MAX_BYTES) return null;
                 return { ok: true, value: val };
@@ -108,7 +111,7 @@ function safeClone(value) {
                         }
                         const desc = Object.getOwnPropertyDescriptor(val, String(i));
                         if (!desc || !desc.enumerable || desc.get || desc.set) return null;
-                        const res = clone(desc.value, depth + 1);
+                        const res = clone(desc.value, depth + 1, key);
                         if (!res || !res.ok) return null;
                         out.push(res.value);
                     }
@@ -124,13 +127,12 @@ function safeClone(value) {
                     if (typeof key !== 'string' || UNSAFE_KEYS.has(key)) return null;
                 }
 
-                const sortedKeys = [...ownKeys].sort();
                 totalBytes += 1; // '{'
                 if (totalBytes > MAX_BYTES) return null;
 
                 const out = {};
-                for (let i = 0; i < sortedKeys.length; i++) {
-                    const key = sortedKeys[i];
+                for (let i = 0; i < ownKeys.length; i++) {
+                    const key = ownKeys[i];
                     if (key.length > MAX_STRING) return null;
 
                     if (i > 0) {
@@ -144,7 +146,7 @@ function safeClone(value) {
 
                     const desc = Object.getOwnPropertyDescriptor(val, key);
                     if (!desc || !desc.enumerable || desc.get || desc.set) return null;
-                    const res = clone(desc.value, depth + 1);
+                    const res = clone(desc.value, depth + 1, key);
                     if (!res || !res.ok) return null;
                     out[key] = res.value;
                 }
@@ -658,151 +660,47 @@ export function indexReferences(document) {
     return refs;
 }
 
-/**
- * Opens a rules pack from a JSON string or plain object.
- * Returns an immutable snapshot model { document, validation, references, rulesHash, packHash }.
- */
+// The host owns acceptance, including the envelope's looser text rules and ordinary packs.
+function checkPack(input) {
+    try { return validatePack(input); }
+    catch { return { ok: false, errors: [{ code: 'NOT_PLAIN', path: '', message: 'Cannot read pack data' }] }; }
+}
+
+/** Original file text retained for draft persistence; absent for object inputs and edited snapshots. */
+export function sourceTextOf(model) { return sourceTexts.get(model); }
+
+/** Opens a pack as an immutable editing snapshot with the host's validation and fingerprints. */
 export function openPack(json) {
-    let parsedInput = json;
-    let parseError = null;
-
-    if (typeof json === 'string') {
-        // Match Story Block's validateRulesPack, which drops a leading byte order mark.
-        json = json.replace(/^\uFEFF/, '');
-        if (new TextEncoder().encode(json).length > MAX_BYTES) {
-            return deepFreeze({
-                document: null,
-                validation: {
-                    ok: false,
-                    errors: [{
-                        code: 'too-large',
-                        path: '',
-                        message: 'Pack text exceeds 512 KiB',
-                    }],
-                    warnings: [],
-                },
-                references: [],
-                rulesHash: null,
-                packHash: null,
-            });
+    const checked = checkPack(json);
+    let document = null;
+    if (checked.ok) {
+        // Edit the detached authored structure, never the host's normalized runtime copy.
+        // Normalization can merge distinct keys even when both fingerprints stay equal.
+        document = checked.raw;
+    } else {
+        let parsed = json;
+        if (typeof json === 'string') {
+            if (new TextEncoder().encode(json).length > MAX_BYTES) parsed = null;
+            else {
+                try { parsed = JSON.parse(json.replace(/^\uFEFF/, '')); }
+                catch { parsed = null; }
+            }
         }
-        try {
-            parsedInput = JSON.parse(json);
-        } catch (err) {
-            parseError = err;
-        }
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) document = safeClone(parsed);
     }
-
-    if (parseError) {
-        return deepFreeze({
-            document: null,
-            validation: {
-                ok: false,
-                errors: [{
-                    code: 'bad-schema',
-                    path: '',
-                    message: `Invalid JSON: ${parseError.message}`,
-                }],
-                warnings: [],
-            },
-            references: [],
-            rulesHash: null,
-            packHash: null,
-        });
-    }
-
-    if (!parsedInput || typeof parsedInput !== 'object' || Array.isArray(parsedInput)) {
-        const validation = validateRulesPack(parsedInput);
-        return deepFreeze({
-            document: null,
-            validation: {
-                ok: false,
-                errors: validation.errors || [{
-                    code: 'bad-schema',
-                    path: '',
-                    message: 'Pack must be a JSON object',
-                }],
-                warnings: validation.warnings ?? [],
-            },
-            references: [],
-            rulesHash: null,
-            packHash: null,
-        });
-    }
-
-    const checkResult = validateRulesPack(typeof json === 'string' ? json : parsedInput);
-
-    if (checkResult.ok) {
-        const exportResult = exportRulesV2(checkResult.pack);
-        if (!exportResult.ok) {
-            const safeDocument = safeClone(parsedInput);
-            const references = safeDocument ? indexReferences(safeDocument) : [];
-            return deepFreeze({
-                document: safeDocument,
-                validation: {
-                    ok: false,
-                    errors: exportResult.errors ?? [{
-                        code: 'too-large',
-                        path: '',
-                        message: 'Canonical export exceeds 512 KiB',
-                    }],
-                    warnings: checkResult.warnings ?? [],
-                },
-                references,
-                rulesHash: null,
-                packHash: null,
-            });
-        }
-
-        const canonicalDocument = JSON.parse(exportResult.text);
-        const references = indexReferences(canonicalDocument);
-
-        return deepFreeze({
-            document: canonicalDocument,
-            validation: {
-                ok: true,
-                errors: [],
-                warnings: checkResult.warnings ?? [],
-            },
-            references,
-            rulesHash: checkResult.rulesHash,
-            packHash: checkResult.packHash,
-        });
-    }
-
-    // When invalid, preserve safely cloned authored input with sorted keys for editing
-    const safeDocument = safeClone(parsedInput);
-    if (safeDocument === null) {
-        return deepFreeze({
-            document: null,
-            validation: {
-                ok: false,
-                errors: checkResult.errors ?? [],
-                warnings: checkResult.warnings ?? [],
-            },
-            references: [],
-            rulesHash: null,
-            packHash: null,
-        });
-    }
-
-    const references = indexReferences(safeDocument);
-
-    return deepFreeze({
-        document: safeDocument,
-        validation: {
-            ok: false,
-            errors: checkResult.errors ?? [],
-            warnings: checkResult.warnings ?? [],
-        },
-        references,
-        rulesHash: null,
-        packHash: null,
+    const model = deepFreeze({
+        document,
+        validation: { ok: checked.ok, errors: checked.errors ?? [], warnings: checked.warnings ?? [] },
+        references: document ? indexReferences(document) : [],
+        rulesHash: checked.ok ? checked.rulesHash ?? null : null,
+        packHash: checked.ok ? checked.packHash ?? null : null,
     });
+    if (checked.ok && typeof json === 'string') sourceTexts.set(model, json);
+    return model;
 }
 
 /**
- * Exports a model to canonical raw envelope JSON text per SPEC §7.
+ * Exports original file bytes, or deterministic host-valid JSON for an edited/object snapshot.
  * Throws Error with an `errors` property on invalid models.
  */
 export function exportPack(model) {
@@ -822,12 +720,18 @@ export function exportPack(model) {
         throw err;
     }
 
-    const exported = exportRulesV2(model.document);
-    if (!exported.ok) {
+    const source = sourceTexts.get(model);
+    const checked = checkPack(source ?? model.document);
+    if (!checked.ok) {
         const err = new Error('Cannot export invalid rules pack');
-        err.errors = exported.errors;
+        err.errors = checked.errors;
         throw err;
     }
 
-    return exported.text;
+    if (source !== undefined) return source;
+    // Serialize raw data so unrelated edits cannot re-key, trim, or add defaults to subtrees.
+    const document = checked.raw;
+    const pretty = JSON.stringify(document, null, 2) + '\n';
+    if (new TextEncoder().encode(pretty).length <= MAX_BYTES) return pretty;
+    return JSON.stringify(document);
 }

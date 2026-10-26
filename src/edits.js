@@ -1,5 +1,6 @@
 // Pack edit operations: add, renameId, remove, moveClass, and setField (pure).
 
+import { LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 import { openPack } from './model.js';
 import { schemaForKind, validateChange } from './form-schema.js';
 import { RULES_V2_LIMITS, RULES_V2_PROGRESSION, rulesV2Schema } from '../vendor/story-block/src/v2/packs/rules-v2.js';
@@ -20,13 +21,13 @@ const MAX_TIER = Math.max(...RULES_V2_PROGRESSION.tiers);
 const WRITTEN_CHOICES = RULES_V2_PROGRESSION.writtenChoices;
 const GENERATED_CHOICE = RULES_V2_PROGRESSION.generatedChoice;
 const PATHWAY_STEPS = RULES_V2_PROGRESSION.pathwaySteps;
-const MAX_SKILL_SLUG = 52; // Awaiting a dedicated upstream limit export.
+const MAX_SKILL_SLUG = RULES_V2_LIMITS.skillSlug;
 
-const MAX_DEPTH = RULES_V2_LIMITS?.depth ?? 16;
-const MAX_ARRAY = RULES_V2_LIMITS?.array ?? 1000;
-const MAX_KEYS = RULES_V2_LIMITS?.keys ?? 200;
-const MAX_STRING = RULES_V2_LIMITS?.string ?? 4000;
-const MAX_BYTES = RULES_V2_LIMITS?.packBytes ?? (512 * 1024);
+const MAX_DEPTH = RULES_V2_LIMITS.depth;
+const MAX_ARRAY = RULES_V2_LIMITS.array;
+const MAX_KEYS = RULES_V2_LIMITS.keys;
+const MAX_STRING = RULES_V2_LIMITS.string;
+const MAX_BYTES = RULES_V2_LIMITS.packBytes;
 
 /** Helper to extract the pack identifier from a document. */
 function getPackId(document) {
@@ -89,7 +90,7 @@ function getSharedRulesIdentities(document, packId, excludeKind = null, excludeN
  * Bounds traversal by depth 16, array length 1000, keys 200, string length 4000, and exact JSON bytes.
  * Returns { ok: true, value } on success, or { ok: false, error } on unsafe or non-JSON input.
  */
-function validateAndCloneValue(val, seen = new Set(), depth = 0) {
+function validateAndCloneValue(val, seen = new Set(), depth = 0, key = '') {
     try {
         if (val === null) return { ok: true, value: null };
 
@@ -100,7 +101,8 @@ function validateAndCloneValue(val, seen = new Set(), depth = 0) {
             return { ok: true, value: val };
         }
         if (type === 'string') {
-            if (val.length > MAX_STRING) return { ok: false, error: `String length exceeds limit of ${MAX_STRING}` };
+            const max = key === 'template' || key === 'css' ? LIMITS.code : MAX_STRING;
+            if (val.length > max) return { ok: false, error: `String length exceeds limit of ${max}` };
             return { ok: true, value: val };
         }
         if (type !== 'object') return { ok: false, error: `Unsupported non-JSON type: ${type}` };
@@ -128,7 +130,7 @@ function validateAndCloneValue(val, seen = new Set(), depth = 0) {
                     if (!desc || !desc.enumerable || desc.get || desc.set) {
                         return { ok: false, error: 'Array element accessor or non-enumerable' };
                     }
-                    const res = validateAndCloneValue(desc.value, seen, depth + 1);
+                    const res = validateAndCloneValue(desc.value, seen, depth + 1, key);
                     if (!res.ok) return res;
                     out.push(res.value);
                 }
@@ -153,7 +155,7 @@ function validateAndCloneValue(val, seen = new Set(), depth = 0) {
                 if (!desc || !desc.enumerable || desc.get || desc.set) {
                     return { ok: false, error: `Getter or accessor on key: ${key}` };
                 }
-                const res = validateAndCloneValue(desc.value, seen, depth + 1);
+                const res = validateAndCloneValue(desc.value, seen, depth + 1, key);
                 if (!res.ok) return res;
                 out[key] = res.value;
             }
@@ -1555,7 +1557,7 @@ export function setField(model, path, value) {
         };
     }
 
-    const validated = validateAndCloneValue(value);
+    const validated = validateAndCloneValue(value, new Set(), 0, String(last));
     if (!validated.ok) {
         return {
             ok: false,
@@ -1753,7 +1755,8 @@ export function setField(model, path, value) {
 /** Schema-driven edits share one guard; the pure engine still supports damaged drafts. */
 export function setSchemaField(model, path, value, scope) {
     const safePath = validateAndCloneValue(path);
-    const safeValue = validateAndCloneValue(value);
+    const lastKey = safePath.ok && Array.isArray(safePath.value) ? safePath.value.at(-1) : null;
+    const safeValue = validateAndCloneValue(value, new Set(), 0, typeof lastKey === 'string' ? lastKey : '');
     if (!safePath.ok || !Array.isArray(safePath.value) || !safeValue.ok) return setField(model, path, value);
     path = safePath.value;
     if (path.some(key => typeof key === 'string' && UNSAFE_KEYS.has(key))) return setField(model, path, value);
@@ -1763,7 +1766,7 @@ export function setSchemaField(model, path, value, scope) {
         const rules = path[0] === 'content' && path[1] === 'rules' && RULES_KINDS.has(path[3]);
         const kind = rules ? path[3] : path[1] === 'skills' ? 'legacySkills' : path[1];
         rootPath = path[0] === 'content' && schemaForKind(kind) ? path.slice(0, rules ? 5 : 3) : [];
-        schema = rootPath.length ? schemaForKind(kind) : { type: 'object', properties: { name: { type: 'string', minLength: 1, maxLength: 80 } } };
+        schema = rootPath.length ? schemaForKind(kind) : { type: 'object', properties: { name: { type: 'string', minLength: 1, maxLength: LIMITS.name } } };
     }
     let current = model?.document;
     for (const key of rootPath) current = current?.[key];

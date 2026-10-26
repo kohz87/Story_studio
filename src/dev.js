@@ -5,7 +5,7 @@ import { setSchemaField as setField } from './edits.js';
 import { createHistory } from './history.js';
 import { RULES_V2_LIMITS } from '../vendor/story-block/src/v2/packs/rules-v2.js';
 
-const MAX_BYTES = RULES_V2_LIMITS?.packBytes ?? (512 * 1024);
+const MAX_BYTES = RULES_V2_LIMITS.packBytes;
 
 /**
  * Mounts the development editor interface into the provided root DOM element.
