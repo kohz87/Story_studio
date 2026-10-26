@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { factions, survival } from './fixtures/data-modules/index.js';
 import { grammarPreview, grammarText, domainText, effectText, pickedValue } from '../src/data-modules/grammar.js';
+import * as adapter from '../src/data-modules/sb-adapter.js';
+import { noRuntimeBackend } from './helpers/dm-backends.js';
 import { shortRef, moduleId, expressionText, v11Findings } from '../src/data-modules/dm-model.js';
 
 test('example A: one line per kind with the short slug form and typed label domains', () => {
@@ -9,7 +11,10 @@ test('example A: one line per kind with the short slug form and typed label doma
     const preview = grammarPreview(doc, doc.content.dataModules[0]);
     assert.equal(preview.ref, 'reputation');
     assert.equal(preview.short, true);
-    assert.equal(preview.source, 'studio-preview');
+    // Story Block's runtime generates the grammar text for the pinned definition; Studio's preview adds examples around it.
+    assert.equal(preview.source, 'story-block');
+    assert.equal(preview.storyBlockText, '+ dm reputation \u2014 reason | kind: gain | faction: guild|watch|compact; - dm reputation \u2014 reason | kind: loss | faction: guild|watch|compact');
+    for (const kind of preview.kinds) assert.ok(preview.storyBlockText.includes(`${kind.op} dm ${preview.ref} \u2014 reason | kind: ${kind.name}`), kind.name);
     assert.deepEqual(preview.kinds.map(kind => kind.name), ['gain', 'loss']);
     assert.equal(preview.kinds[0].line, '+ dm reputation — <what happened> | kind: gain | faction: guild|watch|compact');
     assert.equal(preview.kinds[1].line, '- dm reputation — <what happened> | kind: loss | faction: guild|watch|compact');
@@ -99,4 +104,15 @@ test('v1.1 features are found by position and described with the fixed message',
     assert.deepEqual(found.map(item => item.local.join('.')), ['kinds.meal.check', 'kinds.rest.effects.1', 'kinds.rest.effects.2', 'rules.0.then.0', 'rules.0.when.1']);
     assert.ok(found.every(item => item.code === 'NEEDS_V1_1' && item.message.endsWith('needs data-modules v1.1')));
     assert.deepEqual(v11Findings(survival().content.dataModules[0]), []);
+});
+
+test('without a runtime the preview is Studio\u2019s own reading of the declarations and says so', () => {
+    adapter.useBackendForTests(noRuntimeBackend);
+    try {
+        const doc = factions();
+        const preview = grammarPreview(doc, doc.content.dataModules[0]);
+        assert.equal(preview.source, 'studio-preview');
+        assert.equal(preview.storyBlockText, null);
+        assert.equal(preview.kinds.length, 2);
+    } finally { adapter.useBackendForTests(null); }
 });

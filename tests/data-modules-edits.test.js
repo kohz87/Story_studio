@@ -2,7 +2,7 @@ import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { factions, factionsText, survival, survivalText, linked } from './fixtures/data-modules/index.js';
-import { oldBackend } from './helpers/dm-stub-backend.js';
+import { oldBackend } from './helpers/dm-backends.js';
 import * as adapter from '../src/data-modules/sb-adapter.js';
 import { openPack, exportPack } from '../src/model.js';
 import { createHistory } from '../src/history.js';

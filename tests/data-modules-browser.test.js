@@ -1,10 +1,10 @@
 // Data modules in a real browser: both worked examples from DATA_MODULES.md authored end to end through the forms,
-// the expression editor and the JSON repair view; Story Block's verdict on screen; the simulator through the TEST-ONLY
-// stand-in runtime (the shipped page says it is waiting for Story Block's runtime); refusals; references; and the
-// guarantees: byte-identical export of untouched data, no requests, no page errors.
+// the expression editor and the JSON repair view; Story Block's verdict on screen; the simulator on Story Block's own
+// runtime (a test-only page without the runtime shows the waiting state); refusals; references; and the guarantees:
+// byte-identical export of untouched data, no requests, no page errors.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { stubDist } from './helpers/dm-stub-dist.js';
+import { waitingDist } from './helpers/dm-waiting-dist.js';
 import { SHIPPED, withPage, upload, openDataModules, section, verdict, waitAccepted, control, fill, choose, tick, exportedPack } from './helpers/dm-browser.js';
 import { factionsText, survivalText, factions, survival, linked } from './fixtures/data-modules/index.js';
 
@@ -38,7 +38,7 @@ async function savedModules(page) {
 }
 
 test('Example A: author the Ersveil faction standing module through the forms, then simulate it', { timeout: 120000 }, async () => {
-    await withPage(stubDist().url, {}, async page => {
+    await withPage(SHIPPED, {}, async page => {
         await upload(page, blank('ersveil-factions', 'Ersveil faction standing'));
         await openDataModules(page);
         await newModule(page, 'reputation', 'Reputation');
@@ -159,18 +159,22 @@ test('Example A: author the Ersveil faction standing module through the forms, t
         assert.deepEqual(final, { standing: { guild: 6, watch: -5, compact: 0 }, title: 'Guild Friend' });
         assert.match(await page.locator('[data-sim-step="1"] .sim-card').innerText(), /standing\.guild 3 \u2192 6/);
 
-        // Deleting the second gain retracts its +3 and the title together.
+        // Deleting the second gain retracts its +3 and the title together; Story Block skips the later loss, whose
+        // recorded rule inputs changed, and says to Re-read it.
         await page.getByRole('button', { name: 'Delete step 2', exact: true }).click();
         const whatIf = await page.locator('#dm-sim-whatif').innerText();
         assert.match(whatIf, /standing\.guild: 6 \u2192 3/);
         assert.match(whatIf, /title: Guild Friend \u2192 none/);
+        assert.match(whatIf, /Step 3: applied \u2192 inactive/);
+        assert.match(whatIf, /REPLAY_PREREQUISITE/);
+        assert.match(whatIf, /Cold replay from the saved chat matches the live state\./);
         // Simulation never writes to the author document: the pack still exports exactly as before.
         assert.equal((await exportedPack(page)).toString('utf8'), beforeSimulation);
     });
 });
 
 test('Example B: author the Ersveil survival meters (imports, timer, character scope) through the forms, then simulate time', { timeout: 120000 }, async () => {
-    await withPage(stubDist().url, {}, async page => {
+    await withPage(SHIPPED, {}, async page => {
         await upload(page, blank('ersveil-survival', 'Ersveil survival meters', ['data-modules-v1', 'story-director']));
         await openDataModules(page);
         await newModule(page, 'survival', 'Survival');
@@ -281,18 +285,21 @@ test('Example B: author the Ersveil survival meters (imports, timer, character s
         assert.deepEqual(final, { Wessel: { hunger: 0, fatigue: 2 } });
         const first = await page.locator('[data-sim-step="0"]').innerText();
         assert.match(first, /hunger: 0 \u2192 12/);
-        assert.match(first, /fatigue: 6 \u2192 0 \(Requested -60; applied -6 \(0\/100\)\)/);
-        assert.match(first, /"lastMinute":360,"remainder":0/);
+        assert.match(first, /Requested -60; applied -6 \(0\/100\)\./);
+        assert.match(first, /"lastMinute":1360,"remainder":0/);
         assert.match(await page.locator('[data-sim-step="1"] .sim-fields').innerText(), /"hunger":16,"fatigue":2/);
         assert.match(await page.locator('[data-sim-step="3"]').innerText(), /refused/);
-        assert.match(await page.locator('[data-sim-step="3"]').innerText(), /DM_BOUNDS \u00b7 : Survival: hours must be 1 to 8; nothing applied\./);
+        assert.match(await page.locator('[data-sim-step="3"]').innerText(), /DM_LABEL \u00b7 : survival \(hours\): hours is outside its declared int values\. Nothing applied\./);
     });
 });
 
 const undo = page => page.getByRole('button', { name: 'Undo', exact: true });
 
-test('shipped page: both examples open accepted by Story Block, export their bytes untouched, and the simulator says it is waiting for the runtime', { timeout: 60000 }, async () => {
-    for (const text of [factionsText(), survivalText()]) {
+test('both examples open accepted by Story Block, export their bytes untouched, simulate on the runtime, and Apply then Undo restores the bytes', { timeout: 60000 }, async () => {
+    for (const [text, line, expected] of [
+        [factionsText(), '+ dm reputation \u2014 repaired the weir | kind: gain | faction: guild', /standing\.guild: 0 \u2192 3/],
+        [survivalText(), '! dm survival \u2014 ate supper | kind: meal | who: Wessel', /"Wessel":\{"hunger":0,"fatigue":0\}/],
+    ]) {
         await withPage(SHIPPED, {}, async page => {
             await upload(page, text);
             await openDataModules(page);
@@ -302,12 +309,14 @@ test('shipped page: both examples open accepted by Story Block, export their byt
             await openDataModules(page);
             await page.getByRole('button', { name: /^1\./ }).click();
             await section(page, 'Simulator');
-            assert.match(await page.locator('#dm-sim-unavailable').innerText(), /no simulator entry point yet/);
+            assert.equal(await page.locator('#dm-sim-unavailable').count(), 0, 'the shipped page has the runtime');
+            await page.getByRole('button', { name: 'Add reply', exact: true }).click();
+            await fill(page, 'Step 1 text', `<Changes>\n${line}\n</Changes>`);
             await page.getByRole('button', { name: 'Run simulation', exact: true }).click();
-            assert.match(await page.locator('#dm-sim-waiting').innerText(), /no simulator entry point yet/);
+            await page.locator('[data-sim-step="0"]').waitFor();
+            assert.match(await page.locator('#dm-sim-output').innerText(), expected);
+            assert.match(await page.locator('#dm-sim-replay').innerText(), /matches the live state/);
             // Applying an unchanged module is an edit that changes nothing; Undo returns the original bytes.
-            await openDataModules(page);
-            await page.getByRole('button', { name: /^1\./ }).click();
             await page.locator('#dm-apply').click();
             await undo(page).click();
             assert.equal((await exportedPack(page)).toString('utf8'), text);
@@ -315,8 +324,38 @@ test('shipped page: both examples open accepted by Story Block, export their byt
     }
 });
 
+test('a Story Block copy with the checker but no runtime: accepted, editable, and the simulator says what it needs', { timeout: 60000 }, async () => {
+    await withPage(waitingDist().url, {}, async page => {
+        const text = factionsText();
+        await upload(page, text);
+        await openDataModules(page);
+        await page.getByRole('button', { name: /^1\./ }).click();
+        assert.equal(await verdict(page), 'Accepted by Story Block.');
+        assert.equal(await page.locator('#dm-grammar-sb').count(), 0, 'no generated grammar text without the runtime');
+        assert.equal((await exportedPack(page)).toString('utf8'), text);
+        await openDataModules(page);
+        await page.getByRole('button', { name: /^1\./ }).click();
+        await section(page, 'Simulator');
+        assert.equal(await page.locator('#dm-sim-unavailable').innerText(), 'This needs Story Block with the data-modules runtime');
+        await page.getByRole('button', { name: 'Add reply', exact: true }).click();
+        await page.getByRole('button', { name: 'Run simulation', exact: true }).click();
+        assert.equal(await page.locator('#dm-sim-waiting').innerText(), 'This needs Story Block with the data-modules runtime');
+        assert.equal(await page.locator('[data-sim-step]').count(), 0);
+    });
+});
+
+test('the narrator grammar Story Block generates is shown beside the Studio preview', { timeout: 60000 }, async () => {
+    await withPage(SHIPPED, {}, async page => {
+        await upload(page, factionsText());
+        await openDataModules(page);
+        await page.getByRole('button', { name: /^1\./ }).click();
+        assert.equal(await page.locator('#dm-grammar-sb').innerText(), '+ dm reputation \u2014 reason | kind: gain | faction: guild|watch|compact; - dm reputation \u2014 reason | kind: loss | faction: guild|watch|compact');
+        assert.match(await page.locator('.dm-grammar').innerText(), /Generated by Story Block\./);
+    });
+});
+
 test('refusals: an unknown key stays in a safe invalid draft beside Story Block\u2019s exact error; a refused Apply changes nothing; the repair applies and undoes', { timeout: 60000 }, async () => {
-    await withPage(stubDist().url, {}, async page => {
+    await withPage(SHIPPED, {}, async page => {
         const text = factionsText();
         await upload(page, text);
         await openDataModules(page);
@@ -354,7 +393,7 @@ test('refusals: an unknown key stays in a safe invalid draft beside Story Block\
 });
 
 test('a record that is not valid JSON never reaches the draft', { timeout: 60000 }, async () => {
-    await withPage(stubDist().url, {}, async page => {
+    await withPage(SHIPPED, {}, async page => {
         await upload(page, factionsText());
         await openDataModules(page);
         await page.getByRole('button', { name: /^1\./ }).click();
@@ -372,7 +411,7 @@ test('a record that is not valid JSON never reaches the draft', { timeout: 60000
 });
 
 test('v1.1 features are refused with Story Block\u2019s message and never offered by the forms', { timeout: 60000 }, async () => {
-    await withPage(stubDist().url, {}, async page => {
+    await withPage(SHIPPED, {}, async page => {
         await upload(page, survivalText());
         await openDataModules(page);
         await page.getByRole('button', { name: /^1\./ }).click();
@@ -397,7 +436,7 @@ test('v1.1 features are refused with Story Block\u2019s message and never offere
 });
 
 test('references: a typed rename rewrites every reference by position and one Undo restores the bytes; removal that would orphan is refused', { timeout: 60000 }, async () => {
-    await withPage(stubDist().url, {}, async page => {
+    await withPage(SHIPPED, {}, async page => {
         const text = factionsText();
         await upload(page, text);
         await openDataModules(page);
@@ -441,7 +480,7 @@ test('references: a typed rename rewrites every reference by position and one Un
 });
 
 test('cross-module imports: a second module reads a named export of the first, and the reference index sees it', { timeout: 60000 }, async () => {
-    await withPage(stubDist().url, {}, async page => {
+    await withPage(SHIPPED, {}, async page => {
         await upload(page, JSON.stringify(linked(), null, 2));
         await openDataModules(page);
         await page.getByRole('button', { name: /^2\./ }).click();
@@ -465,7 +504,7 @@ test('cross-module imports: a second module reads a named export of the first, a
 });
 
 test('author text is only ever text: hostile names and descriptions render inertly in forms, grammar, verdict and simulator', { timeout: 60000 }, async () => {
-    await withPage(stubDist().url, {}, async page => {
+    await withPage(SHIPPED, {}, async page => {
         const hostile = '<img src=x onerror="window.__pwned=1"><script>window.__pwned=1</script>';
         const pack = factions();
         const [module] = pack.content.dataModules;
@@ -489,7 +528,7 @@ test('author text is only ever text: hostile names and descriptions render inert
 });
 
 test('narrow screens: the Data modules forms, grammar and simulator fit 390px without horizontal scrolling', { timeout: 60000 }, async () => {
-    await withPage(stubDist().url, { width: 390, height: 800 }, async page => {
+    await withPage(SHIPPED, { width: 390, height: 800 }, async page => {
         await upload(page, survivalText());
         await openDataModules(page);
         await page.getByRole('button', { name: /^1\./ }).click();
@@ -505,7 +544,7 @@ test('narrow screens: the Data modules forms, grammar and simulator fit 390px wi
 });
 
 test('the narrator grammar preview uses the short module reference while the slug is unique', { timeout: 60000 }, async () => {
-    await withPage(stubDist().url, {}, async page => {
+    await withPage(SHIPPED, {}, async page => {
         await upload(page, factionsText());
         await openDataModules(page);
         await page.getByRole('button', { name: /^1\./ }).click();
@@ -516,7 +555,7 @@ test('the narrator grammar preview uses the short module reference while the slu
 });
 
 test('migrations: adding a field is an additive migration Story Block accepts; narrowing a bound is explained before export', { timeout: 60000 }, async () => {
-    await withPage(stubDist().url, {}, async page => {
+    await withPage(SHIPPED, {}, async page => {
         await upload(page, survivalText());
         await openDataModules(page);
         await page.getByRole('button', { name: /^1\./ }).click();
@@ -538,5 +577,43 @@ test('migrations: adding a field is an additive migration Story Block accepts; n
         await page.getByRole('button', { name: 'Check migration', exact: true }).click();
         assert.match(await page.locator('#dm-migration-result').innerText(), /^JSON refused/);
         assert.equal((await exportedPack(page)).toString('utf8'), survivalText(), 'checking changes nothing');
+    });
+});
+
+test('simulator controls: Continue claims once, Re-read, Swipe and Reload report what Story Block does, and a time advance moves the clock', { timeout: 60000 }, async () => {
+    await withPage(SHIPPED, {}, async page => {
+        await upload(page, factionsText());
+        await openDataModules(page);
+        await page.getByRole('button', { name: /^1\./ }).click();
+        await section(page, 'Simulator');
+        await page.getByRole('button', { name: 'Add reply', exact: true }).click();
+        await page.getByRole('button', { name: 'Add Continue', exact: true }).click();
+        await page.getByRole('button', { name: 'Run simulation', exact: true }).click();
+        await page.locator('[data-sim-step="1"]').waitFor();
+        assert.match(await page.locator('[data-sim-step="1"]').innerText(), /CLAIMED/);
+        assert.equal(JSON.parse(await page.locator('#dm-sim-final').innerText()).standing.guild, 3);
+        await page.getByRole('button', { name: 'Reload', exact: true }).click();
+        assert.match(await page.locator('#dm-sim-whatif').innerText(), /If you reload step 1[\s\S]*Nothing changes\./);
+        await page.getByRole('button', { name: 'Re-read step 1', exact: true }).click();
+        assert.match(await page.locator('#dm-sim-whatif').innerText(), /If you reread step 1/);
+        await page.getByRole('button', { name: 'Swipe step 1', exact: true }).click();
+        assert.match(await page.locator('#dm-sim-whatif').innerText(), /If you swipe step 1/);
+        // Deleting the Continue drops only its text.
+        await page.getByRole('button', { name: 'Delete step 2', exact: true }).click();
+        assert.match(await page.locator('#dm-sim-whatif').innerText(), /If you delete step 2/);
+    });
+    await withPage(SHIPPED, {}, async page => {
+        await upload(page, survivalText());
+        await openDataModules(page);
+        await page.getByRole('button', { name: /^1\./ }).click();
+        await section(page, 'Simulator');
+        await page.getByRole('button', { name: 'Add time advance', exact: true }).click();
+        await page.getByRole('button', { name: 'Run simulation', exact: true }).click();
+        await page.locator('[data-sim-step="0"]').waitFor();
+        assert.deepEqual(JSON.parse(await page.locator('#dm-sim-final').innerText()), { Wessel: { hunger: 2, fatigue: 1 } });
+        assert.match(await page.locator('[data-sim-step="0"]').innerText(), /advanced/);
+        await fill(page, 'Story minute at the start', '');
+        await page.getByRole('button', { name: 'Run simulation', exact: true }).click();
+        await page.locator('#dm-sim-output').waitFor();
     });
 });

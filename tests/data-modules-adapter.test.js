@@ -1,7 +1,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { factionsText, survivalText, factions, survival } from './fixtures/data-modules/index.js';
-import { backend as stub, oldBackend } from './helpers/dm-stub-backend.js';
+import { noRuntimeBackend, oldBackend } from './helpers/dm-backends.js';
 import { DM_DESCRIPTORS, DM_LIMITS, DM_DIAGNOSTICS } from '../vendor/story-block/src/v2/data-modules/check.js';
 import { backend as vendored } from '../src/data-modules/sb-backend.js';
 import * as adapter from '../src/data-modules/sb-adapter.js';
@@ -11,14 +11,15 @@ after(() => adapter.useBackendForTests(null));
 
 const old = () => adapter.useBackendForTests(oldBackend);
 
-test('production backend: the vendored Story Block checks data modules, but has no grammar generator or simulator yet', () => {
+test('production backend: the vendored Story Block checks data modules and ships the runtime Studio simulates on', () => {
     adapter.useBackendForTests(null);
     assert.equal(vendored.source, 'vendored');
     assert.equal(vendored.supported, true);
     const state = adapter.status();
-    assert.deepEqual({ checker: state.checker, simulator: state.simulator, descriptors: state.descriptors, grammar: state.grammar }, { checker: true, simulator: false, descriptors: true, grammar: false });
+    assert.deepEqual({ checker: state.checker, simulator: state.simulator, descriptors: state.descriptors, grammar: state.grammar }, { checker: true, simulator: true, descriptors: true, grammar: true });
     assert.equal(state.message, '');
     assert.equal(adapter.WAITING_MESSAGE, 'This needs Story Block with data-modules-v1');
+    assert.equal(adapter.NO_SIMULATOR_MESSAGE, 'This needs Story Block with the data-modules runtime');
 });
 
 test('limits, descriptors and diagnostics are Story Block\u2019s own objects', () => {
@@ -26,7 +27,11 @@ test('limits, descriptors and diagnostics are Story Block\u2019s own objects', (
     assert.equal(adapter.descriptors(), DM_DESCRIPTORS);
     assert.deepEqual(adapter.limits(), { source: 'story-block', values: DM_LIMITS });
     assert.equal(adapter.diagnostics(), DM_DIAGNOSTICS);
+    // Story Block's grammar generator answers only for an accepted definition of the pack.
     assert.equal(adapter.grammar({}, {}), null);
+    const pack = factions();
+    assert.equal(adapter.grammar(pack, pack.content.dataModules[0]),
+        '+ dm reputation \u2014 reason | kind: gain | faction: guild|watch|compact; - dm reputation \u2014 reason | kind: loss | faction: guild|watch|compact');
 });
 
 test('the adapter returns the vendored importer verdict unchanged', () => {
@@ -43,13 +48,16 @@ test('the adapter returns the vendored importer verdict unchanged', () => {
     assert.equal(adapter.isWaitingError(verdict.errors[0]), false);
 });
 
-test('the simulator is waiting on the runtime, and says so precisely', () => {
-    adapter.useBackendForTests(null);
-    const result = adapter.simulate({});
-    assert.deepEqual(result, { ok: false, waiting: true, message: adapter.NO_SIMULATOR_MESSAGE });
+test('a Story Block copy with the checker but no runtime says so precisely, and offers no grammar or simulation', async () => {
+    adapter.useBackendForTests(noRuntimeBackend);
+    const state = adapter.status();
+    assert.deepEqual({ checker: state.checker, simulator: state.simulator, grammar: state.grammar, descriptors: state.descriptors }, { checker: true, simulator: false, grammar: false, descriptors: true });
+    assert.deepEqual(await adapter.simulate({}), { ok: false, waiting: true, message: adapter.NO_SIMULATOR_MESSAGE });
+    assert.equal(adapter.grammar(factions(), factions().content.dataModules[0]), null);
+    assert.equal(noRuntimeBackend.validatePack, vendored.validatePack, 'the checker is still Story Block\u2019s');
 });
 
-test('an older Story Block without the data-modules checker keeps the waiting state', () => {
+test('an older Story Block without the data-modules checker keeps the waiting state', async () => {
     old();
     const state = adapter.status();
     assert.deepEqual({ checker: state.checker, simulator: state.simulator, descriptors: state.descriptors }, { checker: false, simulator: false, descriptors: false });
@@ -58,22 +66,12 @@ test('an older Story Block without the data-modules checker keeps the waiting st
     assert.equal(adapter.isWaitingError(verdict.errors[0]), true);
     assert.equal(adapter.isWaitingError({ code: 'UNKNOWN_KIND', path: 'content.items' }), false);
     assert.equal(adapter.isWaitingError({ code: 'BAD_RECORD', path: 'content.dataModules' }), false);
-    assert.deepEqual(adapter.simulate({}), { ok: false, waiting: true, message: adapter.WAITING_MESSAGE });
+    assert.deepEqual(await adapter.simulate({}), { ok: false, waiting: true, message: adapter.WAITING_MESSAGE });
     assert.equal(adapter.descriptors(), null);
     const { source, values } = adapter.limits();
     assert.match(source, /provisional/);
     assert.equal(values.fields, 32);
     assert.equal(adapter.diagnostics(), null);
-});
-
-test('test-only stand-in: the checker is still Story Block\u2019s, only the simulator is a stand-in', () => {
-    adapter.useBackendForTests(stub);
-    const state = adapter.status();
-    assert.equal(state.source, 'test-stub');
-    assert.equal(state.simulator, true);
-    assert.equal(stub.validatePack, vendored.validatePack);
-    assert.equal(adapter.descriptors(), DM_DESCRIPTORS);
-    assert.equal(adapter.isWaitingError({ code: 'UNKNOWN_KIND', path: 'content.dataModules' }), false);
 });
 
 test('migration check: Story Block compares two checked definitions and its own errors come back', () => {

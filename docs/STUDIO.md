@@ -914,25 +914,27 @@ anything earlier in that document). Studio edits and explains; Story Block check
 All data-module knowledge reaches Studio through one adapter, [`src/data-modules/sb-adapter.js`](../src/data-modules/sb-adapter.js),
 over [`sb-backend.js`](../src/data-modules/sb-backend.js), which imports only vendored Story Block code:
 
-| Need | Story Block export used | State in this copy |
-|---|---|---|
-| Verdict on every candidate and on Apply/export | `validatePack` (the importer, with its data-module checker) | wired |
-| Controls, key lists, operator arities, adapters, pickers | `DM_DESCRIPTORS` | wired |
-| Budgets shown beside the forms | `DM_LIMITS` | wired |
-| Code explanations | `DM_DIAGNOSTICS` | wired |
-| Additive migration comparison | `validateDataMigration` on checked definitions | wired |
-| Simulator (store, bus, capture, timers, replay) | runtime entry point | waiting: not in `stage6/data-modules` yet |
-| Generated narrator grammar text | runtime generator | waiting; Studio previews from the declarations |
+| Need | Story Block code used |
+|---|---|
+| Verdict on every candidate and on Apply/export | `validatePack`, the importer with its data-module checker |
+| Controls, key lists, operator arities, adapters, pickers | `DM_DESCRIPTORS` |
+| Budgets shown beside the forms; code explanations | `DM_LIMITS`, `DM_DIAGNOSTICS` |
+| Additive migration comparison | `validateDataMigration` on two checked definitions |
+| Narrator grammar text | `grammarFor` of the data-module part, on a pin built from the checked definition |
+| Simulator (store, bus, capture, timers, replay) | the runtime itself: `createRuntime`, the real store and command bus on a fake SillyTavern (`testkit/fake-st.js`), the data-module part and interpreter |
 
-Studio contains no validator and no interpreter. The forms are built from the descriptors, so a limit, an operator
-or a key Story Block adds or drops follows after the next `npm run sync-sb`. What stays in Studio is presentation
-only: control grouping, slot types for choosing a control, and the labels in [`hints.js`](../src/data-modules/hints.js).
+Studio contains no validator and no interpreter. The forms are built from the descriptors, so a limit, an operator or
+a key Story Block adds or drops follows after the next `npm run sync-sb`. What stays in Studio is presentation only:
+control grouping, slot types for choosing a control and the labels in [`hints.js`](../src/data-modules/hints.js).
 `sync-sb` also copies Story Block's data-module fixtures (the two worked examples and one refusal vector per `DM_*`
-code) into `vendor/story-block-fixtures/` so the parity tests run from a lone clone.
+code) into `vendor/story-block-fixtures/`, so the parity tests run from a lone clone. The vendored runtime is the
+`stage6/data-modules` work in progress; `vendor/story-block/VERSION` names the commit.
 
-While the vendored copy cannot check data modules (an older sync) the screen says "This needs Story Block with
-data-modules-v1", keeps the record as a safe invalid draft and refuses to claim a pass. A copy with the checker but
-no runtime shows "This Story Block copy checks data modules but has no simulator entry point yet" in the Simulator.
+A copy that cannot check data modules (an older sync) shows "This needs Story Block with data-modules-v1", keeps the
+record as a safe invalid draft and never claims a pass. A copy with the checker but no runtime shows "This needs Story
+Block with the data-modules runtime" in the Simulator and has no generated grammar; the preview then reads the
+declarations itself. Both states are reached in tests with a clearly named test-only backend
+(`tests/helpers/dm-backends.js`, built into a separate page by `dm-waiting-dist.js`); neither is in `src/`.
 
 ### The forms
 
@@ -947,8 +949,9 @@ local kinds (line op, typed labels, once-per-reply claims, `when` with refusal t
 (value ranges with min/max/midpoint pickers or a range table per enum binding, bindings, effects, offer condition);
 timers; exports; additive migrations; screens and layouts. Names that are renamed or removed go through the typed
 reference index (below), never a text replace. Studio offers no v1.1 feature: checks (`check:`, the `check` expression)
-and `grantCoin`/`grantItem`/`grantXp` are shown only to be refused with Story Block's own "needs data-modules v1.1"
-diagnostic.
+and `grantCoin`/`grantItem`/`grantXp` are shown only to be refused. Story Block's checker already refuses them with
+its own "needs data-modules v1.1" diagnostic and that exact verdict is shown; only a copy that cannot check at all gets
+Studio's fixed refusal of the same words.
 
 **Expression editor.** An expression is never typed as text. Each operator has a picker with fixed arity and typed
 slots (field path with map key, line label, reward binding or value, import alias and field, literals typed by slot,
@@ -961,8 +964,9 @@ verdict) until you remove them, and a record that is not a JSON object never rea
 
 **Narrator grammar.** Beside the forms, each kind shows its line shape using decision 6's short module reference
 (the bare slug) when the slug is unique in the pack and the full `pack.<id>/<slug>` ID otherwise, its once-per-reply
-rule, its labels, its refusal condition and a valid example (with *Use in simulator*) and lines that must be refused
-(`DM_LABEL`/`DM_BOUNDS`). Uniqueness is judged within the pack; Story Block judges it among a chat's active pins.
+rule, its labels, its refusal condition, a valid example (with *Use in simulator*) and lines that must be refused
+(`DM_LABEL`/`DM_BOUNDS`). Above them the text Story Block itself generates for the module is shown. Uniqueness is
+judged within the pack; Story Block judges it among a chat's active pins.
 
 **References.** Targets are module, export, field, map key, reward template, import alias, line label, binding and
 reward value. The index records each reference by position (a path into the pack and how to rewrite it), including the
@@ -980,44 +984,67 @@ the module's defaults. Module presentation mounts only with the module's pin (St
 
 ### Simulator
 
-Replies (`<Changes>` blocks), Continues and story-time advances run on Story Block's runtime through
-`sb-adapter.js` on a disposable chat: attached characters, starting minute, seed and sample public query answers are
-inputs; parsed labels, refusals, field changes, the reply card text, timers and budget come back, as do the effects of
-Delete, Re-read, Swipe and Reload of a step. The panel is wired to the request/result contract in
-[`simulator.js`](../src/data-modules/simulator.js) and shows its waiting message until Story Block exports a runtime.
-A simulation never edits the pack or history. The tests exercise the panel with a stand-in runtime under `tests/helpers/`
-(`dm-stub-backend.js`, built into a separate test-only page by `dm-stub-dist.js`); it is never imported by `src/` or
-the shipped page and implements only enough of DATA_MODULES.md to run the two worked examples.
+[`sb-sim.js`](../src/data-modules/sb-sim.js) builds a whole Story Block host on a disposable in-memory chat, installs the
+candidate pack (the saved pack with the open draft substituted), pins the module as Setup does (dependencies from the
+same pack first, attached characters for a character module) and plays the scenario's replies through the real capture
+path. Inputs: attached characters, starting story minute, and the steps: a reply (`<Changes>` text), a Continue of the
+reply above, or a time advance (narrated as `! time +Nm`). Output per step: parsed lines, refusals with Story Block's
+code and reason, notes such as "Requested -60; applied -6 (0/100)", field changes, the reply-card text and timer
+cursors; for the run, final fields, budget usage and a comparison of the live state with a cold rebuild from the saved
+chat. *Delete*, *Re-read* (edit then Story Block's re-read), *Swipe* (the latest reply) and *Reload* (reopen the saved
+chat) show what Story Block does, including blocks it skips with `REPLAY_PREREQUISITE`; each reports which steps
+changed status. Nothing in Studio evaluates a line, a condition or a timer.
+
+Story Director's story time and actors are published, state-only contracts the data modules read. Studio is offline and
+has no Story Director, so the simulation registers a small sample owner of exactly those two projections
+([`sim-director.js`](../src/data-modules/sim-director.js)): a narrated `! time` line moves its clock inside the same
+reply, so timers see a new prefix rather than a stubbed answer. It rolls nothing and checks nothing, which v1 modules do
+not need; the seed is kept in the scenario for v1.1 checks. A simulation never edits the pack or history, prints no
+Story Block warnings to the console, and is repeatable.
+
+The runtime is bundled into the page, which grows the single file to about 1.4 MB. Story Block's `sdk.js` awaits an
+optional import at module level, which a classic script cannot do, so `scripts/build.mjs` bundles as ESM, drops the
+entry's unused trailing export, wraps the code in an async function and proves by compiling (not running) it that it
+is a classic script. The page is still one inline classic script. The static scan of the finished page
+([`scripts/dist-scan.mjs`](../scripts/dist-scan.mjs), run by the build and by `tests/build.test.js`) allows exactly two
+inert defaults of the bundled runtime by shape: SillyTavern's chat-file client `fetch = (...args) => globalThis.fetch(...args)`
+and the branch helpers' `importer = path => import(path)`. The page's policy (`connect-src 'none'`, no script source)
+makes neither usable, and the browser tests fail on any request.
 
 ### Guarantees kept
 
-An untouched pack, data modules included, exports its original bytes; Apply and Undo restore them. The distribution
-is deterministic (build twice, same hash), has no network access, and renders every piece of author text through
-`textContent`, form values or attribute values. Every rejected edit goes through the shared refusal helper.
+An untouched pack, data modules included, exports its original bytes; Apply and Undo restore them. The build is
+deterministic (build twice, same hash), the page makes no requests, and every piece of author text reaches the page as
+`textContent`, a form value or an attribute value. Every rejected edit goes through the shared refusal helper.
 
 ### Tests
 
 - [`data-modules-forms`](../tests/data-modules-forms.test.js), `-edits`, `-refs`, `-grammar`: forms, drafts, typed
   references, grammar and v1.1 handling.
-- [`data-modules-adapter`](../tests/data-modules-adapter.test.js): the adapter returns Story Block's objects, waiting
-  states, migration comparison.
+- [`data-modules-adapter`](../tests/data-modules-adapter.test.js): the adapter returns Story Block's objects, the
+  waiting states, the migration comparison.
 - [`data-modules-parity`](../tests/data-modules-parity.test.js): for both Story Block worked examples and every
   refusal vector, Studio's verdict (open, edit, check) equals the importer's, with exact error arrays, and the
   limit boundaries agree.
-- [`data-modules-browser`](../tests/data-modules-browser.test.js): the shipped page and the stand-in page at 1280px
-  and 390px. Both worked examples are authored end to end through the forms and expression editor (screens through
-  the JSON repair view) and the exported modules equal Story Block's fixtures exactly; then the stand-in simulator
-  reproduces the documented numbers, a delete what-if, a refused line, refusals, unknown-key drafts, v1.1 refusals,
-  typed rename/remove with Undo, cross-module imports, migrations, hostile text, and zero requests or page errors.
+- [`data-modules-simulator`](../tests/data-modules-simulator.test.js): the simulation on the real runtime reproduces
+  the design's numbers (example A Guild 0, 3, 6 with the title and Watch -5; example B 12/0, 16/2, 0/2, the 59/60/61
+  minute boundaries and remainders), refusals (`DM_LABEL`, `CLAIMED`), delete/Re-read/Swipe/Reload what-ifs,
+  `REPLAY_PREREQUISITE`, two modules in one pack, request errors, no side effects and repeatability.
+- [`data-modules-browser`](../tests/data-modules-browser.test.js): the shipped page at 1280px and 390px, plus the
+  waiting-state page. Both worked examples are authored end to end through the forms and expression editor (screens
+  through the JSON repair view) and the exported modules equal Story Block's fixtures exactly; then the real simulator
+  runs them in the page. Also unknown-key drafts, refused Apply, v1.1 refusals, typed rename/remove with Undo,
+  cross-module imports, migrations, hostile text, the simulator controls, and zero requests or page errors.
 
 ### Known issues (part 5a)
 
-- The simulator, and Story Block's generated narrator grammar, wait for the data-modules runtime on
-  `stage6/data-modules`. The request/result contract in `simulator.js` is Studio's; it will need reconciling with the
-  runtime's actual entry points when they exist, and the browser tests currently prove the panel only against the
-  test-only stand-in.
+- The vendored runtime is Story Block's work in progress on `stage6/data-modules` ("steps 2-4"). The simulation reports
+  whatever it does today; when it changes, run `npm run sync-sb` and the simulator tests show what moved. There is no
+  generated reply-card hook in it yet, so the card text shown is composed from its refusals, notes and field changes.
+- The sample Story Director publishes only time and actor identities. A pack needing another owner's data (Story
+  Director checks, coin, items, experience) is v1.1 and refused.
+- A step's field changes are the net change of the reply; two writes to one field in one reply show as one.
 - Short-reference uniqueness is judged within the pack; the host judges it among a chat's active pins.
-- Setup (enable/attach/migrate) and the replay engine are Story Block's; Studio authors definitions only.
-- There is no undo inside an unapplied draft; *Discard draft* drops all of it, and Undo after Apply reverses the
-  whole edit.
+- Setup (enable, attach, migrate) and the replay engine are Story Block's; Studio authors definitions only.
+- There is no undo inside an unapplied draft; *Discard draft* drops all of it, and Undo after Apply reverses the whole edit.
 - Screens in a module are copies. Editing the pack screen afterwards does not update the module's copy.

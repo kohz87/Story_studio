@@ -5,7 +5,7 @@
 import { backend as vendored } from './sb-backend.js';
 
 export const WAITING_MESSAGE = 'This needs Story Block with data-modules-v1';
-export const NO_SIMULATOR_MESSAGE = 'This Story Block copy checks data modules but has no simulator entry point yet';
+export const NO_SIMULATOR_MESSAGE = 'This needs Story Block with the data-modules runtime';
 
 // Shown beside the forms only while Story Block exports no limits (never used to decide validity).
 const PROVISIONAL_LIMITS = Object.freeze({
@@ -15,7 +15,7 @@ const PROVISIONAL_LIMITS = Object.freeze({
 
 let backend = vendored;
 
-/** Test seam: tests install a clearly named stand-in backend. Production code never calls this. */
+/** Test seam: tests install a clearly named test-only backend (see tests/helpers/dm-backends.js). Production code never calls this. */
 export function useBackendForTests(next) { backend = next ?? vendored; }
 
 /** Which Story Block capabilities this build has, for banners and gating. */
@@ -81,12 +81,12 @@ export function grammar(pack, module) {
 }
 
 /**
- * Runs a scenario on Story Block's runtime. Returns { ok: false, waiting: true, message } while unavailable.
- * The request shape is Studio's contract with the simulator entry point; see simulator.js.
+ * Runs a scenario on Story Block's runtime and resolves its result; { ok: false, waiting: true, message } while the
+ * vendored copy has no runtime. The request shape is Studio's contract with the simulation; see simulator.js.
  */
-export function simulate(request) {
+export async function simulate(request) {
     const state = status();
     if (!state.checker) return { ok: false, waiting: true, message: WAITING_MESSAGE };
     if (!state.simulator) return { ok: false, waiting: true, message: NO_SIMULATOR_MESSAGE };
-    return backend.simulate(request);
+    return await backend.simulate(request);
 }

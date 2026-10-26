@@ -13,7 +13,7 @@ export function linked() {
     pack.requires.capabilities = ['data-modules-v1', 'story-director'];
     pack.content.dataModules.push({
         slug: 'fatigue-watch', name: 'Fatigue watch', schema: 1, stateVersion: 1, scope: 'chat',
-        imports: { needs: { query: 'dataModules.public', args: { module: 'pack.ersveil-survival/survival', export: 'needs', who: 'ca_wessel' }, mode: 'prefix', projection: ['fatigue'] } },
+        imports: { needs: { query: 'dataModules.public', args: { module: 'pack.ersveil-survival/survival', export: 'needs', who: 'ca_wessel01' }, mode: 'prefix', projection: ['fatigue'] } },
         state: { warned: { type: 'bool', default: false } },
         kinds: {},
         rules: [{ id: 'tired', when: ['ge', ['input', 'needs', 'fatigue'], 50], then: [{ op: 'set', path: ['warned'], value: true }] }],
