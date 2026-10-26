@@ -144,7 +144,10 @@ function problemOf(key, raw, numbersOk) {
  * INPUT_KEYS reports at most its first failing rule. The range rules run only when all four numbers are valid.
  */
 export function validateInputs(raw) {
-    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    // A plain object is one whose prototype is Object.prototype or null: a Date, a Map, an array or an object made from
+    // another form is not one.
+    const proto = raw === null || typeof raw !== 'object' ? undefined : Object.getPrototypeOf(raw);
+    if (proto !== Object.prototype && proto !== null) {
         return { ok: false, errors: [{ code: 'bad-type', field: '', message: 'The code module form is not an object.' }] };
     }
     const errors = [];

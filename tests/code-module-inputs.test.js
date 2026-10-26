@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { EXAMPLE_INPUTS, INPUT_KEYS, jsString, mdText, validateInputs } from '../src/code-module/inputs.js';
+import { EXAMPLE_INPUTS, INPUT_KEYS, RESERVED_FIELDS, RESERVED_KINDS, RESERVED_MODULE_IDS, RESERVED_NAMES, jsString, mdText, validateInputs } from '../src/code-module/inputs.js';
 
 const golden = JSON.parse(readFileSync(fileURLToPath(new URL('./fixtures/code-module/golden-inputs.json', import.meta.url)), 'utf8'));
 const withValue = (key, value) => ({ ...EXAMPLE_INPUTS, [key]: value });
@@ -79,6 +79,7 @@ test('identifier bounds: one value just inside and one just outside each length'
     assert.deepEqual(errorsOf(withValue('moduleId', slug(65))), one('bad-slug', 'moduleId', 'Module id must be lowercase words joined by "-", like "lantern-oil", at most 64 characters.'));
     passes(withValue('capability', slug(64)));
     assert.deepEqual(errorsOf(withValue('capability', slug(65))), one('bad-slug', 'capability', 'Capability must be lowercase words joined by "-", like "lantern-oil", at most 64 characters.'));
+    passes(withValue('domain', 'ab'));
     passes(withValue('domain', slug(24).replace(/-/g, '')));
     assert.deepEqual(errorsOf(withValue('domain', 'a')).map(error => error.code), ['bad-name']);
     assert.deepEqual(errorsOf(withValue('domain', slug(25).replace(/-/g, ''))).map(error => error.code), ['bad-name']);
@@ -141,7 +142,7 @@ test('Name refusals: markup, braces, quotes, a line break, decomposed text, lead
     assert.deepEqual(errorsOf(withValue('name', 'Oil{{ x }}')), one('unsafe-text', 'name', unsafe));
     assert.deepEqual(errorsOf(withValue('name', 'a"b')), one('unsafe-text', 'name', unsafe));
     assert.deepEqual(errorsOf(withValue('name', 'a\nb')), one('unsafe-text', 'name', unsafe));
-    assert.deepEqual(errorsOf(withValue('name', 'Café')), one('unsafe-text', 'name', 'Name has a character in decomposed form; type it again.'));
+    assert.deepEqual(errorsOf(withValue('name', 'Cafe\u0301')), one('unsafe-text', 'name', 'Name has a character in decomposed form; type it again.'));
     assert.deepEqual(errorsOf(withValue('name', ' Lantern')), one('unsafe-text', 'name', unsafe));
     assert.deepEqual(errorsOf(withValue('name', 'x'.repeat(41))), one('too-long', 'name', 'Name is longer than 40 characters.'));
 });
@@ -192,11 +193,45 @@ test('the empty optional fields are allowed, and the other required fields are n
     assert.deepEqual(errorsOf(withValue('domain', '')), one('required', 'domain', 'State name is needed.'));
 });
 
+test('an object that is not a plain object gives the one bad-type error', () => {
+    class Form {
+        constructor() { this.moduleId = 'lantern-oil'; }
+    }
+    for (const raw of [new Date(), new Map(), Object.create(EXAMPLE_INPUTS), new Form()]) {
+        assert.deepEqual(errorsOf(raw), one('bad-type', '', 'The code module form is not an object.'), Object.prototype.toString.call(raw));
+    }
+    assert.equal(validateInputs(Object.assign(Object.create(null), EXAMPLE_INPUTS)).ok, true);
+});
+
+test('every reserved name is refused with its own sentence, in each list', () => {
+    for (const name of RESERVED_MODULE_IDS) {
+        assert.deepEqual(errorsOf(withValue('moduleId', name)), one('reserved', 'moduleId', `Module id "${name}" is taken by Story Block or another Story Suite module.`), name);
+    }
+    for (const name of RESERVED_NAMES) {
+        assert.deepEqual(errorsOf(withValue('domain', name)), one('reserved', 'domain', `State name "${name}" is taken by Story Block or another Story Suite module.`), name);
+        assert.deepEqual(errorsOf(withValue('capability', name)), one('reserved', 'capability', `Capability "${name}" is taken by Story Block or another Story Suite module.`), name);
+    }
+    for (const name of RESERVED_KINDS) {
+        assert.deepEqual(errorsOf(withValue('kind', name)), one('reserved', 'kind', `Line kind "${name}" is taken by Story Block or another Story Suite module.`), name);
+    }
+    for (const name of RESERVED_FIELDS) {
+        assert.deepEqual(errorsOf(withValue('field', name)), one('reserved', 'field', `Field "${name}" is a name every JavaScript object already has; choose another.`), name);
+    }
+});
+
+test('a Name with each forbidden character is refused as unsafe text', () => {
+    const forbidden = [String.fromCharCode(9), String.fromCharCode(0xa0), String.fromCharCode(0x200b), String.fromCharCode(0x202e), '`', String.fromCharCode(92), '|', '#', '*', '_', '[', ']', '&', '<', '>', '{', '}'];
+    const unsafe = "Name may use only letters, digits, spaces and the marks ' ’ , . ! ? : ; ( ) - – —.";
+    for (const character of forbidden) {
+        assert.deepEqual(errorsOf(withValue('name', `Oil${character}`)), one('unsafe-text', 'name', unsafe), JSON.stringify(character));
+    }
+});
+
 test('jsString makes a JS string literal that evaluates back to the same text', () => {
     assert.equal(jsString("Counts the oil left in the party's lantern."), "'Counts the oil left in the party\\'s lantern.'");
-    const hostile = 'back\\slash \'apostrophe" \n line\u2028sep </script> \u0007';
+    const hostile = ['back\\slash \'apostrophe" ', String.fromCharCode(10), ' line', String.fromCharCode(0x2028), 'sep </script> ', String.fromCharCode(0x2029), String.fromCharCode(13), String.fromCharCode(7), String.fromCharCode(0x7f), String.fromCharCode(0)].join('');
     const literal = jsString(hostile);
-    assert.doesNotMatch(literal, /[\n\r\u2028\u2029]/);
+    for (const code of [10, 13, 0x2028, 0x2029, 0x7f, 0, 7]) assert.equal(literal.includes(String.fromCharCode(code)), false, `U+${code.toString(16)} is escaped, not raw`);
     assert.equal(vm.runInNewContext(`(${literal})`), hostile);
 });
 
