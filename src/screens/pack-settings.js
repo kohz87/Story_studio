@@ -26,7 +26,7 @@ export function renderPackSettings(ctx) {
     const rules = ctx.model.document.content?.rules?.[0];
     if (rules) {
         for (const key of Object.keys(rulesV2Schema.properties)) {
-            if (!['slug', 'name', 'schema'].includes(key) && !KINDS.includes(key)) edit(['content', 'rules', 0, key], rules[key]);
+            if (!['slug', 'schema'].includes(key) && !KINDS.includes(key)) edit(['content', 'rules', 0, key], rules[key]);
         }
     }
 }

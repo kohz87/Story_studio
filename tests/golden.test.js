@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { setField } from '../src/edits.js';
 import { createHistory } from '../src/history.js';
 import { validatePack } from '../vendor/story-block/src/v2/packs/validate.js';
@@ -58,6 +59,7 @@ test('SB 2.0.0 bundled Ersveil: original bytes and both hashes survive open/expo
     assert.equal(initial.packHash, '080b94031135599cee5ff42f48e5e027a317a9cd5b4fc6a5fdea86c97680781a');
     const bytes = Buffer.from(bundledText);
     assert.equal(bytes.length, 247239);
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), 'a5fb1a515a4dfabd824cf7a8d165099fdcf366c1eeebb7c94c999989e90f2934');
     assert.ok(Buffer.from(exportPack(initial)).equals(bytes));
     const edit = setField(initial, ['name'], 'Edited Bluewatch');
     assert.equal(edit.ok, true);
@@ -102,6 +104,39 @@ test('every SB 2.0.0 host field and rules option is retained and editable', asyn
     });
 });
 
+test('host collections and manifest options survive editing, export and byte-identical undo', async t => {
+    const initial = openPack(bundledText);
+    const cases = [
+        [['economy'], { scale: 0.001, note: 'Small coins' }],
+        [['content', 'terms'], [{ name: 'Growth', levelName: 'Circle', xpName: 'Growth', tiers: { size: 5, numerals: 'arabic', enabled: false } }]],
+        [['content', 'ranks'], [{ id: 'F', title: 'First', levels: [1, 10], reward: [5, 50] }]],
+        [['content', 'crafts', 0, 'stations'], ['forge', 'salt-yard']],
+        [['content', 'meterPresets'], [{ id: 'companion', title: 'Companion', meters: [
+            { id: 'loyalty', name: 'Loyalty', min: -100, max: 100, start: 0, describe: 'Trust',
+                bands: [{ at: -100, word: 'doubtful' }, { at: 10, word: 'trusted' }], drift: { toward: 0, perDay: 1 } },
+        ], stages: [{ id: 'friend', name: 'Friend', needs: [{ meter: 'loyalty', at: 10 }], milestone: 'They trust you.' }] }]],
+        [['content', 'markets'], [{ type: 'lock-town', buy: 1.05, sell: 0.95, stock: [4, 6], note: 'River tolls' }, { tag: 'coastal', prices: { fish: 0.7, all: 1.1 } }]],
+        [['content', 'recipes', 0, 'station'], 'salt-yard'],
+        [['content', 'recipes', 0, 'known'], false],
+        [['content', 'recipes', 0, 'teaches'], 'Hollis at the forge'],
+        [['content', 'items', 0, 'carry'], 1000],
+        [['content', 'places', 0, 'secret'], true],
+        [['content', 'rules', 0, 'name'], 'Bluewatch rules'],
+        [['content', 'rules', 0, 'memory'], 'full'],
+        [['content', 'rules', 0, 'statLabels'], { STR: 'Might', CHA: 'Presence' }],
+    ];
+    for (const [path, value] of cases) await t.test(path.join('.'), () => {
+        const edited = setField(initial, path, value);
+        assert.equal(edited.ok, true, JSON.stringify(edited.errors));
+        assert.equal(edited.model.validation.ok, true, JSON.stringify(edited.model.validation.errors));
+        const reopened = parity(exportPack(edited.model), true);
+        assert.equal(reopened.rulesHash, edited.model.rulesHash);
+        assert.equal(reopened.packHash, edited.model.packHash);
+        assert.deepEqual(path.reduce((record, key) => record[key], reopened.document), value);
+        assert.equal(exportPack(edited.undo()), bundledText);
+    });
+});
+
 test('Studio refuses the same invalid fields as SB, including pin transport and runtime-only data', async t => {
     const cases = [
         ['unknown envelope', p => { p.unrecognized = true; }],
@@ -113,6 +148,14 @@ test('Studio refuses the same invalid fields as SB, including pin transport and 
         ['bad calendar holiday', p => { p.calendar.holidays = [{ name: 'Oops', month: 1, day: 401 }]; }],
         ['bad weather', p => { p.weather = { tables: [] }; }],
         ['bad recipe crafting reference', p => { p.content.recipes[0].craft = 'unknown-craft'; }],
+        ['bad term separators', p => { p.content.terms[0].levelName = 'Level|Rank'; }],
+        ['bad rank range', p => { p.content.ranks[0].levels = [10, 1]; }],
+        ['bad craft stats', p => { p.content.crafts[0].stats = ['INT', 'INT']; }],
+        ['bad meter stage reference', p => { p.content.meterPresets[0].stages = [{ id: 'friend', name: 'Friend', needs: [{ meter: 'unknown', at: 10 }] }]; }],
+        ['bad market factor', p => { p.content.markets[0].buy = 4.01; }],
+        ['bad item carry', p => { p.content.items[0].carry = 0; }],
+        ['bad rules memory', p => { p.content.rules[0].memory = 'invalid'; }],
+        ['bad stat label', p => { p.content.rules[0].statLabels = { UNKNOWN: 'Might' }; }],
         ['rules unsafe markup', p => { p.content.rules[0].skills[0].note = 'a < b'; }],
         ['host unsafe markup', p => { p.description = '<script>bad</script>'; }],
         ['screen over code limit', p => { p.screens = [{ id: 'camp', template: 'x'.repeat(LIMITS.code + 1) }]; }],

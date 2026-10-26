@@ -17,6 +17,7 @@ test('Pack settings exposes every host envelope field, remaining content kind an
     for (const key of CONTENT_KINDS.filter(key => !['rules', 'skills'].includes(key) && !KINDS.includes(key))) assert.ok(paths.includes(`content.${key}`), key);
     assert.ok(paths.includes('content.rules.0.memory'));
     assert.ok(paths.includes('content.rules.0.statLabels'));
+    assert.ok(paths.includes('content.rules.0.name'));
 });
 
 test('screen code edits use SB code limits and retain reference indexing and undo', () => {

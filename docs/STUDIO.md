@@ -627,7 +627,7 @@ codes, paths and order. A canonical export exceeding 512 KiB no longer invalidat
 `currency` (including `coins` and rules-v2 `display`), `economy`, `calendar` (including `holidays`), `weather`,
 `start`, `layouts`, `screens`, and `theme`. The pack ID remains fixed. The same screen exposes the host collections
 without dedicated record screens (`terms`, `ranks`, `crafts`, `meterPresets`, `markets`) and manifest options
-`statLabels` and `memory`. Nested fields are edited as JSON and checked by Story Block, including recipe crafting
+`name`, `statLabels` and `memory`. Nested fields are edited as JSON and checked by Story Block, including recipe crafting
 fields, screen templates/CSS/data/steps, meter bands/drift/stages, market factors and calendar/weather tables.
 Pin transport fields (`resolved`, `rulesHash`, `packHash`, `packKey`, `packVersion`, `progression`, `constantsHash`,
 `defs`) are runtime data, not extra authoring fields, and remain refused exactly as in Story Block.
