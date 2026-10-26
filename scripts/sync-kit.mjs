@@ -7,13 +7,16 @@
 // against Studio's vendored Story Block, the same code Studio itself checks with.
 //
 // authoring-kit/VERSION names the Story Block commit it was copied from and records a hash of every file, so a test fails
-// when the copy is edited by hand or drifts from its stamp. The folder is replaced as a whole. Plain Node, no dependencies.
+// when the copy is edited by hand or drifts from its stamp. The folder is replaced except its work/, which is the creator's (their
+// lore and drafts) and is never removed or overwritten; a work/ file committed in Story Block is not copied (only work/README.md is).
+// Plain Node, no dependencies.
 // `--from` defaults to $STORY_BLOCK. The checkout must have the kit committed and unmodified, so the stamp is true.
 // `npm run sync-sb` runs this as its last step.
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -74,22 +77,35 @@ function main() {
         console.error('sync-kit: the kit in that checkout has uncommitted changes; commit them first, so the stamp names a real commit');
         process.exit(1);
     }
-    const tracked = git('ls-files', '-z', '--', KIT).split('\0').filter(Boolean).map(path => path.slice(KIT.length + 1));
+    // The kit's own files only: whatever is committed under work/ (a creator's space) is never copied, except its README.
+    const tracked = git('ls-files', '-z', '--', KIT).split('\0').filter(Boolean).map(path => path.slice(KIT.length + 1))
+        .filter(rel => !rel.startsWith('work/') || rel === 'work/README.md');
+    // Build the new kit aside and only then swap it in, so a refusal never leaves a half-copied folder, and the destination's
+    // work/ (the creator's lore and drafts) is never removed or touched, whatever happens.
     const target = resolve(KIT);
-    rmSync(target, { recursive: true, force: true });
-    for (const rel of tracked) {
-        mkdirSync(dirname(join(target, rel)), { recursive: true });
-        cpSync(join(source, rel), join(target, rel));
-    }
-    const rootFile = join(target, SB_ROOT_FILE);
-    const original = readFileSync(rootFile, 'utf8');
-    if (!original.includes(SB_ROOT_LINE)) {
-        console.error(`sync-kit: ${SB_ROOT_FILE} no longer has the line this script rewrites; update scripts/sync-kit.mjs`);
-        rmSync(target, { recursive: true, force: true });
-        process.exit(1);
-    }
-    writeFileSync(rootFile, original.replace(SB_ROOT_LINE, STUDIO_SB_ROOT_LINE));
-    writeFileSync(join(target, 'VERSION'), stampOf(target, commit));
+    const stage = mkdtempSync(join(tmpdir(), 'studio-kit-'));
+    try {
+        for (const rel of tracked) {
+            mkdirSync(dirname(join(stage, rel)), { recursive: true });
+            cpSync(join(source, rel), join(stage, rel));
+        }
+        const rootFile = join(stage, SB_ROOT_FILE);
+        const original = readFileSync(rootFile, 'utf8');
+        if (!original.includes(SB_ROOT_LINE)) {
+            console.error(`sync-kit: ${SB_ROOT_FILE} no longer has the line this script rewrites; update scripts/sync-kit.mjs (nothing was changed)`);
+            rmSync(stage, { recursive: true, force: true });
+            process.exit(1);
+        }
+        writeFileSync(rootFile, original.replace(SB_ROOT_LINE, STUDIO_SB_ROOT_LINE));
+        writeFileSync(join(stage, 'VERSION'), stampOf(stage, commit));
+        mkdirSync(target, { recursive: true });
+        for (const name of readdirSync(target)) if (name !== 'work') rmSync(join(target, name), { recursive: true, force: true });
+        for (const name of readdirSync(stage)) if (name !== 'work') cpSync(join(stage, name), join(target, name), { recursive: true });
+        if (existsSync(join(stage, 'work', 'README.md'))) {
+            mkdirSync(join(target, 'work'), { recursive: true });
+            cpSync(join(stage, 'work', 'README.md'), join(target, 'work', 'README.md'));
+        }
+    } finally { rmSync(stage, { recursive: true, force: true }); }
     console.log(`sync-kit: ${KIT}/ from ${from} at ${commit.slice(0, 12)} (${kitFiles(target).length} files)`);
 }
 

@@ -5,7 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { MockDocument } from './helpers/dom.js';
@@ -122,4 +123,95 @@ test('the kit names no model, and only its README names tools', () => {
         assert.doesNotMatch(text, models, `${rel} names a model`);
         if (rel !== 'README.md') assert.doesNotMatch(text, tools, `${rel} names a tool`);
     }
+});
+
+// The sync, run for real: a small Story Block checkout with a committed kit, and a destination holding a creator's work.
+function syncScenario(change = () => {}) {
+    const dir = mkdtempSync(join(tmpdir(), 'studio-sync-kit-'));
+    const source = join(dir, 'Story_block');
+    const dest = join(dir, 'Story_studio');
+    const put = (root, rel, text) => { mkdirSync(join(root, rel, '..'), { recursive: true }); writeFileSync(join(root, rel), text); };
+    put(source, 'authoring-kit/check.mjs', '// checker\n');
+    put(source, 'authoring-kit/README.md', 'the kit\n');
+    put(source, 'authoring-kit/scripts/sb-root.mjs', `${SB_ROOT_LINE}\n`);
+    put(source, 'authoring-kit/work/README.md', 'your work goes here\n');
+    put(source, 'authoring-kit/work/committed-lore.md', 'someone committed this by mistake\n');
+    put(source, 'authoring-kit/work/lore/also-committed.md', 'and this\n');
+    change(source, put);
+    const git = (...args) => execFileSync('git', ['-C', source, '-c', 'user.name=t', '-c', 'user.email=t@t.invalid', ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    git('init', '-q');
+    git('add', '-f', '-A');
+    git('commit', '-q', '-m', 'kit');
+    put(dest, 'authoring-kit/work/draft.json', '{"mine":true}\n');
+    put(dest, 'authoring-kit/work/lore/world.md', 'my world\n');
+    put(dest, 'authoring-kit/work/README.md', 'an older readme\n');
+    put(dest, 'authoring-kit/stale-file.md', 'removed by the sync\n');
+    const run = () => {
+        try { return { status: 0, out: execFileSync(process.execPath, [new URL('../scripts/sync-kit.mjs', import.meta.url).pathname, '--from', source], { cwd: dest, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
+        catch (error) { return { status: error.status, out: String(error.stdout ?? ''), err: String(error.stderr ?? '') }; }
+    };
+    return { dir, source, dest, run, put, head: () => git('rev-parse', 'HEAD').trim() };
+}
+
+test('sync-kit keeps the destination\'s work/ whole, copies nothing from the source\'s work/ but its README, and stamps the commit', () => {
+    const scenario = syncScenario();
+    try {
+        const result = scenario.run();
+        assert.equal(result.status, 0, result.err);
+        const copy = join(scenario.dest, 'authoring-kit');
+        assert.equal(readFileSync(join(copy, 'work/draft.json'), 'utf8'), '{"mine":true}\n', 'an ignored draft survives');
+        assert.equal(readFileSync(join(copy, 'work/lore/world.md'), 'utf8'), 'my world\n', 'lore survives');
+        assert.equal(readFileSync(join(copy, 'work/README.md'), 'utf8'), 'your work goes here\n');
+        assert.equal(existsSync(join(copy, 'work/committed-lore.md')), false, 'a committed file under the source work/ is not copied');
+        assert.equal(existsSync(join(copy, 'work/lore/also-committed.md')), false);
+        assert.equal(existsSync(join(copy, 'stale-file.md')), false, 'the kit itself is replaced');
+        assert.equal(readFileSync(join(copy, 'README.md'), 'utf8'), 'the kit\n');
+        assert.equal(readFileSync(join(copy, 'scripts/sb-root.mjs'), 'utf8'), `${STUDIO_SB_ROOT_LINE}\n`);
+        const version = readFileSync(join(copy, 'VERSION'), 'utf8');
+        const stamp = readStamp(version);
+        assert.equal(stamp.commit, scenario.head());
+        assert.deepEqual(Object.keys(stamp.files).sort(), ['README.md', 'check.mjs', 'scripts/sb-root.mjs', 'work/README.md']);
+        assert.equal(version, stampOf(copy, stamp.commit));
+        assert.deepEqual(kitFiles(copy), Object.keys(stamp.files).sort(), 'the creator\'s files are not part of the stamp');
+        // A second sync changes nothing the creator owns.
+        assert.equal(scenario.run().status, 0);
+        assert.equal(readFileSync(join(copy, 'work/draft.json'), 'utf8'), '{"mine":true}\n');
+    } finally { rmSync(scenario.dir, { recursive: true, force: true }); }
+});
+
+test('sync-kit that refuses leaves the destination, its work/ included, exactly as it was', () => {
+    const noLine = syncScenario((source, put) => put(source, 'authoring-kit/scripts/sb-root.mjs', 'export const SB_V2 = somethingElse;\n'));
+    try {
+        const result = noLine.run();
+        assert.equal(result.status, 1);
+        assert.match(result.err, /no longer has the line this script rewrites/);
+        const copy = join(noLine.dest, 'authoring-kit');
+        assert.deepEqual(readdirSync(copy).sort(), ['stale-file.md', 'work']);
+        assert.equal(readFileSync(join(copy, 'work/draft.json'), 'utf8'), '{"mine":true}\n');
+        assert.equal(readFileSync(join(copy, 'work/README.md'), 'utf8'), 'an older readme\n');
+    } finally { rmSync(noLine.dir, { recursive: true, force: true }); }
+
+    const dirty = syncScenario();
+    try {
+        writeFileSync(join(dirty.source, 'authoring-kit/README.md'), 'edited, not committed\n');
+        const result = dirty.run();
+        assert.equal(result.status, 1);
+        assert.match(result.err, /uncommitted changes/);
+        assert.equal(readFileSync(join(dirty.dest, 'authoring-kit/work/draft.json'), 'utf8'), '{"mine":true}\n');
+        assert.equal(existsSync(join(dirty.dest, 'authoring-kit/stale-file.md')), true);
+    } finally { rmSync(dirty.dir, { recursive: true, force: true }); }
+});
+
+test('the checker in the copy refuses a capability the suite does not provide, and --with-capability allows it', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'studio-kit-cap-'));
+    try {
+        const pack = JSON.parse(read('examples/tiny-world/pack.json'));
+        pack.requires.capabilities.push('mystery-module');
+        const file = join(dir, 'pack.json');
+        writeFileSync(file, JSON.stringify(pack));
+        const refused = node(join(kit, 'check.mjs'), file);
+        assert.equal(refused.status, 1);
+        assert.match(refused.out, /This pack needs mystery-module[\s\S]*--with-capability/);
+        assert.equal(node(join(kit, 'check.mjs'), file, '--with-capability', 'mystery-module').status, 0);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
 });

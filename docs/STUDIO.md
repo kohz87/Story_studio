@@ -1097,7 +1097,8 @@ accepts passes the kit's checker: both run Story Block's own `validatePack`.
 
 - **Where it comes from.** The kit lives in Story Block (`authoring-kit/`) and is copied here by `npm run sync-kit`. Nothing in it
   is edited by hand. `authoring-kit/VERSION` names the Story Block commit and lists the SHA-256 of every file; the copy is exactly
-  the files Story Block has committed in that folder, never anyone's `work/` files.
+  the files Story Block has committed in that folder. `authoring-kit/work/` is the creator's (lore and drafts): the sync never
+  removes or overwrites anything in it and copies nothing from Story Block's `work/` except its README.
 - **One rewritten line.** The kit's scripts find Story Block's code through `authoring-kit/scripts/sb-root.mjs`. In Story Block that
   is the repository's `src/v2/`; the sync rewrites that one line so the copy here runs against `vendor/story-block/`, the same code
   Studio checks with. `authoring-kit/check.mjs` therefore agrees with Studio's Problems list by construction.
