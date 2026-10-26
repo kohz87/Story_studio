@@ -2030,7 +2030,8 @@ and no file outside its list changed.
   `{ ...golden, moduleId: 'hearts3', name: 'Garðar’s — tally (old)', description: 'Ünïcode: ok; yes! (really) – fine?', domain: 'hearts', field: 'left', label: 'Hearts', min: 0, max: 3, initial: 3, step: 1, kind: 'heart', kindLabel: 'n', command: 'lose', query: 'count', action: 'Lose one', screen: true }`.
   (All three were run while writing this spec: 6 of 6 tests pass in each.)
 - Each runs `spawnSync(npmCommand(), ['test'], { cwd, encoding: 'utf8', timeout: 120000 })` and asserts exit status 0
-  and `# pass 6` / `# fail 0` in the output. Temp folders are removed in `finally`.
+  and `# pass 6` / `# fail 0` in the output (or `ℹ pass 6` / `ℹ fail 0`: Node 24's default reporter, which CI uses, prints
+  the spec summary). Temp folders are removed in `finally`.
 - Done when: the test passes locally and in CI (CI has npm); total time under 30 s.
 
 ### M7: Registration and replay on Story Block's host

@@ -32,8 +32,9 @@ function runOwnTests(dir) {
     const result = spawnSync(npmCommand(), ['test'], { cwd: dir, encoding: 'utf8', timeout: 120000, env });
     const output = `${result.stdout}${result.stderr}`;
     assert.equal(result.status, 0, output);
-    assert.match(output, /^# pass 6$/m, output);
-    assert.match(output, /^# fail 0$/m, output);
+    // Node 22 prints the TAP summary (`# pass 6`) to a pipe; Node 24, which CI uses, prints the spec one (`ℹ pass 6`).
+    assert.match(output, /^(?:# |ℹ )pass 6$/m, output);
+    assert.match(output, /^(?:# |ℹ )fail 0$/m, output);
     return output;
 }
 
