@@ -427,3 +427,24 @@ test('bundled Ersveil bytes survive browser open, edit/undo and draft reload off
         assert.deepEqual(exported.document.weather, JSON.parse(weatherText));
     });
 });
+
+test('offline name edit and export preserve Unicode-distinct keys in layouts and screen data', { timeout: 30000 }, async () => {
+    await withPage({}, async page => {
+        const pack = smallRulesPack();
+        const nfc = 'caf\u00e9', nfd = 'cafe\u0301';
+        pack.layouts = [{ [nfc]: 1, [nfd]: 2 }];
+        pack.screens = [{ id: 'camp', layout: { root: 'camp' },
+            data: { [nfc]: { query: 'party.pc' }, [nfd]: { query: 'party.all' } } }];
+        await upload(page, pack);
+        await change(page, '#pack-name', 'Renamed');
+        const bytes = await download(page);
+        const exported = JSON.parse(bytes);
+        assert.deepEqual(exported, { ...pack, name: 'Renamed' });
+        for (const key of ['layouts', 'screens']) {
+            assert.deepEqual(Buffer.from(JSON.stringify(exported[key])), Buffer.from(JSON.stringify(pack[key])));
+        }
+        await page.reload();
+        await page.locator('.studio').waitFor();
+        assert.deepEqual(await download(page), bytes, 'Raw data also survives draft persistence');
+    });
+});
