@@ -995,9 +995,13 @@ chat, both with saved checkpoints and with later checkpoints stripped, including
 use the real store options `checkpointEvery: 2` and `receiptKeep: 3`, matching the testkit contract. *Delete*, *Re-read*
 (edit then Story Block's re-read), *Swipe* (the latest reply) and *Reload* (reopen the saved
 chat) show what Story Block does, including blocks it skips with `REPLAY_PREREQUISITE`; each reports which steps
-changed status. Studio derives trace rows from the current host Sources, capture results and surviving receipts,
+changed status. **Each what-if starts from the scenario as written** (the baseline saved by *Run simulation*), rather
+than building on the previous what-if. Delete, Re-read, swipe and reload are independent comparisons with that baseline.
+Studio derives trace rows from the current host Sources, capture results and surviving receipts,
 composes net field diffs for display, and checks final-state cold replay equality without claiming per-line diffs or
-host-authored card text.
+host-authored card text. Step boundaries use each receipt's revision operation position, including the reply's
+afterCapture and beforeGenerate timer hooks. Each boundary is a separate immutable copy of fields and timer cursors;
+a Continue never changes an earlier step's snapshot.
 
 The vendored runtime is the finished `stage6/data-modules` at `be84639` (see `vendor/story-block/VERSION`). Pinning reads
 `dataModules.setup` and passes its `module`, `hash` and `packHash` to `dm.pin`, with attached actor IDs as `subjects`.

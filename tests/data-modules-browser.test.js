@@ -625,6 +625,43 @@ test('simulator controls: Continue claims once, Re-read, Swipe and Reload report
     });
 });
 
+for (const twice of [false, true]) test(`review 119: ${twice ? 'two Continues' : 'a meal Continue'} preserve timer cards and independent what-ifs offline`, { timeout: 60000 }, async () => {
+    await withPage(SHIPPED, {}, async page => {
+        await upload(page, survivalText());
+        await openDataModules(page);
+        await page.getByRole('button', { name: /^1\./ }).click();
+        await section(page, 'Simulator');
+        await page.getByRole('button', { name: 'Add time advance', exact: true }).click();
+        await page.getByRole('button', { name: 'Add Continue', exact: true }).click();
+        await fill(page, 'Step 2 text', '<Changes>\n! dm survival — supper | kind: meal | who: Wessel\n</Changes>');
+        if (twice) {
+            await page.getByRole('button', { name: 'Add Continue', exact: true }).click();
+            await fill(page, 'Step 3 text', '<Changes>\n! time +60m\n</Changes>');
+        }
+        await page.getByRole('button', { name: 'Run simulation', exact: true }).click();
+        await page.locator('#dm-sim-final').waitFor();
+        const output = page.locator('#dm-sim-output');
+        const fields = [{ Wessel: { hunger: 2, fatigue: 1 } }, { Wessel: { hunger: 0, fatigue: 1 } },
+            ...(twice ? [{ Wessel: { hunger: 2, fatigue: 2 } }] : [])];
+        const readFields = scope => scope.locator(':scope > [data-sim-step] .sim-fields').allTextContents().then(rows => rows.map(text => JSON.parse(text)));
+        assert.deepEqual(await readFields(output), fields);
+        assert.match(await output.locator(':scope > [data-sim-step="0"] .sim-card').innerText(), /Wessel.hunger 0 → 2/);
+        assert.match(await output.locator(':scope > [data-sim-step="1"] .sim-card').innerText(), /Wessel.hunger 2 → 0/);
+        assert.match(await output.innerText(), /Each what-if starts from the scenario as written/);
+        await page.getByRole('button', { name: 'Delete step 2', exact: true }).click();
+        const whatIf = page.locator('#dm-sim-whatif');
+        await whatIf.getByRole('heading', { name: 'If you delete step 2', exact: true }).waitFor();
+        assert.equal(JSON.parse(await whatIf.locator('#dm-sim-final').innerText()).Wessel.hunger, twice ? 4 : 2);
+        for (const [button, title] of [['Reload', 'reload step 1'], ['Re-read step 2', 'reread step 2'], ['Swipe step 2', 'swipe step 2']]) {
+            await page.getByRole('button', { name: button, exact: true }).click();
+            await whatIf.getByRole('heading', { name: `If you ${title}`, exact: true }).waitFor();
+            if (button === 'Reload') assert.deepEqual(await readFields(whatIf), fields);
+            assert.deepEqual(JSON.parse(await whatIf.locator('#dm-sim-final').innerText()), fields.at(-1));
+            assert.deepEqual(await readFields(output), fields, 'the baseline cards retain their original snapshots');
+        }
+    });
+});
+
 test('review 116: changing a field type and effect operation keeps authored unknown keys until removed', { timeout: 60000 }, async () => {
     await withPage(SHIPPED, {}, async page => {
         await upload(page, factionsText());

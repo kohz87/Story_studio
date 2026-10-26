@@ -99,7 +99,8 @@ export function simulatorSection(S, host) {
                 sim.whatIf = { type: 'reload', step: 0, result, diff: result.ok ? compareRuns(sim.result, result) : null };
                 S.redraw();
             }));
-            output.append(heading(doc, 'What would happen if', 'h3'), actions);
+            output.append(heading(doc, 'What would happen if', 'h3'),
+                note(doc, 'Each what-if starts from the scenario as written. Delete, Re-read, swipe and reload do not build on the previous what-if.'), actions);
         }
         if (sim.whatIf) {
             const box = card(doc, heading(doc, `If you ${sim.whatIf.type} step ${sim.whatIf.step + 1}`, 'h3'));

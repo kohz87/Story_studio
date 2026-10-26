@@ -1,10 +1,13 @@
-// Review 116: trace regressions and a differential against the standalone Story Block testkit host.
+// Trace regressions and differentials against the standalone Story Block testkit host.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simulate } from '../src/data-modules/sb-adapter.js';
 import { replyText } from '../src/data-modules/simulator.js';
 import { createHost } from '../vendor/story-block/testkit/index.js';
 import { readRecord } from '../vendor/story-block/src/v2/persist.js';
+import { apply } from '../vendor/story-block/src/v2/ops.js';
+import { sampleActors, sampleDirector } from '../src/data-modules/sim-director.js';
+import { survival } from './fixtures/data-modules/index.js';
 
 const MODULE = 'pack.trace/counter';
 const line = (kind, extra = '') => `! dm counter — count | kind: ${kind}${extra}`;
@@ -18,6 +21,109 @@ const pack = () => ({
             op: '!', labels: {}, oncePerReply: [], effects: [{ op: 'add', path: ['points'], value }],
         }])),
     }] },
+});
+
+const SURVIVAL = 'pack.ersveil-survival/survival';
+const time = minutes => ({ type: 'advance', minutes });
+const needsLine = (line, type = 'continue') => ({ type, text: replyText([line]) });
+const meal = () => needsLine('! dm survival — supper | kind: meal | who: Wessel');
+const rest = () => needsLine('! dm survival — slept | kind: rest | who: Wessel | hours: 1');
+const textOf = value => value.type === 'advance' ? replyText([`! time +${value.minutes}m`]) : value.text;
+const meters = state => structuredClone(state.domains.dataModules.instances[SURVIVAL].characters.ca_wessel01);
+const meterDiff = (before, after) => ['hunger', 'fatigue'].filter(key => before[key] !== after[key])
+    .map(key => ({ path: `Wessel.${key}`, before: before[key], after: after[key] }));
+
+for (const [name, steps, action] of [
+    ['119 time then meal', [time(60), meal()], null],
+    ['119 reload time then meal', [time(60), meal()], { type: 'reload' }],
+    ['two Continues with afterCapture ticks', [time(60), meal(), needsLine('! time +61m')], null],
+    ['reload two Continues with timer remainder', [time(60), meal(), needsLine('! time +61m')], { type: 'reload' }],
+    ['delete the meal Continue', [time(60), meal(), needsLine('! time +61m')], { type: 'delete', step: 1 }],
+    ['delete an earlier timer reply', [time(60), meal(), time(61), rest()], { type: 'delete', step: 0 }],
+    ['Re-read the time before a Continue', [time(60), meal()], { type: 'reread', step: 0, text: textOf(time(120)) }],
+    ['Re-read a meal into rest', [time(60), meal()], { type: 'reread', step: 1, text: rest().text }],
+    ['swipe a meal into rest', [time(60), meal()], { type: 'swipe', step: 1, text: rest().text }],
+    ['Re-read coalesced unguarded time receipts', [time(60), needsLine('! time +61m'), meal()], { type: 'reread', step: 0, text: textOf(time(120)) }],
+    ['reload timer Continues across checkpoints and receipt trimming', Array.from({ length: 6 }, () => [time(61), meal(), rest()]).flat(), { type: 'reload' }],
+]) test(`simulator/Story Block timer differential: ${name}`, async t => {
+    t.mock.method(console, 'warn', () => {});
+    const host = await createHost({
+        modules: [sampleDirector({ minute: 1000, actors: sampleActors(['Wessel']) })],
+        storeOptions: { checkpointEvery: 2, receiptKeep: 3 },
+    });
+    t.after(() => host.close());
+    assert.equal((await host.packs.packs.install(survival())).ok, true);
+    const offer = host.sdk.query('dataModules.setup').find(row => row.module === SURVIVAL);
+    assert.equal((await host.sdk.command('dm.pin', { module: SURVIVAL, hash: offer.hash, packHash: offer.packHash, subjects: ['ca_wessel01'] })).ok, true);
+    const groups = [], live = [];
+    const texts = steps.map(textOf);
+    for (const [index, value] of steps.entries()) {
+        if (value.type === 'continue') {
+            groups.at(-1).steps.push(index);
+            await host.cont(`\n${texts[index]}`);
+        } else {
+            groups.push({ steps: [index] });
+            await host.send('Go on.', `Step ${groups.length}.\n${texts[index]}`);
+        }
+        live.push(meters(host.head()));
+    }
+    const group = groups.find(group => group.steps.includes(action?.step));
+    const at = group ? host.ctx.chat.findIndex(message => !message.is_user && message.mes.startsWith(`Step ${groups.indexOf(group) + 1}.`)) : -1;
+    if (action?.type === 'reload') {
+        await host.store.flush();
+        await host.st.loadChat(host.ctx.chat);
+    } else if (action?.type === 'delete' && steps[action.step].type !== 'continue') {
+        await host.st.deleteMessage(at);
+        group.steps = [];
+    } else if (action) {
+        if (action.type === 'delete') group.steps = group.steps.filter(index => index !== action.step);
+        else texts[action.step] = action.text;
+        const combined = `Step ${groups.indexOf(group) + 1}.\n${group.steps.map(index => texts[index]).join('\n')}`;
+        if (action.type === 'swipe') await host.swipe(combined);
+        else {
+            await host.st.editMessage(at, combined);
+            await host.sdk.reread(at);
+        }
+    }
+    const result = await simulate({ pack: survival(), module: SURVIVAL, scenario: { actors: ['Wessel'], startMinute: 1000, steps }, action });
+    accepted(result);
+    const expected = [];
+    // Independent oracle: apply the host's receipt operation chunks, skipping exactly the receipts the
+    // host marked inactive. Read fields/cursors after each story receipt and its following system receipts.
+    // No Source ordinal, prefixWitness or simulator boundary helper participates in this oracle.
+    for (const [number, group] of groups.entries()) {
+        if (!group.steps.length) continue;
+        const at = host.ctx.chat.findIndex(message => !message.is_user && message.mes.startsWith(`Step ${number + 1}.`));
+        const record = readRecord(host.ctx.chat[at]);
+        let state = host.store.before(at), before = meters(state).fields;
+        const inactive = new Set(host.store.problems().filter(problem => problem.index === at).flatMap(problem => problem.receipts ?? []));
+        let start = 0, current = -1;
+        const snapshots = [];
+        record.ops.forEach((op, index) => {
+            if (op.path !== '/meta/rev') return;
+            const receipt = record.receipts.find(receipt => receipt.rev === op.value);
+            assert.ok(receipt);
+            if (receipt.cause === 'story') current += 1;
+            if (!inactive.has(receipt.id)) state = apply(state, record.ops.slice(start, index + 1));
+            start = index + 1;
+            if (current >= 0) snapshots[current] = meters(state);
+        });
+        assert.equal(snapshots.length, group.steps.length, 'each fixture step has one accepted story receipt');
+        for (const [index, value] of snapshots.entries()) {
+            expected.push({ index: group.steps[index], fields: { Wessel: value.fields }, timers: { Wessel: value.timers }, changes: meterDiff(before, value.fields) });
+            before = value.fields;
+        }
+    }
+    assert.deepEqual(result.steps.map(({ index, fields, timers, changes }) => ({ index, fields, timers, changes })), expected);
+    if (!action || action.type === 'reload') {
+        assert.deepEqual(result.steps.map(row => row.fields.Wessel), live.map(value => value.fields), 'later Continues and reload preserve earlier live snapshots');
+        assert.deepEqual(result.steps.map(row => row.timers.Wessel), live.map(value => value.timers));
+    }
+    assert.deepEqual(result.final.fields.Wessel, meters(host.head()).fields);
+    assert.deepEqual(result.final.timers.Wessel, meters(host.head()).timers);
+    for (const row of result.steps) for (const change of row.changes) assert.ok(row.replyCard.includes(`${change.path} ${change.before} → ${change.after}`));
+    assert.deepEqual(result.problems.map(row => row.code), host.store.problems().map(row => row.code));
+    assert.deepEqual(result.replay, { equal: true });
 });
 const run = (steps, action = null) => simulate({ pack: pack(), module: MODULE, scenario: { actors: [], startMinute: 1000, steps }, action });
 const points = state => state.domains.dataModules.instances[MODULE].chat.fields.points;

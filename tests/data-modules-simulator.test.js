@@ -22,6 +22,33 @@ const scenario = (steps, extra = {}) => ({ actors: [], startMinute: 1000, seed: 
 const simulate = (pack, module, steps, action = null, extra = {}) => adapter.simulate({ pack, module, scenario: scenario(steps, extra), action });
 const threeReplies = () => [reply(gain('repaired the weir')), reply(gain('brought back the register')), reply(loss('broke the seal'))];
 
+for (const twice of [false, true]) test(`review 119: time and ${twice ? 'two Continues' : 'a meal Continue'} retain immutable step boundaries after reload`, async () => {
+    const steps = [advance(60), cont(meal), ...(twice ? [cont('! time +60m')] : [])];
+    for (const action of [null, { type: 'reload' }]) {
+        const result = await simulate(survival(), SURVIVAL, steps, action, { actors: ['Wessel'] });
+        assert.equal(result.ok, true, JSON.stringify(result));
+        assert.deepEqual(result.steps.map(row => row.fields.Wessel), [
+            { hunger: 2, fatigue: 1 }, { hunger: 0, fatigue: 1 }, ...(twice ? [{ hunger: 2, fatigue: 2 }] : []),
+        ]);
+        assert.deepEqual(result.steps.map(row => row.changes), [
+            [{ path: 'Wessel.hunger', before: 0, after: 2 }, { path: 'Wessel.fatigue', before: 0, after: 1 }],
+            [{ path: 'Wessel.hunger', before: 2, after: 0 }],
+            ...(twice ? [[{ path: 'Wessel.hunger', before: 0, after: 2 }, { path: 'Wessel.fatigue', before: 1, after: 2 }]] : []),
+        ]);
+        assert.deepEqual(result.steps.map(row => row.timers.Wessel.needs), [
+            { lastMinute: 1060, remainder: 0 }, { lastMinute: 1060, remainder: 0 },
+            ...(twice ? [{ lastMinute: 1120, remainder: 0 }] : []),
+        ]);
+        assert.match(result.steps[0].replyCard, /Wessel.hunger 0 → 2/);
+        assert.match(result.steps[1].replyCard, /Wessel.hunger 2 → 0/);
+        assert.notEqual(result.steps[0].fields, result.steps[1].fields);
+        assert.notEqual(result.steps[0].timers, result.steps[1].timers);
+        assert.throws(() => { result.steps[0].fields.Wessel.hunger = 99; }, TypeError);
+        assert.throws(() => { result.steps[0].timers.Wessel.needs.lastMinute = 0; }, TypeError);
+        assert.deepEqual(result.replay, { equal: true });
+    }
+});
+
 test('the runtime is real: the simulator is wired to the vendored Story Block host', () => {
     adapter.useBackendForTests(null);
     assert.equal(adapter.status().simulator, true);
