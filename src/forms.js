@@ -23,7 +23,7 @@ export function parseJsonInput(raw) {
 export function createDefault(input, options = {}) {
     const schema = resolveSchema(input) || {};
     const { model, kind, path = [], used = [], partial = false } = options;
-    const identities = model && ['id', 'slug'].includes(path.at(-1)) ? records(model, kind).map(record => localId(model, identity(record))) : [];
+    const identities = model && ['id', 'slug'].includes(path.at(-1)) ? records(model, kind).map(record => localId(model, identity(record, kind))) : [];
     const accepts = value => value !== undefined && validateField(schema, value).ok
         && !identities.includes(value) && !used.some(entry => JSON.stringify(entry) === JSON.stringify(value));
     if (schema.default !== undefined && accepts(schema.default)) return JSON.parse(JSON.stringify(schema.default));
@@ -37,7 +37,7 @@ export function createDefault(input, options = {}) {
     }
     if (schema.type === 'null') return accepts(null) ? null : undefined;
     if (target && model && schema.type !== 'array' && schema.type !== 'object') {
-        const entries = target === 'forms' ? formOptions(model) : records(model, target).map(identity);
+        const entries = target === 'forms' ? formOptions(model) : records(model, target).map(record => identity(record, target));
         return entries.map(id => referenceId(model, schema, id)).find(accepts);
     }
     const candidates = [];
@@ -55,7 +55,7 @@ export function createDefault(input, options = {}) {
         if (kind === 'branches' && model && schema.properties?.fromForm && schema.properties?.choice) {
             const advanced = records(model, 'classes').filter(record => record?.tier === Math.max(...RULES_V2_PROGRESSION.tiers))
                 .flatMap(record => Array.isArray(record.skills) ? record.skills.map(id => localId(model, id)) : []);
-            const taken = new Set(records(model, 'branches').map(record => localId(model, identity(record))));
+            const taken = new Set(records(model, 'branches').map(record => localId(model, identity(record, 'branches'))));
             const owner = id => advanced.filter(skill => id === `${skill}-base` || id.startsWith(`${skill}-base-`)).sort((a, b) => b.length - a.length)[0];
             const parent = formOptions(model).find(id => {
                 const skill = owner(id);
@@ -111,7 +111,17 @@ function mutate(ctx, path, value, options) {
             }
         }
     }
-    return applyEdit(ctx, setField(ctx.model, path, value, options));
+    const result = setField(ctx.model, path, value, options);
+    return applyEdit(ctx, result, followRecord(ctx, result, options));
+}
+// A key made from the name (or from a route's ends) moves with an edit to it; the selection goes with the record.
+function followRecord(ctx, result, options) {
+    if (!result?.ok || !options.kind || !options.record || !options.rootPath) return undefined;
+    let next = result.model?.document;
+    for (const part of options.rootPath) next = next?.[part];
+    const before = localId(ctx.model, identity(options.record, options.kind));
+    const after = localId(result.model, identity(next, options.kind));
+    return before && after && before !== after && ctx.selection.id === before ? { id: after } : undefined;
 }
 function pathAttrs(path, options) { return { [options.isNew ? 'data-draft-path' : 'data-path']: JSON.stringify(path) }; }
 function titleFor(path) { return typeof path.at(-1) === 'number' ? `Item ${path.at(-1) + 1}` : String(path.at(-1) || 'Record'); }
@@ -300,7 +310,7 @@ export function renderForm(ctx, container, input, value, path, passed = {}) {
         }
         if (idField && !options.isNew) {
             if (!accept(ctx, schema, next)) { control.value = display(value); return; }
-            const result = renameId(ctx.model, options.kind, identity(options.record), next);
+            const result = renameId(ctx.model, options.kind, identity(options.record, options.kind), next);
             applyEdit(ctx, result, { id: localId(result.model, next) });
         } else if (!commit(next)) control.value = display(value);
     });
@@ -332,10 +342,11 @@ function renderReference(ctx, container, target, schema, value, path, options, t
     const doc = ctx.doc;
     const current = display(value);
     const entries = target === 'forms' ? formOptions(ctx.model).map(id => ({ slug: id })) : records(ctx.model, target);
-    const choices = entries.filter(r => typeof identity(r) === 'string').map(r => {
-        const same = localId(ctx.model, identity(r)) === localId(ctx.model, current);
-        const id = referenceId(ctx.model, schema, same ? current : identity(r));
-        return { id, name: safeLabel(r.name ?? identity(r)) };
+    const choices = entries.filter(r => typeof identity(r, target) === 'string').map(r => {
+        const key = identity(r, target);
+        const same = localId(ctx.model, key) === localId(ctx.model, current);
+        const id = referenceId(ctx.model, schema, same ? current : key);
+        return { id, name: safeLabel(r.name ?? key) };
     }).filter(choice => choice.id !== null);
     const external = ['places', 'npcs', 'threads'].includes(target);
     const control = el(doc, external ? 'input' : 'select', '', pathAttrs(path, options));

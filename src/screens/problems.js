@@ -90,24 +90,24 @@ export function goToProblem(ctx, issue) {
         const branchList = KINDS.includes('branches') ? records(ctx.model, 'branches') : [];
         const branch = typeof idx === 'number' ? branchList[idx] : null;
         const owning = localId(ctx.model, branch?.skill) || branch?.skill || '';
-        const bSlug = localId(ctx.model, identity(branch)) || identity(branch) || '';
+        const bSlug = localId(ctx.model, identity(branch, 'branches')) || identity(branch, 'branches') || '';
         const inPathInspector = ['name', 'transforms', 'power', 'powerScore'].includes(rest[0]) || issue.code === 'budget-closure';
         if (owning && inPathInspector) ctx.select('skills', owning, bSlug);
         else if (bSlug) ctx.select('branches', bSlug);
     } else if (coll === 'skills') {
         const skillList = KINDS.includes('skills') ? records(ctx.model, 'skills') : [];
         const skill = typeof idx === 'number' ? skillList[idx] : null;
-        const sSlug = localId(ctx.model, identity(skill)) || identity(skill) || '';
+        const sSlug = localId(ctx.model, identity(skill, 'skills')) || identity(skill, 'skills') || '';
         if (sSlug) ctx.select('skills', sSlug, `${safeLabel(sSlug)}-base`);
     } else if (coll === 'classes') {
         const classList = KINDS.includes('classes') ? records(ctx.model, 'classes') : [];
         const cls = typeof idx === 'number' ? classList[idx] : null;
-        const cSlug = localId(ctx.model, identity(cls)) || identity(cls) || '';
+        const cSlug = localId(ctx.model, identity(cls, 'classes')) || identity(cls, 'classes') || '';
         if (cSlug) ctx.select('classes', cSlug);
     } else if (coll && KINDS.includes(coll)) {
         const list = records(ctx.model, coll);
         const rec = typeof idx === 'number' ? list[idx] : null;
-        const rId = localId(ctx.model, identity(rec)) || identity(rec) || '';
+        const rId = localId(ctx.model, identity(rec, coll)) || identity(rec, coll) || '';
         if (rId) ctx.select(coll, rId);
     }
 

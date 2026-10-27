@@ -7,6 +7,7 @@ import {
 import { validatePack } from './data-modules/sb-adapter.js';
 import { LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 import { foldKey } from '../vendor/story-block/src/text.js';
+import { identity } from './identity.js';
 
 export { rulesV2Schema };
 
@@ -202,10 +203,11 @@ export function indexReferences(document) {
     const placeSlugMap = new Map();
     for (const p of contentPlaces) {
         if (!p || typeof p !== 'object') continue;
-        const keys = [p.slug, ...[p.name, ...(Array.isArray(p.aliases) ? p.aliases : [])]
+        const slug = identity(p, 'places');
+        const keys = [slug, ...[p.name, ...(Array.isArray(p.aliases) ? p.aliases : [])]
             .filter(value => typeof value === 'string').map(foldKey)];
         for (const key of keys) {
-            if (key && !placeSlugMap.has(key)) placeSlugMap.set(key, p.slug);
+            if (key && !placeSlugMap.has(key)) placeSlugMap.set(key, slug);
         }
     }
 
@@ -226,9 +228,10 @@ export function indexReferences(document) {
     const itemLookup = new Map();
     for (const it of contentItems) {
         if (!it || typeof it !== 'object') continue;
-        const targetId = toFull(it.slug || it.id);
+        const key = identity(it, 'items');
+        const targetId = toFull(key || it.id);
         if (it.id) itemLookup.set(it.id, targetId);
-        if (it.slug) itemLookup.set(it.slug, targetId);
+        if (key) itemLookup.set(key, targetId);
         if (it.name) {
             itemLookup.set(it.name, targetId);
             itemLookup.set(it.name.trim().toLowerCase(), targetId);
@@ -258,9 +261,10 @@ export function indexReferences(document) {
     const raceLookup = new Map();
     for (const r of contentRaces) {
         if (!r || typeof r !== 'object') continue;
-        const targetId = toFull(r.slug || r.id);
+        const key = identity(r, 'races');
+        const targetId = toFull(key || r.id);
         if (r.id) raceLookup.set(r.id, targetId);
-        if (r.slug) raceLookup.set(r.slug, targetId);
+        if (key) raceLookup.set(key, targetId);
         if (r.name) {
             raceLookup.set(r.name, targetId);
             raceLookup.set(r.name.trim().toLowerCase(), targetId);
@@ -280,9 +284,10 @@ export function indexReferences(document) {
     const talentLookup = new Map();
     for (const t of contentTalents) {
         if (!t || typeof t !== 'object') continue;
-        const targetId = toFull(t.slug || t.id);
+        const key = identity(t, 'talents');
+        const targetId = toFull(key || t.id);
         if (t.id) talentLookup.set(t.id, targetId);
-        if (t.slug) talentLookup.set(t.slug, targetId);
+        if (key) talentLookup.set(key, targetId);
         if (t.name) {
             talentLookup.set(t.name, targetId);
             talentLookup.set(t.name.trim().toLowerCase(), targetId);
@@ -302,9 +307,10 @@ export function indexReferences(document) {
     const legacySkillLookup = new Map();
     for (const s of contentLegacySkills) {
         if (!s || typeof s !== 'object') continue;
-        const targetId = toFull(s.slug || s.id);
+        const key = identity(s, 'legacySkills');
+        const targetId = toFull(key || s.id);
         if (s.id) legacySkillLookup.set(s.id, targetId);
-        if (s.slug) legacySkillLookup.set(s.slug, targetId);
+        if (key) legacySkillLookup.set(key, targetId);
         if (s.name) {
             legacySkillLookup.set(s.name, targetId);
             legacySkillLookup.set(s.name.trim().toLowerCase(), targetId);
@@ -331,7 +337,7 @@ export function indexReferences(document) {
             for (let cIdx = 0; cIdx < m.classes.length; cIdx++) {
                 const cls = m.classes[cIdx];
                 if (!cls || typeof cls !== 'object') continue;
-                const ownerId = toFull(cls.slug || cls.id || `class-${cIdx}`);
+                const ownerId = toFull(identity(cls, 'classes') || `class-${cIdx}`);
 
                 if (cls.parent !== null && cls.parent !== undefined) {
                     addRef(refs, 'classes', ownerId, ['content', 'rules', rIdx, 'classes', cIdx, 'parent'], 'classes', toFull(cls.parent));
@@ -352,7 +358,7 @@ export function indexReferences(document) {
             for (let sIdx = 0; sIdx < m.skills.length; sIdx++) {
                 const skl = m.skills[sIdx];
                 if (!skl || typeof skl !== 'object') continue;
-                const ownerId = toFull(skl.slug || skl.id || `skill-${sIdx}`);
+                const ownerId = toFull(identity(skl, 'skills') || `skill-${sIdx}`);
 
                 if (skl.replaces !== null && skl.replaces !== undefined) {
                     addRef(refs, 'skills', ownerId, ['content', 'rules', rIdx, 'skills', sIdx, 'replaces'], 'skills', toFull(skl.replaces));
@@ -370,7 +376,7 @@ export function indexReferences(document) {
             for (let bIdx = 0; bIdx < m.branches.length; bIdx++) {
                 const br = m.branches[bIdx];
                 if (!br || typeof br !== 'object') continue;
-                const ownerId = toFull(br.slug || br.id || `branch-${bIdx}`);
+                const ownerId = toFull(identity(br, 'branches') || `branch-${bIdx}`);
 
                 if (br.skill) {
                     addRef(refs, 'branches', ownerId, ['content', 'rules', rIdx, 'branches', bIdx, 'skill'], 'skills', toFull(br.skill));
@@ -398,7 +404,7 @@ export function indexReferences(document) {
             for (let tIdx = 0; tIdx < m.trainers.length; tIdx++) {
                 const trn = m.trainers[tIdx];
                 if (!trn || typeof trn !== 'object') continue;
-                const ownerId = toFull(trn.slug || trn.id || `trainer-${tIdx}`);
+                const ownerId = toFull(identity(trn, 'trainers') || `trainer-${tIdx}`);
 
                 if (trn.place) {
                     addRef(refs, 'trainers', ownerId, ['content', 'rules', rIdx, 'trainers', tIdx, 'place'], 'places', resolvePlaceRef(trn.place));
@@ -429,7 +435,7 @@ export function indexReferences(document) {
         for (let cIdx = 0; cIdx < safeDoc.content.creatures.length; cIdx++) {
             const foe = safeDoc.content.creatures[cIdx];
             if (!foe || typeof foe !== 'object') continue;
-            const ownerId = toFull(foe.slug || foe.id || `creature-${cIdx}`);
+            const ownerId = toFull(identity(foe, 'creatures') || `creature-${cIdx}`);
 
             if (Array.isArray(foe.skills)) {
                 for (let sIdx = 0; sIdx < foe.skills.length; sIdx++) {
@@ -455,7 +461,7 @@ export function indexReferences(document) {
         for (let qIdx = 0; qIdx < safeDoc.content.quests.length; qIdx++) {
             const q = safeDoc.content.quests[qIdx];
             if (!q || typeof q !== 'object') continue;
-            const ownerId = toFull(q.slug || q.id || `quest-${qIdx}`);
+            const ownerId = toFull(identity(q, 'quests') || `quest-${qIdx}`);
 
             // quest.giver is explicitly an external NSD NPC ID (§7), NOT a creature reference.
             if (q.giver) {
@@ -529,7 +535,7 @@ export function indexReferences(document) {
         for (let sIdx = 0; sIdx < safeDoc.content.shops.length; sIdx++) {
             const shp = safeDoc.content.shops[sIdx];
             if (!shp || typeof shp !== 'object') continue;
-            const ownerId = toFull(shp.slug || shp.id || `shop-${sIdx}`);
+            const ownerId = toFull(identity(shp, 'shops') || `shop-${sIdx}`);
 
             if (shp.place) {
                 addRef(refs, 'shops', ownerId, ['content', 'shops', sIdx, 'place'], 'places', resolvePlaceRef(shp.place));
@@ -560,7 +566,7 @@ export function indexReferences(document) {
         for (let rIdx = 0; rIdx < safeDoc.content.recipes.length; rIdx++) {
             const rcp = safeDoc.content.recipes[rIdx];
             if (!rcp || typeof rcp !== 'object') continue;
-            const ownerId = toFull(rcp.slug || rcp.id || `recipe-${rIdx}`);
+            const ownerId = toFull(identity(rcp, 'recipes') || `recipe-${rIdx}`);
 
             if (rcp.makes) {
                 addRef(refs, 'recipes', ownerId, ['content', 'recipes', rIdx, 'makes'], 'items', toFull(rcp.makes));
@@ -581,7 +587,7 @@ export function indexReferences(document) {
         for (let rtIdx = 0; rtIdx < safeDoc.content.routes.length; rtIdx++) {
             const route = safeDoc.content.routes[rtIdx];
             if (!route || typeof route !== 'object') continue;
-            const ownerId = toFull(route.slug || route.id || `route-${rtIdx}`);
+            const ownerId = toFull(identity(route, 'routes') || `route-${rtIdx}`);
 
             if (route.from) {
                 addRef(refs, 'routes', ownerId, ['content', 'routes', rtIdx, 'from'], 'places', resolvePlaceRef(route.from));
@@ -596,7 +602,7 @@ export function indexReferences(document) {
         for (let eIdx = 0; eIdx < safeDoc.content.events.length; eIdx++) {
             const evt = safeDoc.content.events[eIdx];
             if (!evt || typeof evt !== 'object') continue;
-            const ownerId = toFull(evt.slug || evt.id || `event-${eIdx}`);
+            const ownerId = toFull(identity(evt, 'events') || `event-${eIdx}`);
 
             if (evt.after) {
                 addRef(refs, 'events', ownerId, ['content', 'events', eIdx, 'after'], 'events', toFull(evt.after));
@@ -608,7 +614,7 @@ export function indexReferences(document) {
         for (let pIdx = 0; pIdx < safeDoc.content.presets.length; pIdx++) {
             const prs = safeDoc.content.presets[pIdx];
             if (!prs || typeof prs !== 'object') continue;
-            const ownerId = toFull(prs.slug || prs.id || `preset-${pIdx}`);
+            const ownerId = toFull(identity(prs, 'presets') || `preset-${pIdx}`);
 
             if (prs.race && typeof prs.race === 'string') {
                 addRef(refs, 'presets', ownerId, ['content', 'presets', pIdx, 'race'], 'races', resolveRaceRef(prs.race));

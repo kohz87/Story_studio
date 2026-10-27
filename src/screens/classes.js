@@ -13,7 +13,7 @@ const GENERATED_CHOICE = RULES_V2_PROGRESSION.generatedChoice;
 // Sets or replaces a field on a class record by slug.
 export function classField(model, classSlug, fieldName, value) {
     const list = records(model, 'classes');
-    const idx = list.findIndex(c => c && typeof c === 'object' && localId(model, identity(c)) === localId(model, classSlug));
+    const idx = list.findIndex(c => c && typeof c === 'object' && localId(model, identity(c, 'classes')) === localId(model, classSlug));
     if (idx === -1) {
         return { ok: false, model, errors: [{ code: 'not-found', message: `Class ${safeLabel(classSlug)} not found` }] };
     }
@@ -34,15 +34,15 @@ export function cascadeChanges(beforeModel, previewModel, _targetSlug = null) {
         const afterList = records(previewModel, kind);
         const afterIds = new Set(
             afterList
-                .map(r => (r && typeof r === 'object' ? localId(previewModel, identity(r)) : null))
+                .map(r => (r && typeof r === 'object' ? localId(previewModel, identity(r, kind)) : null))
                 .filter(Boolean)
         );
 
         for (const item of beforeList) {
             if (!item || typeof item !== 'object') continue;
-            const rawId = identity(item);
+            const rawId = identity(item, kind);
             const id = localId(beforeModel, rawId);
-            if (!afterIds.has(id)) {
+            if (id && !afterIds.has(id)) {
                 const name = typeof item.name === 'string' && item.name ? item.name : id;
                 const kindLabel = LABELS[kind] || kind;
                 changes.push({
@@ -212,7 +212,7 @@ function getUniqueClassSlug(model, base = 'new-class') {
     for (const k of KINDS) {
         for (const r of records(model, k)) {
             if (r && typeof r === 'object') {
-                const id = identity(r);
+                const id = identity(r, k);
                 if (id) existing.add(localId(model, id));
             }
         }
