@@ -2,7 +2,7 @@ import { applyEdit } from './apply-edit.js';
 import { safeLabel, el, button, field } from './dom.js';
 import { setSchemaField as setField, renameId } from './edits.js';
 import { records, identity, localId } from './records.js';
-import { referenceTarget, resolveSchema, validateField, validateChange, matchesVariant } from './form-schema.js';
+import { referenceTarget, resolveSchema, validateField, validateChange, matchesVariant, VARIANT_LABELS } from './form-schema.js';
 import { validateRulesPack, RULES_V2_LIMITS, RULES_V2_PROGRESSION } from '../vendor/story-block/src/v2/packs/rules-v2.js';
 
 export function parseNumberInput(raw) {
@@ -211,11 +211,11 @@ export function renderForm(ctx, container, input, value, path, passed = {}) {
         placeholder.selected = active < 0; select.append(placeholder);
         schema.oneOf.forEach((s, i) => {
             const discriminator = Object.entries(s.properties || {}).find(([, v]) => v.const !== undefined);
-            const caption = s.title || discriminator?.[1].const || (s.type === 'null' ? '(none / null)' : s.type || s.enum?.join(' / ') || `Option ${i + 1}`);
+            const caption = VARIANT_LABELS[s.defName] || s.title || discriminator?.[1].const || (s.type === 'null' ? '(none / null)' : s.type || s.enum?.join(' / ') || `Option ${i + 1}`);
             const option = el(doc, 'option', caption, { value: String(i) });
             option.selected = i === active; select.append(option);
         });
-        group.append(field(doc, `${title} variant`, select));
+        group.append(field(doc, `${title} ${schema.oneOf.every(s => VARIANT_LABELS[s.defName]) ? 'type' : 'variant'}`, select));
         select.addEventListener('change', () => {
             if (select.value === '') return;
             const variant = schema.oneOf[Number(select.value)];

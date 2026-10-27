@@ -30,6 +30,7 @@ notes (`studio-mocks/`); the look is the glass themes, Nunito, accent `#7b6cf0`.
 | `kind-trainers` | Left rail: trainers | 24 |
 | `budget` | Power budget meter | 24 |
 | `cascade-remove` | Remove with everything that depends on it: a branch with a cut | 24 |
+| `chevron-down` | The pack parts disclosure on a phone (closed or open) | 24 |
 | `undo`, `redo` | History buttons; mirror images of each other | 24 |
 | `open-file` | Open a pack file | 24 |
 | `export-file` | Export a pack file | 24 |
@@ -58,6 +59,7 @@ with that module's `svgIcon(doc, id)` (viewBox 256, `fill="currentColor"`, so th
 | `kind-places` | `ph-map-pin` |
 | `kind-quests` | `ph-scroll` |
 | `kind-more` | `ph-dots-three-outline` |
+| `info` (record notes) | `ph-info` |
 | `warning` (problem) | `ph-warning` |
 | `ready` (check) | `ph-check-circle` |
 

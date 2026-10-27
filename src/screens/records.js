@@ -1,6 +1,6 @@
 import { applyEdit } from '../apply-edit.js';
-import { safeLabel, el, button } from '../dom.js';
-import { KINDS, LABELS, records, identity, localId, kindPath } from '../records.js';
+import { safeLabel, el, button, icon } from '../dom.js';
+import { KINDS, LABELS, records, identity, localId, kindPath, TRAITS, trait } from '../records.js';
 import { add, remove } from '../edits.js';
 import { cascadeChanges } from './classes.js';
 import { renderForm, createDefault } from '../forms.js';
@@ -20,6 +20,83 @@ function getRecordProblems(model, kind, record, idx) {
         if (normId && (msg.includes(`"${safeLabel(normId)}"`) || msg.includes(`'${safeLabel(normId)}'`))) return true;
         return false;
     });
+}
+
+const FILTERS = [['all', 'All'], ['fixed', 'Fixed'], ['template', 'Templates']];
+
+function note(doc, ...parts) {
+    const text = el(doc, 'p');
+    text.append(...parts);
+    const box = el(doc, 'div', '', { class: 'records-note', role: 'note' });
+    box.append(icon(doc, 'info'), text);
+    return box;
+}
+
+// "the 2 markets records set their ..." in the right number, for the notes that explain how shops and places meet markets.
+function marketsClause(doc, count, detail, capital) {
+    const the = capital ? 'The' : 'the';
+    const code = el(doc, 'code', 'markets');
+    if (count === 0) return [capital ? 'This pack has no ' : 'this pack has no ', code, ' records'];
+    return count === 1 ? [`${the} 1 `, code, ` record sets its ${detail}`] : [`${the} ${count} `, code, ` records set their ${detail}`];
+}
+
+function marketPlaces(model) {
+    return records(model, 'places').filter(place => typeof place?.market === 'string' && place.market !== '').length;
+}
+
+function headerNote(ctx, kind, count) {
+    const doc = ctx.doc;
+    if (kind === 'creatures') return note(doc, 'Base foes: each fight scales them to its danger; the narrator can make named variants.');
+    if (kind === 'trainers') return note(doc, 'Trainers are fixed records: each stands at a place, with set skills and a fee. Training refuses an unknown trainer.');
+    if (kind !== 'shops') return null;
+    const places = marketPlaces(ctx.model);
+    const link = el(doc, 'a', 'Places / Markets', { class: 'link-ish', href: '#places' });
+    link.addEventListener('click', event => { event.preventDefault?.(); ctx.select('places'); });
+    const lead = count === 1 ? 'This shop is fixed: a named shop with set stock and prices.'
+        : count === 0 ? 'Shops are fixed: named shops with set stock and prices.' : `These ${count} shops are fixed: named shops with set stock and prices.`;
+    const where = places === 0 ? 'none in this pack do' : places === 1 ? '1 place in this pack does' : `${places} places in this pack do`;
+    return note(doc, `${lead} Separately, RPG Battle\u2019s trade makes traders at any place that has a market type (${where}); `,
+        ...marketsClause(doc, records(ctx.model, 'markets').length, 'price factors and how many things a trader has', false), '. See ', link, '.');
+}
+
+// The inspector's own note for a template: how the narrator turns the record into a named one.
+function templateNote(ctx, kind, record, id) {
+    const doc = ctx.doc;
+    if (kind === 'creatures') {
+        return note(doc, 'Base stat block. Each fight scales it to that fight\u2019s danger when it is offered. For a named variant the narrator writes ',
+            el(doc, 'code', `! encounter <name> | like: ${safeLabel(id)}`));
+    }
+    if (kind !== 'quests') return null;
+    const rank = typeof record.rank === 'string' && record.rank ? ` for rank ${safeLabel(record.rank)}` : '';
+    return note(doc, `Template: a reward range${rank}. The actual reward is fixed when the narrator offers one, with `, el(doc, 'code', `| like: ${safeLabel(id)}`));
+}
+
+function questFilter(ctx, counts, active) {
+    const doc = ctx.doc;
+    const group = el(doc, 'div', '', { class: 'skill-tabs quest-filter', role: 'group', 'aria-label': 'Show quests' });
+    for (const [key, label] of FILTERS) {
+        const choice = button(doc, '', () => {
+            (ctx.filters ??= {}).quests = key;
+            ctx.render();
+            ctx.main.querySelector?.(`[data-filter="${key}"]`)?.focus?.();
+        }, { class: 'skill-tab-btn', 'aria-pressed': key === active ? 'true' : 'false', 'data-filter': key });
+        choice.append(label, el(doc, 'span', counts[key], { class: 'count' }));
+        group.append(choice);
+    }
+    return group;
+}
+
+// A helper line under a field of the open record's form (the form itself knows nothing about it).
+function addFieldHint(ctx, formBody, path, parts) {
+    const wanted = JSON.stringify(path);
+    const control = [...(formBody.querySelectorAll?.('[data-path]') ?? [])].find(node => node.getAttribute('data-path') === wanted);
+    const row = control?.closest?.('.fieldset-row');
+    if (!row) return;
+    const hint = el(ctx.doc, 'small', '', { class: 'field-hint' });
+    hint.append(...parts);
+    const first = row.children[0];
+    if (first && row.insertBefore && first.nextSibling !== undefined) row.insertBefore(hint, first.nextSibling);
+    else row.append(hint);
 }
 
 export function renderRecords(ctx) {
@@ -46,11 +123,19 @@ export function renderRecords(ctx) {
         button(doc, `+ Add ${singularLabel}`, () => ctx.select(kind, '__new__'))
     );
 
+    const counts = { all: validRecords.length, fixed: 0, template: 0 };
+    for (const { record } of validRecords) { const t = trait(kind, record); if (t) counts[t]++; }
+    const filtered = kind === 'quests';
+    const active = filtered && FILTERS.some(([key]) => key === ctx.filters?.quests) ? ctx.filters.quests : 'all';
+    const shown = validRecords.filter(({ record }) => active === 'all' || trait(kind, record) === active);
+
     const listContainer = el(doc, 'div', '', { class: 'records-list' });
     if (validRecords.length === 0) {
         listContainer.append(el(doc, 'p', `No ${LABELS[kind] || kind} found in pack.`, { class: 'muted' }));
+    } else if (shown.length === 0) {
+        listContainer.append(el(doc, 'p', `No ${active} ${LABELS[kind].toLowerCase()}.`, { class: 'muted' }));
     } else {
-        for (const { record, idx } of validRecords) {
+        for (const { record, idx } of shown) {
             const id = identity(record, kind);
             const normId = localId(model, id);
             const isSelected = Boolean(normId) && ctx.selection.id === normId;
@@ -67,6 +152,8 @@ export function renderRecords(ctx) {
 
             const nameRow = el(doc, 'span', '', { class: 'record-card-header' });
             nameRow.append(el(doc, 'span', record.name || normId || `${LABELS[kind] || kind} ${idx + 1}`, { class: 'record-card-name' }));
+            const kindTrait = trait(kind, record);
+            if (kindTrait) nameRow.append(el(doc, 'span', TRAITS[kindTrait], { class: `chip chip-${kindTrait}` }));
             if (problems.length > 0) nameRow.append(el(doc, 'span', '', { class: 'problem-dot', 'aria-label': 'Has problems' }));
 
             const metaText = !normId ? 'No ID: give it a name or a slug'
@@ -77,7 +164,14 @@ export function renderRecords(ctx) {
         }
     }
 
-    screen.append(header, listContainer);
+    screen.append(header);
+    const intro = headerNote(ctx, kind, validRecords.length);
+    if (intro) screen.append(intro);
+    if (filtered) {
+        screen.append(questFilter(ctx, counts, active),
+            el(doc, 'p', 'Templates are open quests: a reward range by rank. The actual reward is fixed when the narrator offers one.', { class: 'muted filter-help' }));
+    }
+    screen.append(listContainer);
     ctx.main.append(screen);
 
     const inspectorContainer = ctx.inspector || screen;
@@ -110,7 +204,11 @@ function renderRecordsInspector(ctx, container, kind, schema, validRecords, sing
         el(doc, 'h2', record.name || normId),
         el(doc, 'span', LABELS[kind] || kind, { class: 'chip' })
     );
+    const kindTrait = trait(kind, record);
+    if (kindTrait) titleRow.append(el(doc, 'span', TRAITS[kindTrait], { class: `chip chip-${kindTrait}` }));
     container.append(titleRow);
+    const intro = kindTrait === 'template' ? templateNote(ctx, kind, record, normId) : null;
+    if (intro) container.append(intro);
 
     const packId = model?.document?.id || 'pack';
     const fullId = `pack.${safeLabel(packId)}/${safeLabel(normId)}`;
@@ -125,7 +223,11 @@ function renderRecordsInspector(ctx, container, kind, schema, validRecords, sing
     }
 
     const formBody = el(doc, 'div', '', { class: 'inspector-form-body' });
-    renderForm(ctx, formBody, schema, record, baseEnginePath, { kind, record });
+    renderForm(ctx, formBody, schema, record, baseEnginePath, { kind, record, label: singularLabel });
+    if (kind === 'places') {
+        addFieldHint(ctx, formBody, [...baseEnginePath, 'market'], ['RPG Battle\u2019s trade makes traders at places with a market type. ',
+            ...marketsClause(ctx.doc, records(model, 'markets').length, 'price factors and stock size', true), '.']);
+    }
     container.append(formBody);
 
     const actionsRow = el(doc, 'div', '', { class: 'row' });

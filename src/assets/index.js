@@ -6,6 +6,7 @@ export const ASSETS = Object.freeze({
     'app-mark': '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" aria-hidden="true"><path fill="#7b6cf0" fill-rule="evenodd" d="M14 0h36a14 14 0 0 1 14 14v36a14 14 0 0 1-14 14H14A14 14 0 0 1 0 50V14A14 14 0 0 1 14 0zM32 14C33.8 26.6 37.4 30.2 50 32C37.4 33.8 33.8 37.4 32 50C30.2 37.4 26.6 33.8 14 32C26.6 30.2 30.2 26.6 32 14z"/></svg>',
     'budget': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17.5a9 9 0 0 1 18 0"/><path d="M12 17.5l4.2-5.6M12 17.5h.1"/></svg>',
     'cascade-remove': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="4.5" r="2.5"/><path d="M12 7v3.5M6 15v-4.5h12V12"/><circle cx="6" cy="17.5" r="2.5"/><circle cx="18" cy="19.5" r="2"/><path d="M14 15.5l8-3.5"/></svg>',
+    'chevron-down': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
     'export-file': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M12 17.5v-6M9.5 14L12 11.5 14.5 14"/></svg>',
     'form-base': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2.5L5.5 12.5H11L10.2 18l8.3-10H13z"/><path d="M5 21.4h14"/></svg>',
     'form-generated': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3M12 15v2.6"/></svg>',
@@ -34,6 +35,7 @@ export const SB_ICONS = Object.freeze({
     'kind-places': 'ph-map-pin',
     'kind-quests': 'ph-scroll',
     'kind-more': 'ph-dots-three-outline',
+    info: 'ph-info',
     warning: 'ph-warning',
     ready: 'ph-check-circle',
 });

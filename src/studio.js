@@ -8,6 +8,11 @@ import { renderScreen } from './screens/index.js';
 import { downloadPack } from './export.js';
 import { readDraft, writeDraft, MAX_PACK_BYTES } from './session.js';
 import { renderProblemsDrawer } from './screens/problems.js';
+import { createColumns } from './columns.js';
+
+// The screens below the record kinds in the rail, in order.
+const SCREENS = [['defaults', 'Settings defaults'], ['presentation', 'Screen builder'], ['data-modules', 'Data modules'], ['code-module', 'Code module'], ['narrator', 'Narrator card'], ['lorebook', 'Lorebook'], ['lore-import', 'Import lorebook']];
+const SCREEN_LABELS = { ...Object.fromEntries(SCREENS), settings: 'Pack settings', check: 'Check / export' };
 
 export function mountStudio(root) {
     const doc = root.ownerDocument;
@@ -36,6 +41,14 @@ export function mountStudio(root) {
         themeButton.textContent = theme === 'dark' ? 'Light theme' : 'Dark theme';
         themeButton.setAttribute('aria-label', `Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`);
     };
+
+    // The parts list is a disclosure on a phone (up to 600 px): it starts collapsed and collapses again after a part is picked.
+    // Everywhere else it is always open.
+    const stack = win?.matchMedia?.('(max-width: 600px)');
+    let parts = null;
+    let partsOpen = false;
+    const syncParts = () => { if (parts) parts.open = stack?.matches ? partsOpen : true; };
+    stack?.addEventListener?.('change', syncParts);
 
     const app = el(doc, 'div', '', { class: 'studio' });
     const header = el(doc, 'header', '', { class: 'topbar' });
@@ -76,16 +89,17 @@ export function mountStudio(root) {
     header.append(brand, field(doc, 'Pack', name), fingerprint, undo, redo, open, problems, exportButton, themeButton, file);
 
     const workspace = el(doc, 'div', '', { class: 'workspace' });
-    const rail = el(doc, 'nav', '', { 'aria-label': 'Pack parts', class: 'rail' });
+    const rail = el(doc, 'nav', '', { 'aria-label': 'Pack parts', class: 'rail', id: 'rail' });
     const main = el(doc, 'main', '', { id: 'main', tabindex: '-1' });
-    const inspector = el(doc, 'aside', '', { class: 'inspector', 'aria-label': 'Inspector' });
+    const inspector = el(doc, 'aside', '', { class: 'inspector', 'aria-label': 'Inspector', id: 'inspector' });
     const inspectorClose = button(doc, 'Close inspector', () => { app.classList.remove('inspector-open'); main.focus(); }, { class: 'inspector-close' });
     const inspectorBody = el(doc, 'div', '', { class: 'inspector-body' });
     inspector.append(inspectorClose, inspectorBody);
     const notice = el(doc, 'div', '', { role: 'status', 'aria-live': 'polite', class: 'notice' });
     const problemsHost = el(doc, 'div', '', { class: 'problems-drawer-host' });
     const overlays = el(doc, 'div', '', { class: 'overlays' });
-    workspace.append(rail, main, inspector);
+    const columns = createColumns({ doc, win, workspace, inspectorShown: () => !inspector.hidden });
+    workspace.append(rail, columns.railDivider, main, columns.inspectorDivider, inspector);
     app.append(header, workspace, notice, problemsHost, overlays);
     root.replaceChildren(app);
 
@@ -118,7 +132,7 @@ export function mountStudio(root) {
 
 
     const ctx = {
-        doc, win, root, app, main, inspector: inspectorBody, overlays, selection, file, authoring: {},
+        doc, win, root, app, main, inspector: inspectorBody, overlays, selection, file, authoring: {}, filters: {},
         get model() { return history.current; },
         get history() { return history; },
         get dirty() {
@@ -157,8 +171,12 @@ export function mountStudio(root) {
         select(kind, id = null, form = null) {
             if (destroyed) return;
             selection.kind = kind; selection.id = id; selection.form = form;
+            partsOpen = false;
             ctx.render();
-            if (id !== null) app.classList.add('inspector-open');
+            if (id !== null) {
+                app.classList.add('inspector-open');
+                if (stack?.matches) inspector.scrollIntoView?.({ block: 'nearest' });
+            }
         },
         showProblems() {
             if (destroyed) return;
@@ -199,9 +217,10 @@ export function mountStudio(root) {
                 };
             }
             if (model?.document) {
-                const previous = { history, selection: { ...selection }, baseline: lastBaselineJson, filename: ctx.filename, authoring: ctx.authoring };
+                const previous = { history, selection: { ...selection }, baseline: lastBaselineJson, filename: ctx.filename, authoring: ctx.authoring, filters: ctx.filters };
                 history = createHistory(model);
                 ctx.authoring = {};
+                ctx.filters = {};
                 selection.kind = 'classes';
                 selection.id = null;
                 selection.form = null;
@@ -216,6 +235,7 @@ export function mountStudio(root) {
                     lastBaselineJson = previous.baseline;
                     ctx.filename = previous.filename;
                     ctx.authoring = previous.authoring;
+                    ctx.filters = previous.filters;
                     ctx.render();
                     return null;
                 }
@@ -270,25 +290,42 @@ export function mountStudio(root) {
             exportButton.disabled = !model?.validation?.ok;
             exportButton.title = exportButton.disabled ? 'Fix the problems first' : 'Export pack';
             rail.replaceChildren();
+            const list = el(doc, 'div', '', { class: 'parts-list' });
             for (const kind of KINDS.slice(0, 8)) {
                 const nav = button(doc, '', () => ctx.select(kind), { 'aria-current': selection.kind === kind ? 'page' : 'false' });
                 const asset = kind === 'creatures' ? 'kind-foes' : `kind-${kind}`;
                 nav.append(icon(doc, asset), el(doc, 'span', LABELS[kind]), el(doc, 'small', records(model, kind).length));
-                rail.append(nav);
+                list.append(nav);
             }
             const more = el(doc, 'details');
             more.open = KINDS.slice(8).includes(selection.kind);
             more.append(el(doc, 'summary', 'More kinds'));
             for (const kind of KINDS.slice(8)) more.append(button(doc, `${LABELS[kind]} (${records(model, kind).length})`, () => ctx.select(kind)));
-            rail.append(more, button(doc, 'Pack settings', () => ctx.select('settings')));
-            for (const [kind, label] of [['defaults', 'Settings defaults'], ['presentation', 'Screen builder'], ['data-modules', 'Data modules'], ['code-module', 'Code module'], ['narrator', 'Narrator card'], ['lorebook', 'Lorebook'], ['lore-import', 'Import lorebook']]) {
-                rail.append(button(doc, label, () => ctx.select(kind), { 'aria-current': selection.kind === kind ? 'page' : 'false' }));
+            list.append(more, button(doc, 'Pack settings', () => ctx.select('settings')));
+            for (const [kind, label] of SCREENS) {
+                list.append(button(doc, label, () => ctx.select(kind), { 'aria-current': selection.kind === kind ? 'page' : 'false' }));
             }
-            rail.append(check);
+            list.append(check);
+            // On a phone the parts list is a disclosure whose summary names where the creator is; elsewhere it is always open.
+            const disclosure = el(doc, 'details', '', { class: 'parts' });
+            const railKind = KINDS.slice(0, 8).includes(selection.kind);
+            const summary = el(doc, 'summary');
+            summary.append(
+                icon(doc, !railKind ? 'kind-more' : selection.kind === 'creatures' ? 'kind-foes' : `kind-${selection.kind}`),
+                el(doc, 'span', LABELS[selection.kind] ?? SCREEN_LABELS[selection.kind] ?? 'Pack parts', { class: 'label' }),
+            );
+            if (KINDS.includes(selection.kind)) summary.append(el(doc, 'small', records(model, selection.kind).length));
+            summary.append(icon(doc, 'chevron-down'));
+            disclosure.append(summary, list);
+            disclosure.addEventListener('toggle', () => { if (stack?.matches) partsOpen = disclosure.open; });
+            parts = disclosure;
+            syncParts();
+            rail.append(parts);
             ctx.previewCleanup?.();
             ctx.previewCleanup = null;
             main.replaceChildren(); inspectorBody.replaceChildren();
             inspector.hidden = !model?.document || ['check', 'defaults', 'presentation', 'data-modules', 'code-module', 'narrator', 'lorebook', 'lore-import'].includes(selection.kind);
+            columns.refresh();
             renderScreen(ctx);
         },
         destroy() {
@@ -296,6 +333,8 @@ export function mountStudio(root) {
             destroyed = true;
             ++seq;
             media?.removeEventListener?.('change', setTheme);
+            stack?.removeEventListener?.('change', syncParts);
+            columns.destroy();
             win?.removeEventListener?.('beforeunload', onBeforeUnload);
             win?.removeEventListener?.('keydown', onKeyDown);
             win?.removeEventListener?.('dragover', onDragOver);
