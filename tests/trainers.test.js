@@ -9,7 +9,7 @@ import { schemaForRecord } from '../src/form-schema.js';
 import { setField } from '../src/edits.js';
 import { createTestContext } from './helpers/dom.js';
 import { renderScreen } from '../src/screens/index.js';
-import { trainerToTemplate, templateToFixed, templateMeta, feeUnit, feeAmount } from '../src/screens/trainer-template.js';
+import { trainerToTemplate, templateToFixed, templateMeta, feeUnit, feeAmount, canConvertToTemplate } from '../src/screens/trainer-template.js';
 import { exportRulesV2 } from '../vendor/story-block/src/v2/packs/rules-v2.js';
 
 const text = readFileSync(new URL('./fixtures/ersveil-bluewatch-1.6.0.json', import.meta.url), 'utf8');
@@ -385,4 +385,91 @@ test('the convert dialog names the unit the fee is in', () => {
     const { ctx } = feeSentence({ name: 'crown', plural: 'crowns', short: 'cr' });
     buttons(ctx.inspector, 'Convert to fixed trainer')[0].click();
     assert.match(ctx.overlays.querySelector('dialog').textContent, /Fee, in crowns \(starts at the lowest fee of the range\)/);
+});
+
+// ---- Review fixes: keys that carry any character, the Add menu keys, the place a trainer had, and the money word's spaces ----
+
+test('a control is found by comparing its key, never by building a selector from author text', () => {
+    const odd = 'swift"]thrust';
+    const pack = JSON.parse(text);
+    const r = pack.content.rules[0];
+    for (const list of [r.skills, ...r.classes.map(c => c.skills)]) for (const entry of list) if (entry.slug === 'swift-thrust') entry.slug = odd;
+    for (const klass of r.classes) klass.skills = klass.skills.map(s => (s === 'swift-thrust' ? odd : s));
+    for (const trainer of r.trainers) trainer.skills = trainer.skills.map(s => (s === 'swift-thrust' ? odd : s));
+    const ctx = createTestContext(pack);
+    ctx.onRender = () => renderScreen(ctx);
+    ctx.select('trainers', 'open-blade-drills');
+    const box = () => ctx.inspector.querySelectorAll('[data-ctl]').find(node => node.getAttribute('data-ctl') === `skill:${odd}`);
+    assert.ok(box(), 'the box for a skill with quotes and brackets in its key is drawn');
+    assert.equal(box().checked, true);
+    box().checked = false;
+    assert.doesNotThrow(() => box().dispatchEvent({ type: 'change' }));
+    assert.equal(box().checked, false);
+    assert.equal(trainerNamed(ctx.model, 'open-blade-drills').skills.includes(odd), false);
+    assert.deepEqual(ctx.notifications, []);
+});
+
+test('the Add menu answers the menu keys, and its template item is off exactly when a fixed trainer cannot become a template', () => {
+    const ctx = screen();
+    const wrap = ctx.main.querySelector('.add-wrap');
+    const trigger = wrap.querySelector('button');
+    const menu = ctx.main.querySelector('.add-menu');
+    const items = ctx.main.querySelectorAll('[role="menuitem"]');
+    const press = key => wrap.dispatchEvent({ type: 'keydown', key });
+    trigger.focus();
+    press('ArrowDown');
+    assert.equal(menu.hidden, false);
+    assert.equal(ctx.doc.activeElement, items[0], 'Down from the button opens the menu on the first item');
+    press('ArrowDown'); assert.equal(ctx.doc.activeElement, items[1]);
+    press('ArrowDown'); assert.equal(ctx.doc.activeElement, items[0], 'wraps');
+    press('ArrowUp'); assert.equal(ctx.doc.activeElement, items[1], 'wraps upward');
+    press('Home'); assert.equal(ctx.doc.activeElement, items[0]);
+    press('End'); assert.equal(ctx.doc.activeElement, items[1]);
+    press('Escape');
+    assert.equal(menu.hidden, true);
+    assert.equal(ctx.doc.activeElement, trigger);
+    press('ArrowUp');
+    assert.equal(menu.hidden, false);
+    assert.equal(ctx.doc.activeElement, items[1], 'Up from the button opens it on the last item');
+
+    const pack = JSON.parse(text);
+    delete pack.content.ranks;
+    const bare = createTestContext(pack);
+    bare.onRender = () => renderScreen(bare);
+    bare.select('trainers');
+    const bareItems = bare.main.querySelectorAll('[role="menuitem"]');
+    assert.equal(bareItems[1].disabled, true);
+    bare.main.querySelector('.add-wrap').dispatchEvent({ type: 'keydown', key: 'ArrowDown' });
+    bare.main.querySelector('.add-wrap').dispatchEvent({ type: 'keydown', key: 'ArrowDown' });
+    assert.equal(bare.doc.activeElement, bareItems[0], 'a disabled item is skipped');
+    assert.equal(canConvertToTemplate(bare.model), 'Add a rank in Pack settings first.', 'the same test the editor uses');
+    assert.equal(canConvertToTemplate(ctx.model), '');
+});
+
+test('Convert to fixed trainer offers the place the trainer had before it became a template, else the first place', () => {
+    const ctx = screen();
+    ctx.select('trainers', 'captain-aldus-vane');
+    const before = trainerNamed(ctx.model, 'captain-aldus-vane').place;
+    buttons(ctx.inspector, 'Convert to template')[0].click();
+    assert.equal(trainerNamed(ctx.model, 'captain-aldus-vane').open, true);
+    buttons(ctx.inspector, 'Convert to fixed trainer')[0].click();
+    const dialog = ctx.overlays.querySelector('dialog');
+    const place = dialog.querySelector('[aria-label="place"]');
+    const first = place.childNodes[0].getAttribute('value');
+    assert.notEqual(`pack.ersveil-bluewatch/${place.value}`, `pack.ersveil-bluewatch/${first}`, 'the remembered place is not just the first one');
+    assert.equal(`pack.ersveil-bluewatch/${place.value}`, before);
+    buttons(dialog, 'Convert')[0].click();
+    assert.equal(trainerNamed(ctx.model, 'captain-aldus-vane').place, before, 'converting straight back restores the place');
+
+    // a template that was never fixed here: the first place
+    ctx.select('trainers', 'open-street-craft');
+    buttons(ctx.inspector, 'Convert to fixed trainer')[0].click();
+    const other = ctx.overlays.querySelectorAll('dialog').at(-1).querySelector('[aria-label="place"]');
+    assert.equal(other.value, other.childNodes[0].getAttribute('value'), 'nothing remembered: the first place is selected');
+});
+
+test('the money word is tidied: runs of spaces collapse and the ends are trimmed', () => {
+    assert.deepEqual(feeUnit({ document: { currency: { name: '  gold   crown ', plural: '  gold   crowns ', short: 'g' } } }), { name: 'gold crown', plural: 'gold crowns' });
+    assert.deepEqual(feeUnit({ document: { currency: { name: '   ' } } }), { name: 'gold', plural: 'gold' });
+    assert.equal(feeAmount({ document: { currency: { name: ' silver \t piece', plural: 'silver   pieces' } } }, 2), '2 silver pieces');
 });

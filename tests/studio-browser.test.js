@@ -578,3 +578,171 @@ for (const width of [1280, 390]) {
         });
     });
 }
+
+// ---- Trainers: what a commit does to focus, the caret and the next click (the page is redrawn when a field is committed) ----
+
+const SETTLE = 60; // the redraw after a click is queued one task later
+
+for (const width of [1280, 390]) {
+    test(`trainers at ${width} px: after a commit the caret is selected, so the next typing replaces the field`, { timeout: 90000 }, async () => {
+        await withPage({ width }, async page => {
+            await openTrainers(page);
+            await page.locator('.record-card', { hasText: 'Blade drills' }).click();
+            // 41, Tab, 95: the Tab commits 41 and lands in coinMax with its text selected
+            await page.locator('[data-ctl="coinMin"]').click();
+            await page.keyboard.press('Control+A');
+            await page.keyboard.type('41');
+            await page.keyboard.press('Tab');
+            assert.equal(await activeKey(page), 'coinMax');
+            await page.keyboard.type('95');
+            assert.equal(await page.locator('[data-ctl="coinMax"]').inputValue(), '95');
+            await page.keyboard.press('Tab');
+            assert.equal(await page.locator('[data-ctl="coinMin"]').inputValue(), '41');
+            assert.equal(await page.locator('[data-ctl="coinMax"]').inputValue(), '95');
+            assert.match(await page.locator('.inspector').textContent(), /between 41 and 95 copper/);
+
+            // slug, then name
+            await page.locator('[data-ctl="slug"]').click();
+            await page.keyboard.press('Control+A');
+            await page.keyboard.type('open-blade-lessons');
+            await page.keyboard.press('Tab');
+            assert.equal(await activeKey(page), 'name');
+            await page.keyboard.type('Blade lessons');
+            assert.equal(await page.locator('[data-ctl="name"]').inputValue(), 'Blade lessons');
+            await page.keyboard.press('Tab');
+            assert.equal(await page.locator('.inspector h2').textContent(), 'Blade lessons');
+            assert.equal(await page.locator('[data-ctl="slug"]').inputValue(), 'open-blade-lessons');
+            assert.match(await page.locator('.record-card[aria-pressed="true"]').textContent(), /open-blade-lessons/, 'the selection followed the rename');
+
+            // a click from one field to the next
+            await page.locator('[data-ctl="coinMin"]').click();
+            await page.keyboard.press('Control+A');
+            await page.keyboard.type('42');
+            await page.locator('[data-ctl="coinMax"]').click();
+            await page.waitForTimeout(SETTLE);
+            assert.equal(await activeKey(page), 'coinMax');
+            await page.keyboard.type('96');
+            await page.keyboard.press('Enter');
+            assert.equal(await page.locator('[data-ctl="coinMin"]').inputValue(), '42');
+            assert.equal(await page.locator('[data-ctl="coinMax"]').inputValue(), '96');
+        });
+    });
+
+    test(`trainers at ${width} px: the first click after typing is not lost to the redraw`, { timeout: 90000 }, async () => {
+        await withPage({ width }, async page => {
+            await openTrainers(page);
+            await page.locator('.record-card', { hasText: 'Blade drills' }).click();
+            // edit coinMax, then one click on a skill: the fee commits and the box changes
+            await page.locator('[data-ctl="coinMax"]').fill('95');
+            await page.locator('[data-ctl="skill:swift-thrust"]').click();
+            await page.waitForTimeout(SETTLE);
+            assert.equal(await page.locator('[data-ctl="skill:swift-thrust"]').isChecked(), false, 'the click took effect');
+            assert.equal(await page.locator('.skill-count').textContent(), '5 of 30 at most');
+            assert.equal(await page.locator('[data-ctl="coinMax"]').inputValue(), '95', 'the fee was committed too');
+            assert.match(await page.locator('.inspector').textContent(), /between 40 and 95 copper/);
+            assert.equal(await page.getByRole('button', { name: 'Undo' }).isDisabled(), false);
+
+            // a click on the label text of a box (the label hands it on to the box)
+            await page.locator('[data-ctl="coinMin"]').fill('41');
+            await page.locator('.check-row', { hasText: 'Parrying Turn' }).locator('span').first().click();
+            await page.waitForTimeout(SETTLE);
+            assert.equal(await page.locator('[data-ctl="skill:parrying-turn"]').isChecked(), false);
+            assert.equal(await page.locator('[data-ctl="coinMin"]').inputValue(), '41');
+
+            // Convert to fixed trainer opens its dialog straight after an edit
+            await page.locator('[data-ctl="coinMax"]').fill('97');
+            await page.getByRole('button', { name: /^Convert to fixed trainer/ }).click();
+            await page.locator('dialog[open]').waitFor();
+            await page.waitForTimeout(SETTLE);
+            assert.equal(await page.locator('dialog[open]').count(), 1);
+            await page.getByRole('button', { name: 'Keep the template' }).click();
+            assert.equal(await page.locator('[data-ctl="coinMax"]').inputValue(), '97');
+
+            // Delete works on the first click after an edit, and the edit does not bring the record back
+            await page.locator('[data-ctl="coinMax"]').fill('98');
+            await page.getByRole('button', { name: 'Delete', exact: true }).click();
+            await page.waitForTimeout(SETTLE);
+            assert.equal(await page.locator('.record-card', { hasText: 'Blade drills' }).count(), 0);
+            assert.equal(await page.locator('.record-card').count(), 10);
+            assert.equal(await page.locator('.field-error:visible').count(), 0);
+        });
+    });
+}
+
+test('the Add menu follows the menu keys: Down opens it, Up and Down wrap, Home and End jump, Escape closes it', { timeout: 60000 }, async () => {
+    await withPage({ width: 1280 }, async page => {
+        await openTrainers(page);
+        const trigger = page.getByRole('button', { name: '+ Add Trainer' });
+        const items = () => page.locator('[role="menuitem"]');
+        const focused = () => page.evaluate(() => document.activeElement?.childNodes[0]?.textContent ?? document.activeElement?.tagName);
+        await trigger.focus();
+        await page.keyboard.press('ArrowDown');
+        assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
+        assert.equal(await focused(), 'Fixed trainer');
+        await page.keyboard.press('ArrowDown');
+        assert.equal(await focused(), 'Trainer template');
+        await page.keyboard.press('ArrowDown');
+        assert.equal(await focused(), 'Fixed trainer', 'wraps');
+        await page.keyboard.press('ArrowUp');
+        assert.equal(await focused(), 'Trainer template', 'wraps upward');
+        await page.keyboard.press('Home');
+        assert.equal(await focused(), 'Fixed trainer');
+        await page.keyboard.press('End');
+        assert.equal(await focused(), 'Trainer template');
+        await page.keyboard.press('Escape');
+        assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+        assert.equal(await page.evaluate(() => document.activeElement.textContent), '+ Add Trainer');
+        await page.keyboard.press('ArrowUp');
+        assert.equal(await focused(), 'Trainer template', 'Up from the button opens it on the last item');
+        await page.keyboard.press('Enter');
+        await page.locator('[data-ctl="coinMin"]').waitFor();
+        assert.equal(await items().first().isVisible(), false, 'choosing an item closes the menu');
+    });
+});
+
+test('a trainer template opens a wider inspector (480 px) than the default, and the creator\'s own width still wins', { timeout: 90000 }, async () => {
+    const inspectorWidth = page => page.locator('.inspector').evaluate(node => Math.round(node.getBoundingClientRect().width));
+    await withPage({ width: 1280 }, async page => {
+        await openTrainers(page);
+        await page.locator('.record-card', { hasText: 'Guild Drillmaster' }).click();
+        assert.equal(await inspectorWidth(page), 330, 'a fixed trainer keeps the default');
+        await page.locator('.record-card', { hasText: 'Blade drills' }).click();
+        await page.locator('[data-ctl="coinMin"]').waitFor();
+        assert.equal(await inspectorWidth(page), 480);
+        assert.equal(await page.locator('.divider-inspector').getAttribute('aria-valuenow'), '480');
+        assert.equal(await page.locator('[data-ctl="search"]').evaluate(node => node.scrollWidth <= node.clientWidth), true, 'the search placeholder is not cut');
+        // the creator resizes (here: a key widens it) and that width is kept for every inspector
+        await page.locator('.divider-inspector').focus();
+        await page.keyboard.press('ArrowLeft');
+        assert.equal(await inspectorWidth(page), 496);
+        await page.locator('.record-card', { hasText: 'Guild Drillmaster' }).click();
+        assert.equal(await inspectorWidth(page), 496);
+    });
+    await withPage({ width: 1280 }, async page => {
+        await page.evaluate(() => localStorage.setItem('story-studio-columns', JSON.stringify({ rail: 230, inspector: 400 })));
+        await page.reload();
+        await page.locator('.studio').waitFor();
+        await openTrainers(page);
+        await page.locator('.record-card', { hasText: 'Blade drills' }).click();
+        await page.locator('[data-ctl="coinMin"]').waitFor();
+        assert.equal(await inspectorWidth(page), 400, 'a stored width wins over the template default');
+    });
+    await withPage({ width: 1280 }, async page => {
+        // only the rail was ever moved: the inspector's stored 330 is the default, not a choice
+        await page.evaluate(() => localStorage.setItem('story-studio-columns', JSON.stringify({ rail: 230, inspector: 330 })));
+        await page.reload();
+        await page.locator('.studio').waitFor();
+        await openTrainers(page);
+        await page.locator('.record-card', { hasText: 'Blade drills' }).click();
+        await page.locator('[data-ctl="coinMin"]').waitFor();
+        assert.equal(await inspectorWidth(page), 480);
+    });
+    await withPage({ width: 390 }, async page => {
+        await openTrainers(page);
+        await page.locator('.record-card', { hasText: 'Blade drills' }).click();
+        await page.locator('[data-ctl="coinMin"]').waitFor();
+        const tops = await page.locator('.template-ids .fieldset-row').evaluateAll(nodes => nodes.map(node => Math.round(node.getBoundingClientRect().top)));
+        assert.equal(tops.length, 2);
+        assert.notEqual(tops[0], tops[1], 'slug and name stack on a phone');
+    });
+});

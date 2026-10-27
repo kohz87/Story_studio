@@ -4,7 +4,7 @@ import { KINDS, LABELS, records, identity, localId, kindPath, TRAITS, trait, FIL
 import { add, remove } from '../edits.js';
 import { cascadeChanges } from './classes.js';
 import { renderForm, createDefault } from '../forms.js';
-import { renderTrainerTemplate, convertToTemplate, addTrainerTemplate, templateMeta, canConvertToTemplate, NO_RANKS } from './trainer-template.js';
+import { renderTrainerTemplate, convertToTemplate, addTrainerTemplate, templateMeta, canConvertToTemplate } from './trainer-template.js';
 import { schemaForRecord, validateField } from '../form-schema.js';
 
 function getRecordProblems(model, kind, record, idx) {
@@ -105,7 +105,7 @@ function filterHelp(doc, kind) {
 function addTrainerMenu(ctx, singularLabel) {
     const doc = ctx.doc;
     const wrap = el(doc, 'span', '', { class: 'add-wrap' });
-    const trigger = button(doc, `+ Add ${singularLabel}`, () => setOpen(menu.hidden), { 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+    const trigger = button(doc, `+ Add ${singularLabel}`, () => setOpen(menu.hidden, 'first'), { 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
     const menu = el(doc, 'div', '', { class: 'add-menu', role: 'menu' });
     menu.hidden = true;
     const item = (label, help, action, disabled) => {
@@ -114,17 +114,34 @@ function addTrainerMenu(ctx, singularLabel) {
         choice.disabled = disabled;
         return choice;
     };
-    const noRanks = !(ctx.model?.document?.content?.ranks ?? []).length;
+    const blocked = canConvertToTemplate(ctx.model);
     menu.append(
         item('Fixed trainer', 'Stands at one place, one fee', () => ctx.select('trainers', '__new__'), false),
-        item('Trainer template', noRanks ? NO_RANKS : 'No place; a skill list and a fee range by rank', () => addTrainerTemplate(ctx), noRanks),
+        item('Trainer template', blocked || 'No place; a skill list and a fee range by rank', () => addTrainerTemplate(ctx), Boolean(blocked)),
     );
-    function setOpen(open) {
+    const items = () => [...menu.querySelectorAll('[role="menuitem"]')].filter(choice => !choice.disabled);
+    function setOpen(open, which) {
         menu.hidden = !open;
         trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open && which) items().at(which === 'last' ? -1 : 0)?.focus?.();
     }
+    // The menu pattern: Down and Up from the button open it, then Up, Down, Home and End move through the items; Escape closes it.
     wrap.addEventListener('keydown', event => {
-        if (event.key === 'Escape' && !menu.hidden) { event.preventDefault?.(); setOpen(false); trigger.focus?.(); }
+        const now = items();
+        const at = now.indexOf(doc.activeElement);
+        if (event.key === 'Escape' && !menu.hidden) { event.preventDefault?.(); setOpen(false); trigger.focus?.(); return; }
+        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+        if (menu.hidden) {
+            if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+            event.preventDefault?.();
+            setOpen(true, event.key === 'ArrowUp' ? 'last' : 'first');
+            return;
+        }
+        if (!now.length) return;
+        event.preventDefault?.();
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? now.length - 1
+            : event.key === 'ArrowDown' ? (at + 1) % now.length : (at <= 0 ? now.length - 1 : at - 1);
+        now[next].focus?.();
     });
     wrap.addEventListener('focusout', event => {
         if (!menu.hidden && event.relatedTarget && !wrap.contains?.(event.relatedTarget)) setOpen(false);

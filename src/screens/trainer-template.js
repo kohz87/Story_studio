@@ -54,9 +54,10 @@ export function templateToFixed(record, place, fee) {
  */
 export function feeUnit(model) {
     const currency = model?.document?.currency;
-    const name = typeof currency?.name === 'string' ? currency.name.trim() : '';
+    const tidy = value => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '');
+    const name = tidy(currency?.name);
     if (!name) return baseUnit();
-    const plural = typeof currency.plural === 'string' && currency.plural.trim() ? currency.plural.trim() : undefined;
+    const plural = tidy(currency.plural);
     return baseUnit({ name, ...(plural ? { plural } : {}), coins: coinsOf(currency.coins) });
 }
 
@@ -95,6 +96,8 @@ export function convertToTemplate(ctx, idx, id) {
     if (blocked) { ctx.notify(blocked); return false; }
     const record = records(ctx.model, 'trainers')[idx];
     if (!record || record.open === true) return false;
+    // The place it stood at is remembered, so converting it back to a fixed trainer can offer it again.
+    if (typeof record.place === 'string' && record.place) ctx.trainerUi = { ...(ctx.trainerUi ?? { id: null }), places: { ...(ctx.trainerUi?.places ?? {}), [record.slug]: record.place } };
     const result = setField(ctx.model, basePath(idx), trainerToTemplate(record, ranksOf(ctx.model)[0].id), whole(idx));
     return applyEdit(ctx, result, { id });
 }
@@ -102,7 +105,7 @@ export function convertToTemplate(ctx, idx, id) {
 // What the skill picker remembers while the same template stays open: the order of its groups (those with a chosen skill first, then the
 // pack's order, fixed when the editor opens so a tick never moves a group), the search, whether the list is folded, and its scroll.
 function uiFor(ctx, id) {
-    if (ctx.trainerUi?.id !== id) ctx.trainerUi = { id, order: null, query: '', folded: false, scroll: 0 };
+    if (ctx.trainerUi?.id !== id) ctx.trainerUi = { id, order: null, query: '', folded: false, scroll: 0, places: ctx.trainerUi?.places ?? {} };
     return ctx.trainerUi;
 }
 
@@ -128,6 +131,18 @@ function skillGroups(model) {
 // The scrolling pane of the inspector, so an edit that redraws the page leaves the reader where they were.
 const scroller = ctx => ctx.inspector?.parentElement ?? null;
 
+// The control of `root` whose data-ctl is `ctl`. Compared as text, never put in a selector: a key can carry any character an author wrote.
+const byCtl = (root, ctl) => [...(root?.querySelectorAll?.('[data-ctl]') ?? [])].find(node => node.getAttribute('data-ctl') === ctl) ?? null;
+
+// Puts focus on a control; a text field also selects what it holds, as tabbing into it does, so the next keystrokes replace the
+// old value instead of landing in the middle of it.
+function focusControl(node) {
+    if (!node) return;
+    node.focus?.();
+    const type = node.tagName === 'INPUT' ? (node.getAttribute('type') ?? 'text') : node.tagName === 'TEXTAREA' ? 'text' : '';
+    if (['text', 'search', 'number', 'tel', 'url', 'email', 'password'].includes(type)) node.select?.();
+}
+
 // Runs an edit that redraws the page and leaves the reader where they were: the same scroll, and focus on the control `ctl` (if any).
 function keepView(ctx, ui, ctl, action) {
     const pane = scroller(ctx);
@@ -135,29 +150,53 @@ function keepView(ctx, ui, ctl, action) {
     const list = ctx.inspector?.querySelector?.('.skill-groups');
     if (list) ui.scroll = list.scrollTop;
     const done = action();
-    if (ctl) ctx.inspector?.querySelector?.(`[data-ctl="${ctl}"]`)?.focus?.();
+    if (ctl) focusControl(byCtl(ctx.inspector, ctl));
     if (pane && top !== undefined) pane.scrollTop = top;
     return done;
 }
 
-// A text control commits on `change`. With Enter the control still has focus; when focus is leaving (Tab, a click) the browser fires
-// `change` before it moves focus and the page is about to be redrawn, so the commit waits for `focusout` to learn where focus is going
-// and puts it there afterwards. Without a window (the test DOM) it commits at once.
-function commitChange(ctx, ui, control, ctl, action) {
+// Whether a pointer is down on the page. Focus leaves a field at the press, before the click that follows has happened, and a commit
+// redraws the page: the node pressed on would be replaced and the click lost. So a pointer move waits for its click (see commitChange).
+const pointers = new WeakMap();
+function pointerState(doc) {
+    let state = pointers.get(doc);
+    if (!state) {
+        state = { down: false };
+        pointers.set(doc, state);
+        doc.addEventListener?.('pointerdown', () => { state.down = true; }, true);
+        for (const type of ['pointerup', 'pointercancel', 'dragend']) doc.addEventListener?.(type, () => { state.down = false; }, true);
+        doc.defaultView?.addEventListener?.('blur', () => { state.down = false; });
+    }
+    return state;
+}
+
+// A text control commits on `change`. With Enter the control still has focus and the commit is at once. When focus is leaving, the
+// browser fires `change` before it moves focus and the page is about to be redrawn, so the commit waits for `focusout` to learn where
+// focus is going and puts it there afterwards. If the move is a click or a tap, it waits further, until that click has been handled
+// (a click listener on the document, with a timeout in case none comes), so the click is not lost to the redraw. Without a window
+// (the test DOM) it commits at once. `still` says whether the record is still where it was; a commit for a record that is gone is dropped.
+function commitChange(ctx, ui, control, ctl, action, still = () => true) {
     const doc = ctx.doc;
     const win = doc.defaultView;
     if (!win?.setTimeout || doc.activeElement === control) return keepView(ctx, ui, ctl, action);
-    const model = ctx.model;
+    const pointer = pointerState(doc).down;
     let done = false;
-    const flush = related => {
+    let target = null;
+    const flush = () => {
         if (done) return;
         done = true;
         control.removeEventListener('focusout', onOut);
-        if (ctx.model === model) keepView(ctx, ui, related?.getAttribute?.('data-ctl') ?? null, action);
+        doc.removeEventListener('click', onClick);
+        if (still()) keepView(ctx, ui, target, action);
     };
-    const onOut = event => flush(event.relatedTarget);
+    const onClick = () => win.setTimeout(flush, 0);
+    const onOut = event => {
+        target = event.relatedTarget?.getAttribute?.('data-ctl') ?? null;
+        if (!pointer) flush();
+        else doc.addEventListener('click', onClick, { once: true });
+    };
     control.addEventListener('focusout', onOut);
-    win.setTimeout(() => flush(null), 0);
+    win.setTimeout(flush, pointer ? 250 : 0);
     return true;
 }
 
@@ -191,7 +230,9 @@ export function renderTrainerTemplate(ctx, container, { record, idx, id, problem
     const model = ctx.model;
     const schema = schemaForRecord('trainers', record);
     const ui = uiFor(ctx, id);
+    pointerState(doc); // listening before the first press, so a commit can tell a click from a key
     const base = basePath(idx);
+    const here = () => records(ctx.model, 'trainers')[idx]?.slug === record.slug;
     const feePath = `content.rules[0].trainers[${idx}].fee`;
     const feeIssue = problems.find(problem => /\.fee$/.test((problem.path || '').replace(/\[(\d+)\]/g, '.$1')) && /ordered/i.test(problem.message || ''));
     const otherProblems = problems.filter(problem => problem !== feeIssue);
@@ -204,18 +245,23 @@ export function renderTrainerTemplate(ctx, container, { record, idx, id, problem
     // slug and name
     const slug = textControl(doc, 'slug', record.slug);
     slug.addEventListener('change', () => {
-        const checked = validateField(schema.properties.slug, slug.value);
+        const next = slug.value;
+        const checked = validateField(schema.properties.slug, next);
         if (!checked.ok) { ctx.notify(`${checked.code}: ${checked.message}`); slug.value = safeLabel(record.slug); return; }
-        if (slug.value === record.slug) return;
-        const result = renameId(model, 'trainers', identity(record, 'trainers'), slug.value);
-        commitChange(ctx, ui, slug, 'slug', () => applyEdit(ctx, result, { id: localId(result.model ?? model, slug.value) }));
+        if (next === record.slug) return;
+        commitChange(ctx, ui, slug, 'slug', () => {
+            const result = renameId(ctx.model, 'trainers', identity(record, 'trainers'), next);
+            // The selection follows the rename only while the record is still the one open.
+            return applyEdit(ctx, result, ctx.selection.id === id ? { id: localId(result.model ?? ctx.model, next) } : undefined);
+        }, here);
     });
     const name = textControl(doc, 'name', record.name);
     name.addEventListener('change', () => {
-        if (name.value === record.name) return;
-        commitChange(ctx, ui, name, 'name', () => applyEdit(ctx, setField(model, [...base, 'name'], name.value)));
+        const next = name.value;
+        if (next === record.name) return;
+        commitChange(ctx, ui, name, 'name', () => applyEdit(ctx, setField(ctx.model, [...base, 'name'], next)), here);
     });
-    const grid = el(doc, 'div', '', { class: 'inspector-grid' });
+    const grid = el(doc, 'div', '', { class: 'inspector-grid template-ids' });
     grid.append(row(doc, labelled(doc, 'slug', slug)), row(doc, labelled(doc, 'name', name)));
     body.append(grid);
 
@@ -234,7 +280,7 @@ export function renderTrainerTemplate(ctx, container, { record, idx, id, problem
     }
     rank.addEventListener('change', () => {
         if (rank.value === '__current__' || rank.value === record.rank) return;
-        keepView(ctx, ui, 'rank', () => applyEdit(ctx, setField(model, [...base, 'rank'], rank.value)));
+        keepView(ctx, ui, 'rank', () => applyEdit(ctx, setField(ctx.model, [...base, 'rank'], rank.value)));
     });
     const reward = rewardOf(rankRow(model, record.rank));
     const rankRowNode = row(doc, labelled(doc, 'rank', rank));
@@ -242,7 +288,7 @@ export function renderTrainerTemplate(ctx, container, { record, idx, id, problem
         : 'Name a rank of this pack: the checker refuses any other.', { class: 'field-hint' }));
     body.append(rankRowNode);
 
-    body.append(feeFieldset(ctx, ui, { record, base, feePath, feeIssue, schema, reward }));
+    body.append(feeFieldset(ctx, ui, { record, base, feePath, feeIssue, schema, reward, still: here }));
 
     body.append(row(doc, el(doc, 'span', 'minutes', { class: 'field' }), el(doc, 'span', '60 minutes (fixed by the rules)', { class: 'readonly-value' })));
     body.append(row(doc, el(doc, 'span', 'place', { class: 'field' }), el(doc, 'span', 'None: stands where the story offers it', { class: 'readonly-value' })));
@@ -261,7 +307,7 @@ export function renderTrainerTemplate(ctx, container, { record, idx, id, problem
     if (list && ui.scroll) list.scrollTop = ui.scroll;
 }
 
-function feeFieldset(ctx, ui, { record, base, feePath, feeIssue, schema, reward }) {
+function feeFieldset(ctx, ui, { record, base, feePath, feeIssue, schema, reward, still }) {
     const doc = ctx.doc;
     const bounds = schema.properties.fee.properties.coinMin;
     const set = el(doc, 'fieldset', '', { class: 'form-fieldset' });
@@ -324,7 +370,7 @@ function feeFieldset(ctx, ui, { record, base, feePath, feeIssue, schema, reward 
             const value = parse(control);
             if (value === null) { refresh(); return; }
             if (value === fee[key]) return;
-            commitChange(ctx, ui, control, key, () => applyEdit(ctx, setField(ctx.model, [...base, 'fee', key], value)));
+            commitChange(ctx, ui, control, key, () => applyEdit(ctx, setField(ctx.model, [...base, 'fee', key], value)), still);
         });
     }
     return set;
@@ -421,7 +467,7 @@ function skillsFieldset(ctx, ui, { record, base, schema }) {
         if (groups.length > 3) set.append(el(doc, 'p', `${groups.length} classes in all. The list scrolls.`, { class: 'muted fieldset-unset' }));
     }
     for (const node of unknownRefs(ctx, ui, { refs, known, base, key: 'skills', noun: 'a skill' })) set.append(node);
-    const fold = button(doc, ui.folded ? 'Choose skills' : 'Fold the list', () => { ui.folded = !ui.folded; ctx.render(); ctx.inspector?.querySelector?.('[data-ctl="fold"]')?.focus?.(); }, { class: 'skill-fold', 'data-ctl': 'fold', 'aria-expanded': ui.folded ? 'false' : 'true' });
+    const fold = button(doc, ui.folded ? 'Choose skills' : 'Fold the list', () => { ui.folded = !ui.folded; ctx.render(); focusControl(byCtl(ctx.inspector, 'fold')); }, { class: 'skill-fold', 'data-ctl': 'fold', 'aria-expanded': ui.folded ? 'false' : 'true' });
     set.append(fold);
     const hint = el(doc, 'p', '', { class: 'field-hint' });
     hint.append('The story may narrow this list with ', el(doc, 'code', '| teaches:'), ', never add to it. A trainer teaches the next form of a skill the character already has.');
@@ -510,6 +556,10 @@ function openConvertDialog(ctx, invoker, idx, record) {
 
     const place = el(doc, 'select', '', { 'aria-label': 'place', 'data-ctl': 'place' });
     for (const choice of places) place.append(el(doc, 'option', `${choice.name} (${choice.id})`, { value: choice.id }));
+    // The place it stood at before it became a template, if it was a fixed trainer once and the pack still has that place.
+    const before = ctx.trainerUi?.places?.[record.slug];
+    const earlier = before ? places.find(choice => localId(model, choice.id) === localId(model, before)) : null;
+    if (earlier) place.value = earlier.id;
     const fee = el(doc, 'input', '', { 'aria-label': 'fee', inputmode: 'numeric', autocomplete: 'off' });
     fee.value = safeLabel(record.fee?.coinMin ?? 1);
     const problem = el(doc, 'p', '', { class: 'field-error', role: 'alert' });

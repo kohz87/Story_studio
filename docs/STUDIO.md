@@ -1172,8 +1172,15 @@ the fee from the range then. The design is `docs/v2/OPEN_TRAINERS_SPEC.md` in St
   the rank is the first pack rank). The dialog behind **Convert to fixed trainer…** asks for a place and a fee (starting at the
   lowest fee) and drops `open`, `rank` and the range. Each is one undoable edit that keeps the record's slug and position.
 - **Focus.** Typing never redraws the page: the fee area and the skill list follow what is typed, and a change (Enter, Tab,
-  leaving the field) is committed afterwards. After a commit the focus goes back to the control it was on, or to where Tab
-  was heading, and the pane keeps its scroll.
+  leaving the field) is committed afterwards. After a commit the focus goes back to the control it was on, or to where Tab was
+  heading, with a text field's contents selected (as tabbing into it does), and the pane keeps its scroll. When the move out of the
+  field is a click or a tap, the commit waits until that click has been handled, so the click is not lost to the redraw (a
+  250 ms timeout covers a click that never comes). Controls are found by comparing their `data-ctl` key, never through a selector.
+- **Width.** A template's inspector starts at 480 px instead of 330, so slugs and the search box are not cut; a width the creator
+  has set (stored, or changed this session) always wins. On a phone the slug and name stack.
+- **Add menu.** It follows the menu pattern: Down or Up from the button opens it, Up, Down, Home and End move, Escape closes.
+- **Convert.** Converting a template back to fixed offers the place the trainer had before it became a template (remembered for
+  the session), else the first place.
 - **Forms.** `schemaForRecord(kind, record)` in `src/form-schema.js` gives a trainer its own variant: a fixed trainer's generic
   form leaves out the `open` marker, and a template is never shown the generic form.
 - **Tests.** `tests/trainers.test.js` (chips, filter counts, Add menu, editor, errors, conversions, other records' bytes) and the

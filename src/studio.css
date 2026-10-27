@@ -322,5 +322,5 @@ main{padding:14px 16px;overflow:visible;gap:12px}
 .editor-actions{display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px}
 .editor-actions .spacer{flex:1}
 @media(max-width:600px){.check-grid{grid-template-columns:minmax(0,1fr)}.check-row .slug{display:none}}
-@media(max-width:420px){.fee-row{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:420px){.fee-row,.template-ids{grid-template-columns:minmax(0,1fr)}}
 .skill-fold{align-self:flex-start}
