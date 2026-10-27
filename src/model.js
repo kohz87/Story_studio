@@ -406,7 +406,8 @@ export function indexReferences(document) {
                 if (!trn || typeof trn !== 'object') continue;
                 const ownerId = toFull(identity(trn, 'trainers') || `trainer-${tIdx}`);
 
-                if (trn.place) {
+                // A template has no place: it stands where the story offers it.
+                if (trn.place && trn.open !== true) {
                     addRef(refs, 'trainers', ownerId, ['content', 'rules', rIdx, 'trainers', tIdx, 'place'], 'places', resolvePlaceRef(trn.place));
                 }
 

@@ -4,7 +4,7 @@ import { KINDS, LABELS, records, identity, localId, kindPath, TRAITS, trait } fr
 import { add, remove } from '../edits.js';
 import { cascadeChanges } from './classes.js';
 import { renderForm, createDefault } from '../forms.js';
-import { schemaForKind, validateField } from '../form-schema.js';
+import { schemaForRecord, validateField } from '../form-schema.js';
 
 function getRecordProblems(model, kind, record, idx) {
     if (!model?.validation?.errors) return [];
@@ -103,7 +103,7 @@ export function renderRecords(ctx) {
     const model = ctx.model;
     const doc = ctx.doc;
     const kind = ctx.selection.kind;
-    const schema = schemaForKind(kind);
+    const schema = schemaForRecord(kind, null);
     const rawRecords = records(model, kind);
 
     const validRecords = [];
@@ -223,7 +223,7 @@ function renderRecordsInspector(ctx, container, kind, schema, validRecords, sing
     }
 
     const formBody = el(doc, 'div', '', { class: 'inspector-form-body' });
-    renderForm(ctx, formBody, schema, record, baseEnginePath, { kind, record, label: singularLabel });
+    renderForm(ctx, formBody, schemaForRecord(kind, record), record, baseEnginePath, { kind, record, label: singularLabel });
     if (kind === 'places') {
         addFieldHint(ctx, formBody, [...baseEnginePath, 'market'], ['RPG Battle\u2019s trade makes traders at places with a market type. ',
             ...marketsClause(ctx.doc, records(model, 'markets').length, 'price factors and stock size', true), '.']);

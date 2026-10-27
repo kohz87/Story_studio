@@ -130,7 +130,7 @@ export const HOST_SCHEMAS = {
 };
 
 // How a form names the variants of a union whose `$defs` entries have a clear meaning (a quest is either closed or open).
-export const VARIANT_LABELS = Object.freeze({ closedQuest: 'Fixed', openQuest: 'Template' });
+export const VARIANT_LABELS = Object.freeze({ closedQuest: 'Fixed', openQuest: 'Template', fixedTrainer: 'Fixed', openTrainer: 'Template' });
 
 export function resolveSchema(schema, defs = rulesV2Schema?.$defs, seen = new Set()) {
     if (!schema || typeof schema !== 'object') return schema;
@@ -170,6 +170,20 @@ export function schemaForKind(kind) {
         return resolveSchema(rulesV2Schema.$defs[defKey]);
     }
     return null;
+}
+
+/**
+ * The schema one record is edited against. A trainer is either fixed or an open template (`open: true`), and each has its own
+ * fields; a fixed trainer's form leaves out the `open` marker, which the Convert actions own.
+ */
+export function schemaForRecord(kind, record) {
+    const schema = schemaForKind(kind);
+    if (kind !== 'trainers' || !schema?.oneOf) return schema;
+    const open = record?.open === true;
+    const variant = schema.oneOf.find(part => part.defName === (open ? 'openTrainer' : 'fixedTrainer'));
+    if (!variant || open) return variant ?? schema;
+    const { open: _marker, ...properties } = variant.properties;
+    return { ...variant, properties };
 }
 
 export function referenceTarget(kind, path, record) {
