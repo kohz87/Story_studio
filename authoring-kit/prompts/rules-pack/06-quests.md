@@ -33,6 +33,19 @@ Step 6. Rewrite the base pack's quests (if it has any) as schema-2 quest templat
   "reward": {"coinMin","coinMax","xpMin","xpMax","items":[]} (both ranges inside that rank's reward range),
   objectives without a fixed target ({"id","kind":"kill","count":3}), "repeat": null, "chain": null. Use two or three for
   generic guild jobs.
+- A story that offers jobs in its own words is matched to these templates, so write one story, one hunt and one delivery
+  template for each rank you use. An open kill or collect objective can also bound the count a job may ask for:
+  "countMin" and/or "countMax" (whole numbers 1-999) beside "count", with countMin <= count <= countMax (a hunt that
+  takes 1 to 8 foes: {"id","kind":"kill","count":3,"countMin":1,"countMax":8}). Both are optional; leave them out
+  where the template's own count is the only one that makes sense. A pack that uses them needs "storyBlock": "^2.5" in
+  requires.
+- Give each open template an optional "offerType" saying which job it is for: "hunt", "cull", "gather", "deliver",
+  "explore", "escort" or "task". Hunt and cull both use a kill objective, gather and deliver a collect objective, escort
+  and task a story objective, so the type is how a cull finds your cull template and not your hunt template. The type must
+  suit the template's first objective (hunt, cull: kill; gather, deliver: collect; explore: visit; escort, task: story),
+  and only open templates have it. Two templates may share a type and rank; the first in the list is tried first. It needs
+  "storyBlock": "^2.5" in requires and RPG Battle 2.3.0 to have an effect; without them the first template of the kind is
+  used as before.
 Output {"quests":[...]}. In a file: put it at content.quests of work/pack.json.
 ```
 
@@ -44,4 +57,6 @@ node check.mjs work/pack.json --through 6
 
 It should print `OK through step 6`. Typical problems: `bad-ref` (a foe, item, place or giver that is not defined: places
 need the full `pack.<id>/<slug>`), `bad-schema` (an objective with a missing field, a quest without all eleven fields),
-`bad-schema` on an open quest whose coin or xp range leaves the rank's reward range.
+`bad-schema` on an open quest whose coin or xp range leaves the rank's reward range, `bad-schema` at an open objective's
+`count` when it is not between its `countMin` and `countMax` (or at `countMax` when `countMin` is above it), `bad-schema` at `offerType` when it does not suit the first objective,
+`envelope-unknown` at `offerType` on a quest that is not an open template.

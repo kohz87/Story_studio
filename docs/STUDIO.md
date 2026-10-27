@@ -1115,7 +1115,7 @@ What the form makes (`src/code-module/`, `src/screens/code-module.js`):
   the reply it needed is deleted, and a guard that asks an undeclared query fails the command with Story Block's sentence.
   Tests: `tests/code-module-host.test.js`.
 - **Copied Story Block files.** `tests/vendor/story-block/` holds Story Block's testkit and the runtime it imports, taken from
-  Studio's own vendored copy (`vendor/story-block/`, Story Block 2.4.0, commit `875f3f5`), with `VERSION`, `package.json`, and
+  Studio's own vendored copy (`vendor/story-block/`, Story Block 2.5.0, commit `329dede`), with `VERSION`, `package.json`, and
   `tests/vendor/LICENSE-story-block` (Studio's root `LICENSE`, AGPL-3.0). `tests/vendor/README.md` says how to refresh them.
   The copied set is 128 files: the 125-file testkit closure plus `VERSION`, `package.json` and the licence. The generated module
   `src/code-module/assets.js` is written by `scripts/code-module-assets.mjs` (also called by `scripts/build.mjs`) and is checked

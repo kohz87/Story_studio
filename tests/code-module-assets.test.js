@@ -16,9 +16,9 @@ const vendorDir = join(root, 'vendor', 'story-block');
 const committed = readFileSync(join(root, 'src', 'code-module', 'assets.js'), 'utf8');
 const copied = new Map(VENDOR_FILES.map(([path, base64]) => [path, Buffer.from(base64, 'base64')]));
 
-// The baseline these counts describe: Story Block 2.4.0 (875f3f5), re-synced with the open trainer templates. The closure is
+// The baseline these counts describe: Story Block 2.5.0 (329dede), re-synced with the generative offers fields. The closure is
 // still 125 files, so the copied set is still 128 entries (the closure, plus LICENSE, package.json and the generated VERSION text).
-const BASELINE = { version: '2.4.0', commit: '875f3f5a7942e857f4c4cec58a74c8b3320aa329', files: 125 };
+const BASELINE = { version: '2.5.0', commit: '329dede0268aa07ca978a1f0adeb48d9c805f5b0', files: 125 };
 
 test('the committed assets.js is exactly what the generator writes now', () => {
     assert.equal(committed, codeModuleAssets(root));
@@ -53,7 +53,7 @@ test('every copied file decodes to the bytes of the vendored copy', () => {
 
 test('the VERSION file is the four-line text of section 3.8, and the licence is the root LICENSE', () => {
     assert.equal(copied.get('tests/vendor/story-block/VERSION').toString('utf8'), versionText(vendorDir, BASELINE.files));
-    assert.equal(copied.get('tests/vendor/story-block/VERSION').toString('utf8'), `Story Block 2.4.0\ncommit ${BASELINE.commit}\nfiles 125\nmatrix none\n`);
+    assert.equal(copied.get('tests/vendor/story-block/VERSION').toString('utf8'), `Story Block 2.5.0\ncommit ${BASELINE.commit}\nfiles 125\nmatrix none\n`);
     assert.ok(copied.get('tests/vendor/LICENSE-story-block').equals(readFileSync(join(root, 'LICENSE'))));
 });
 
