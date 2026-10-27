@@ -129,6 +129,9 @@ export const HOST_SCHEMAS = {
     },
 };
 
+// How a form names the variants of a union whose `$defs` entries have a clear meaning (a quest is either closed or open).
+export const VARIANT_LABELS = Object.freeze({ closedQuest: 'Fixed', openQuest: 'Template' });
+
 export function resolveSchema(schema, defs = rulesV2Schema?.$defs, seen = new Set()) {
     if (!schema || typeof schema !== 'object') return schema;
     if (schema.$ref) {
@@ -138,7 +141,7 @@ export function resolveSchema(schema, defs = rulesV2Schema?.$defs, seen = new Se
         if (target) {
             seen.add(refKey);
             const { $ref, ...rest } = schema;
-            return resolveSchema({ ...target, ...rest }, defs, new Set(seen));
+            return resolveSchema({ ...target, ...rest, defName: refKey }, defs, new Set(seen));
         }
     }
     const out = Array.isArray(schema) ? [] : {};

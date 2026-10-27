@@ -223,7 +223,7 @@ function renderRecordsInspector(ctx, container, kind, schema, validRecords, sing
     }
 
     const formBody = el(doc, 'div', '', { class: 'inspector-form-body' });
-    renderForm(ctx, formBody, schema, record, baseEnginePath, { kind, record });
+    renderForm(ctx, formBody, schema, record, baseEnginePath, { kind, record, label: singularLabel });
     if (kind === 'places') {
         addFieldHint(ctx, formBody, [...baseEnginePath, 'market'], ['RPG Battle\u2019s trade makes traders at places with a market type. ',
             ...marketsClause(ctx.doc, records(model, 'markets').length, 'price factors and stock size', true), '.']);

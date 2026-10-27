@@ -451,3 +451,25 @@ test('no names are lost: every Bluewatch foe is listed in order', { timeout: 600
         assert.deepEqual(await page.locator('.record-card-name').allTextContents(), names(pack.content.creatures));
     });
 });
+
+test('the Quests inspector names the record and its type instead of "Item N" and "variant"', { timeout: 90000 }, async () => {
+    await withPage({}, async page => {
+        await load(page);
+        await open(page, 'Quests');
+        const form = page.locator('.inspector-form-body');
+        await page.locator('.record-card[data-id="open-story-task-f"]').click();
+        assert.equal(await form.getByText(/Item \d/).count(), 0);
+        assert.equal(await form.getByText('Quest variant').count(), 0);
+        assert.equal(await form.locator('legend').first().innerText(), 'Quest');
+        const type = form.locator('label.field', { hasText: /^Quest type/ }).locator('select');
+        assert.equal(await form.locator('label.field', { hasText: /^Quest type/ }).count(), 1);
+        assert.deepEqual((await type.locator('option').allTextContents()).filter(text => !text.startsWith('(')), ['Fixed', 'Template']);
+        assert.equal(await type.evaluate(select => select.selectedOptions[0].textContent), 'Template');
+        await page.locator(`.record-card[data-id="${pack.content.quests.find(quest => quest.open !== true).slug}"]`).click();
+        assert.equal(await type.evaluate(select => select.selectedOptions[0].textContent), 'Fixed');
+        assert.equal(await form.getByText(/Item \d/).count(), 0);
+        await open(page, 'Foes');
+        await page.locator('.record-card').first().click();
+        assert.equal(await form.locator('legend').first().innerText(), 'Foe');
+    });
+});
