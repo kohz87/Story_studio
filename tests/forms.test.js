@@ -49,6 +49,8 @@ test('T4-1: schemaForKind resolves shared rules-v2 $defs and host descriptors wi
     assert.deepEqual(trainerSchema.oneOf.map(variant => variant.defName), ['fixedTrainer', 'openTrainer']);
     const [fixedTrainer, openTrainer] = trainerSchema.oneOf;
     assert.ok(fixedTrainer.properties.place);
+    assert.ok(fixedTrainer.properties.fee);
+    assert.equal(fixedTrainer.properties.minutes.const, 60);
     assert.equal(openTrainer.properties.place, undefined);
     assert.ok(openTrainer.properties.fee.properties.coinMin);
 

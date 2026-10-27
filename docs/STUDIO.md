@@ -1151,6 +1151,34 @@ Known issues (part 5b, the answers to section 11 and the limits that remain):
   (`node scripts/code-module-assets.mjs`); the generated tests then check the new copy.
 - The scaffold's own tests need Node 22 or later. Its `tests/vendor/` is not run by `npm test`.
 
+## Open trainer templates (Story Block 2.4.0)
+
+A trainer is fixed (a place, a set skill list, one fee) or an open template: `open: true`, a pack `rank`, a fee range
+`{ coinMin, coinMax }` and no place. The story offers one where it likes (`+ trainer Name | like: <slug>`) and RPG Battle rolls
+the fee from the range then. The design is `docs/v2/OPEN_TRAINERS_SPEC.md` in Story Block; Studio's part is below.
+
+- **List.** Trainers use the same Fixed / Template chips and All / Fixed / Templates filter as Quests (one component in
+  `src/screens/records.js`, keyed by kind, `FILTERED_KINDS` in `src/records.js`). The choice is per session, not saved in the pack.
+  **+ Add Trainer** opens a menu: *Fixed trainer* (the generic form) or *Trainer template* (added at once with the first pack rank,
+  an empty skill list and a fee of 1, then edited; off with "Add a rank in Pack settings first." when the pack has no ranks).
+- **Editor.** A template opens `src/screens/trainer-template.js`: rank (with that rank's quest pay), the fee range with a live
+  sentence and bar, minutes and place as read-only lines, a skill picker grouped by class (search, count, at most 30), event
+  templates (at most 8), the narrator line with a Copy button, **Convert to fixed trainer…** and **Delete**. A fee that is not a
+  whole number from 1 to 1,000,000 is explained on the field and not committed; an inverted range is committed, so the checker
+  reports it: the fee fields show "Lowest fee must not be above the highest." with the checker's path and Export stays off until
+  it is fixed. A maximum above the rank's quest pay is a note, as in the authoring kit's checker.
+- **Conversions.** A fixed trainer's inspector has **Convert to template** (drops `place`, `fee: n` becomes `{ coinMin: n, coinMax: n }`,
+  the rank is the first pack rank). The dialog behind **Convert to fixed trainer…** asks for a place and a fee (starting at the
+  lowest fee) and drops `open`, `rank` and the range. Each is one undoable edit that keeps the record's slug and position.
+- **Focus.** Typing never redraws the page: the fee area and the skill list follow what is typed, and a change (Enter, Tab,
+  leaving the field) is committed afterwards. After a commit the focus goes back to the control it was on, or to where Tab
+  was heading, and the pane keeps its scroll.
+- **Forms.** `schemaForRecord(kind, record)` in `src/form-schema.js` gives a trainer its own variant: a fixed trainer's generic
+  form leaves out the `open` marker, and a template is never shown the generic form.
+- **Tests.** `tests/trainers.test.js` (chips, filter counts, Add menu, editor, errors, conversions, other records' bytes) and the
+  trainers section of `tests/studio-browser.test.js` (1280 and 390 px, no horizontal scroll, 44 px controls). The 1.6.0 example
+  pack is `tests/fixtures/ersveil-bluewatch-1.6.0.json`.
+
 ## Draft with your own AI (the authoring kit)
 
 Studio has no AI page, takes no keys and makes no requests. A creator who wants an AI to draft a pack from their lore uses

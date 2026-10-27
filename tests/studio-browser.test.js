@@ -8,6 +8,7 @@ import { chromium } from 'playwright';
 import { smallRulesPack } from './fixtures/smallRulesPack.js';
 import { makeValidExtendedPack } from './fixtures/builders.js';
 import { openPack, exportPack } from '../src/model.js';
+import { openParts } from './helpers/parts.js';
 
 const URL = pathToFileURL(resolve('dist/story-studio.html')).href;
 const RULES_HASH = '73a9544b564fd03883162089690350a914c550c455b10ddfaf962c1d4e6b3d35';
@@ -448,3 +449,132 @@ test('offline name edit and export preserve Unicode-distinct keys in layouts and
         assert.deepEqual(await download(page), bytes, 'Raw data also survives draft persistence');
     });
 });
+
+// ---- Trainers: chips, filter, Add menu and the template editor, at 1280 and 390 px (Ersveil 1.6.0: 7 fixed trainers and 4 templates) ----
+
+const BLUEWATCH_160 = readFileSync(new globalThis.URL('./fixtures/ersveil-bluewatch-1.6.0.json', import.meta.url), 'utf8');
+const hits = (page, selector) => page.evaluate(sel => [...document.querySelectorAll(sel)].filter(node => node.getClientRects().length).length, selector);
+const activeKey = page => page.evaluate(() => document.activeElement?.getAttribute('data-ctl') ?? document.activeElement?.tagName);
+
+async function openTrainers(page) {
+    await upload(page, BLUEWATCH_160);
+    await page.waitForFunction(() => document.getElementById('pack-name').value !== '');
+    await openParts(page);
+    await navigate(page, 'Trainers');
+    await page.locator('main h1', { hasText: 'Trainers' }).waitFor();
+}
+
+// No horizontal page scroll, and no button, field, select or summary under 44 px (a checkbox is 22 px inside a 44 px row).
+async function assertFits(page, where) {
+    const scroll = await page.evaluate(() => ({ page: document.documentElement.scrollWidth, window: window.innerWidth, body: document.body.scrollWidth }));
+    assert.ok(scroll.page <= scroll.window && scroll.body <= scroll.window, `${where}: no horizontal scroll ${JSON.stringify(scroll)}`);
+    const measured = await page.evaluate(() => [...document.querySelectorAll('main button, main input:not([type=checkbox]), main select, .inspector button, .inspector input:not([type=checkbox]), .inspector select, .inspector summary, .check-row')]
+        .filter(node => node.getClientRects().length && node.closest('dialog') === null)
+        .map(node => [node.tagName, node.getAttribute('data-ctl') ?? node.textContent.slice(0, 20), Math.round(node.getBoundingClientRect().height * 10) / 10]));
+    assert.ok(measured.length >= 10, `${where}: the controls were found`);
+    assert.deepEqual(measured.filter(([, , height]) => height < 43.5), [], `${where}: every control is at least 44 px tall`);
+}
+
+for (const width of [1280, 390]) {
+    test(`trainers at ${width} px: chips, the filter, the template editor, no horizontal scroll and 44 px controls`, { timeout: 90000 }, async () => {
+        await withPage({ width }, async page => {
+            await openTrainers(page);
+            const counts = await page.locator('[aria-label="Show trainers"] button').evaluateAll(nodes => nodes.map(node => [node.getAttribute('data-filter'), node.querySelector('.count').textContent]));
+            assert.deepEqual(counts, [['all', '11'], ['fixed', '7'], ['template', '4']]);
+            assert.equal(await page.locator('.record-card .chip-fixed').count(), 7);
+            assert.equal(await page.locator('.record-card .chip-template').count(), 4);
+            await assertFits(page, 'list');
+
+            await page.locator('[data-filter="template"]').click();
+            assert.equal(await page.locator('.record-card').count(), 4);
+            assert.equal(await page.locator('[data-filter="template"]').evaluate(node => node === document.activeElement), true, 'the filter keeps focus');
+            await page.locator('.record-card', { hasText: 'Blade drills' }).click();
+            await page.locator('[data-ctl="coinMin"]').waitFor();
+            assert.match(await page.locator('.record-card[aria-pressed="true"]').textContent(), /Blade drills/);
+            assert.match(await page.locator('.inspector').textContent(), /A session costs between 40 and 90 crowns/);
+            assert.equal(await page.locator('[data-ctl="coinMin"]').inputValue(), '40');
+            const rows = await page.locator('.fee-row .fieldset-row').evaluateAll(nodes => nodes.map(node => Math.round(node.getBoundingClientRect().top)));
+            assert.equal(rows[0] === rows[1], width === 1280, 'the fee fields sit side by side on a desktop and stack on a phone');
+            await assertFits(page, 'editor');
+            assert.equal(await page.locator('.check-row .slug').first().isVisible(), width === 1280, 'slugs are dropped from the skill rows on a phone');
+
+            // The search box keeps focus while typing, and the list narrows in place.
+            await page.locator('[data-ctl="search"]').click();
+            await page.keyboard.type('frost');
+            assert.equal(await activeKey(page), 'search');
+            assert.equal(await page.locator('[data-ctl="search"]').inputValue(), 'frost');
+            assert.equal(await hits(page, '.skill-group'), 2);
+            // Ticking a skill redraws the editor but leaves focus on the box and the search as typed.
+            await page.locator('[data-ctl="skill:frost-shard"]').click();
+            assert.equal(await activeKey(page), 'skill:frost-shard');
+            assert.equal(await page.locator('[data-ctl="search"]').inputValue(), 'frost');
+            assert.equal(await page.locator('.skill-count').textContent(), '7 of 30 at most');
+            await page.keyboard.press('Space');
+            assert.equal(await page.locator('.skill-count').textContent(), '6 of 30 at most');
+            assert.equal(await activeKey(page), 'skill:frost-shard');
+        });
+    });
+
+    test(`trainers at ${width} px: an inverted fee range names the checker's path and blocks export until it is fixed`, { timeout: 90000 }, async () => {
+        await withPage({ width }, async page => {
+            await openTrainers(page);
+            await page.locator('.record-card', { hasText: 'Hedge-magic' }).click();
+            await page.locator('[data-ctl="coinMin"]').click();
+            await page.keyboard.press('Control+A');
+            await page.keyboard.type('170');
+            assert.equal(await activeKey(page), 'coinMin', 'typing keeps focus');
+            await page.keyboard.press('Tab');
+            assert.equal(await activeKey(page), 'coinMax', 'Tab moves on and the page is redrawn around it');
+            assert.equal(await page.locator('.field-error').textContent(), 'Lowest fee must not be above the highest. content.rules[0].trainers[10].fee');
+            assert.equal(await page.locator('[data-ctl="coinMin"]').getAttribute('aria-invalid'), 'true');
+            assert.equal(await page.locator('[data-ctl="coinMax"]').getAttribute('aria-invalid'), 'true');
+            assert.equal(await page.locator('#pack-name').evaluate(() => document.querySelector('.topbar .primary').disabled), true, 'Export is blocked');
+            assert.match(await page.getByRole('button', { name: /^Problems/ }).textContent(), /\(1\)/);
+            await assertFits(page, 'error state');
+            await page.keyboard.press('Control+A');
+            await page.keyboard.type('180');
+            await page.keyboard.press('Enter');
+            assert.equal(await activeKey(page), 'coinMax');
+            assert.equal(await page.locator('.field-error').isVisible(), false);
+            assert.equal(await page.locator('.topbar .primary').isDisabled(), false, 'Export works again');
+            assert.match(await page.getByRole('button', { name: /^Problems/ }).textContent(), /\(0\)/);
+        });
+    });
+
+    test(`trainers at ${width} px: the Add menu, a new template, and the conversions both ways`, { timeout: 90000 }, async () => {
+        await withPage({ width }, async page => {
+            await openTrainers(page);
+            const trigger = page.getByRole('button', { name: '+ Add Trainer' });
+            await trigger.click();
+            assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
+            assert.deepEqual(await page.locator('[role="menuitem"]').evaluateAll(nodes => nodes.map(node => node.childNodes[0].textContent)), ['Fixed trainer', 'Trainer template']);
+            await assertFits(page, 'Add menu');
+            await page.keyboard.press('Escape');
+            assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+            await trigger.click();
+            await page.getByRole('menuitem', { name: /^Trainer template/ }).click();
+            await page.locator('[data-ctl="coinMin"]').waitFor();
+            assert.equal(await page.locator('.inspector h2').textContent(), 'New trainer template');
+            assert.match(await page.locator('.field-warn').first().textContent(), /1 problem in this record/);
+            assert.equal(await page.locator('.topbar .primary').isDisabled(), true, 'no skill yet');
+            await page.locator('[data-ctl="skill:swift-thrust"]').click();
+            assert.equal(await page.locator('.topbar .primary').isDisabled(), false);
+
+            // template to fixed through the dialog, then back
+            await page.getByRole('button', { name: /^Convert to fixed trainer/ }).click();
+            const dialog = page.locator('dialog[open]');
+            await dialog.waitFor();
+            assert.equal(await dialog.locator('[aria-label="fee"]').inputValue(), '1');
+            await dialog.locator('[aria-label="fee"]').fill('45');
+            await dialog.getByRole('button', { name: 'Convert', exact: true }).click();
+            await page.getByRole('button', { name: /^Convert to template/ }).waitFor();
+            assert.equal(await page.locator('.topbar .primary').isDisabled(), false);
+            await page.getByRole('button', { name: /^Convert to template/ }).click();
+            await page.locator('[data-ctl="coinMin"]').waitFor();
+            assert.equal(await page.locator('[data-ctl="coinMin"]').inputValue(), '45');
+            assert.equal(await page.locator('[data-ctl="coinMax"]').inputValue(), '45');
+            await page.getByRole('button', { name: 'Undo' }).click();
+            await page.getByRole('button', { name: /^Convert to template/ }).waitFor();
+        });
+    });
+}
