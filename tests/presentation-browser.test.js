@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import { validatePack } from '../vendor/story-block/src/v2/packs/validate.js';
+import { openParts } from './helpers/parts.js';
 
 const APP_URL = pathToFileURL(resolve('dist/story-studio.html')).href;
 const base = () => ({ id: 'test', version: '1.0.0', requires: { storyBlock: '^2' }, description: 'Original text',
@@ -28,7 +29,7 @@ async function pageTest(width, action) {
         await context.close();
     } finally { await browser.close(); }
 }
-const nav = (page, name) => page.locator('.rail').getByRole('button', { name, exact: true }).click();
+const nav = async (page, name) => { await openParts(page); await page.locator('.rail').getByRole('button', { name, exact: true }).click(); };
 async function upload(page, input) {
     await page.setInputFiles('#pack-file', { name: 'fixture.json', mimeType: 'application/json', buffer: Buffer.from(typeof input === 'string' ? input : JSON.stringify(input)) });
 }

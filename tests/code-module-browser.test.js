@@ -10,10 +10,12 @@ import { EXAMPLE_INPUTS } from '../src/code-module/inputs.js';
 import { scaffoldZip } from '../src/code-module/generate.js';
 import { DRAFT_WITH_AI } from '../src/draft-hint.js';
 import { SHIPPED, withPage, upload } from './helpers/dm-browser.js';
+import { openParts } from './helpers/parts.js';
 
 const pack = readFileSync(new globalThis.URL('./fixtures/valid-pack.json', import.meta.url), 'utf8');
 
 async function openCodeModule(page) {
+    await openParts(page);
     await page.locator('.rail').getByRole('button', { name: 'Code module', exact: true }).click();
     await page.locator('main h1', { hasText: 'Code module' }).waitFor();
     await page.locator('#cm-validation[data-ok="true"]').waitFor();

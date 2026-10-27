@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
+import { openParts } from './helpers/parts.js';
 
 const URL = pathToFileURL(resolve('dist/story-studio.html')).href;
 const BLUEWATCH = readFileSync(new globalThis.URL('./fixtures/ersveil-bluewatch-2.2.json', import.meta.url), 'utf8');
@@ -49,6 +50,7 @@ async function load(page, text = BLUEWATCH) {
 
 // The rail also holds the "More kinds" list; the first eight buttons are the kinds.
 async function open(page, name) {
+    await openParts(page);
     await page.locator('.rail').getByRole('button', { name: new RegExp('^' + name) }).click();
     await page.locator('main h1', { hasText: name }).waitFor();
 }
@@ -241,7 +243,7 @@ test('with no storage at all the columns still work from the defaults', { timeou
     });
 });
 
-test('at 390 px the columns stack with no dividers, and the parts list is a disclosure', { timeout: 90000 }, async () => {
+test('at 390 px the columns stack with no dividers', { timeout: 90000 }, async () => {
     await withPage({ width: 390, height: 844 }, async page => {
         await load(page);
         await open(page, 'Foes');
@@ -251,25 +253,46 @@ test('at 390 px the columns stack with no dividers, and the parts list is a disc
         const full = await page.evaluate(() => ['.rail', 'main', '.inspector'].map(selector => Math.round(document.querySelector(selector).getBoundingClientRect().width)));
         assert.deepEqual(full, [390, 390, 390]);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true);
-        const summary = page.locator('.parts > summary');
-        assert.equal(await summary.isVisible(), true);
-        assert.match(await summary.innerText(), /^Foes\s+40$/);
-        await summary.click();
-        assert.equal(await page.locator('.parts').evaluate(node => node.open), false);
-        assert.equal(await page.locator('.parts-list').isVisible(), false);
-        await summary.click();
-        await open(page, 'Quests');
-        assert.match(await summary.innerText(), /^Quests\s+42$/);
     });
 });
 
-test('at 1280 the parts list is simply open, with no disclosure row', { timeout: 60000 }, async () => {
-    await withPage({}, async page => {
+test('at 390 px the parts list starts collapsed, opens on a tap and collapses again after a part is picked', { timeout: 90000 }, async () => {
+    await withPage({ width: 390, height: 844 }, async page => {
         await load(page);
-        assert.equal(await page.locator('.parts > summary').isVisible(), false);
-        assert.equal(await page.locator('.parts-list').isVisible(), true);
+        const summary = page.locator('.parts > summary');
+        const list = page.locator('.parts-list');
+        assert.equal(await summary.isVisible(), true);
+        assert.match(await summary.innerText(), /^Classes\s+20$/);
+        assert.equal(await page.locator('.parts').evaluate(node => node.open), false, 'it starts collapsed');
+        assert.equal(await list.isVisible(), false);
+        await summary.click();
+        assert.equal(await list.isVisible(), true);
+        await list.getByRole('button', { name: /^Foes/ }).click();
+        await page.locator('main h1', { hasText: 'Foes' }).waitFor();
+        assert.equal(await page.locator('.parts').evaluate(node => node.open), false, 'picking a part collapses it');
+        assert.equal(await list.isVisible(), false);
+        assert.match(await summary.innerText(), /^Foes\s+40$/);
+        await openParts(page);
+        assert.equal(await list.isVisible(), true);
+        await openParts(page);
+        assert.equal(await list.isVisible(), true, 'openParts leaves an open list alone');
+        await list.getByRole('button', { name: /^Quests/ }).click();
+        assert.match(await summary.innerText(), /^Quests\s+42$/);
+        assert.equal(await list.isVisible(), false);
     });
 });
+
+for (const width of [1280, 900, 601]) {
+    test(`above 600 px (${width}) the parts list is always visible, with no disclosure row`, { timeout: 60000 }, async () => {
+        await withPage({ width }, async page => {
+            await load(page);
+            assert.equal(await page.locator('.parts > summary').isVisible(), false);
+            assert.equal(await page.locator('.parts-list').isVisible(), true);
+            await page.locator('.rail').getByRole('button', { name: /^Foes/ }).click();
+            assert.equal(await page.locator('.parts-list').isVisible(), true, 'picking a part does not collapse it');
+        });
+    });
+}
 
 const pack = JSON.parse(BLUEWATCH);
 const names = records => records.map(record => record.name);
@@ -336,8 +359,7 @@ for (const width of [1280, 900, 390]) {
         await withPage({ width, height: width === 390 ? 844 : 820 }, async page => {
             await load(page);
             for (const kind of ['Items', 'Foes', 'Places', 'Quests', 'Shops', 'Trainers']) {
-                await page.locator('.rail').getByRole('button', { name: new RegExp('^' + kind) }).click();
-                await page.locator('main h1', { hasText: kind }).waitFor();
+                await open(page, kind);
                 const found = await page.locator('.record-card').evaluateAll(cards => cards.map(card => ({
                     scroll: card.scrollHeight, client: card.clientHeight,
                     lines: [...card.children].map(child => child.scrollHeight),

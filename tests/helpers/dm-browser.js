@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
+import { openParts } from './parts.js';
 
 export const SHIPPED = pathToFileURL(resolve('dist/story-studio.html')).href;
 
@@ -47,6 +48,7 @@ export async function upload(page, text) {
 }
 
 export async function openDataModules(page) {
+    await openParts(page);
     await page.locator('.rail').getByRole('button', { name: /^Data modules/ }).click();
     await page.locator('main h1', { hasText: 'Data modules' }).waitFor();
 }
@@ -91,6 +93,7 @@ export async function tick(scope, label, on = true) {
 }
 
 export async function exportedPack(page) {
+    await openParts(page);
     await page.locator('.rail').getByRole('button', { name: /^Check \/ export/ }).click();
     const pending = page.waitForEvent('download');
     await page.locator('#export-btn').click();

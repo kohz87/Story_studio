@@ -42,10 +42,11 @@ export function mountStudio(root) {
         themeButton.setAttribute('aria-label', `Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`);
     };
 
-    // The parts list opens and closes on a phone (up to 600 px) and stays open everywhere else.
+    // The parts list is a disclosure on a phone (up to 600 px): it starts collapsed and collapses again after a part is picked.
+    // Everywhere else it is always open.
     const stack = win?.matchMedia?.('(max-width: 600px)');
     let parts = null;
-    let partsOpen = true;
+    let partsOpen = false;
     const syncParts = () => { if (parts) parts.open = stack?.matches ? partsOpen : true; };
     stack?.addEventListener?.('change', syncParts);
 
@@ -170,6 +171,7 @@ export function mountStudio(root) {
         select(kind, id = null, form = null) {
             if (destroyed) return;
             selection.kind = kind; selection.id = id; selection.form = form;
+            partsOpen = false;
             ctx.render();
             if (id !== null) {
                 app.classList.add('inspector-open');
