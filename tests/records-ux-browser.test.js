@@ -78,18 +78,6 @@ async function focusDivider(page, name) {
     await divider(page, name).focus();
 }
 
-const slugs = text => {
-    const pack = JSON.parse(text);
-    const seen = new Set();
-    for (const place of pack.content.places) {
-        let slug = place.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-        while (seen.has(slug)) slug += '-2';
-        seen.add(slug);
-        place.slug = slug;
-    }
-    return JSON.stringify(pack);
-};
-
 for (const width of [1280, 900]) {
     test(`dividers at ${width}: markup, drag, keys, clamps and reset`, { timeout: 90000 }, async () => {
         await withPage({ width }, async page => {
@@ -397,9 +385,10 @@ test('the inspector repeats the chip and carries the narrator line for foes and 
 
 test('the Places market field has its helper line', { timeout: 90000 }, async () => {
     await withPage({}, async page => {
-        await load(page, slugs(BLUEWATCH));
+        await load(page);
         await open(page, 'Places');
         await page.locator('.record-card').first().click();
+        assert.equal(await page.locator('.record-card[aria-pressed="true"]').count(), 1);
         const hint = page.locator('.inspector .field-hint');
         assert.equal(await hint.count(), 1);
         assert.equal(await hint.innerText(), `RPG Battle’s trade makes traders at places with a market type. The ${pack.content.markets.length} markets records set their price factors and stock size.`);
