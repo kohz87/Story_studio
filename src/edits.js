@@ -2,6 +2,7 @@
 
 import { LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 import { openPack } from './model.js';
+import { identity } from './identity.js';
 import { schemaForKind, validateChange } from './form-schema.js';
 import { RULES_V2_LIMITS, RULES_V2_PROGRESSION, rulesV2Schema } from '../vendor/story-block/src/v2/packs/rules-v2.js';
 
@@ -192,11 +193,11 @@ function getIdentityKey(kind, record) {
     return 'slug';
 }
 
-/** Extracts the identity string from a record of the given kind. */
+/** Extracts the identity string from a record of the given kind: Story Block's own key, so a record without a slug is keyed by its name. */
 function getRecordIdentity(kind, record) {
     if (!record || typeof record !== 'object') return null;
-    const key = getIdentityKey(kind, record);
-    return record[key] ?? null;
+    const key = identity(record, kind);
+    return key === '' ? null : key;
 }
 
 /** Returns read-only access to a kind's array in a document. */
@@ -471,7 +472,8 @@ export function add(model, kind, record) {
     }
 
     const packId = getPackId(model.document);
-    const rawId = getRecordIdentity(kind, clonedRecord);
+    // A new record states its own key (the add form always does); the keys already in the pack are compared by Story Block's rule.
+    const rawId = clonedRecord[getIdentityKey(kind, clonedRecord)] ?? null;
     if (typeof rawId !== 'string' || !rawId.trim()) {
         return {
             ok: false,
@@ -1173,7 +1175,7 @@ export function remove(model, kind, id, { cascade = false } = {}) {
         const itemLookup = new Map();
         for (const it of model.document.content?.items || []) {
             if (!it || typeof it !== 'object') continue;
-            const target = normalizeId(it.slug || it.id, packId);
+            const target = normalizeId(identity(it, 'items'), packId);
             if (it.id) itemLookup.set(it.id, target);
             if (it.slug) itemLookup.set(it.slug, target);
             if (it.name) {

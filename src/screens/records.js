@@ -8,7 +8,7 @@ import { schemaForKind, validateField } from '../form-schema.js';
 
 function getRecordProblems(model, kind, record, idx) {
     if (!model?.validation?.errors) return [];
-    const id = identity(record);
+    const id = identity(record, kind);
     const normId = localId(model, id);
     const prefix = [...kindPath(kind), idx].join('.');
 
@@ -136,9 +136,9 @@ export function renderRecords(ctx) {
         listContainer.append(el(doc, 'p', `No ${active} ${LABELS[kind].toLowerCase()}.`, { class: 'muted' }));
     } else {
         for (const { record, idx } of shown) {
-            const id = identity(record);
+            const id = identity(record, kind);
             const normId = localId(model, id);
-            const isSelected = ctx.selection.id !== null && ctx.selection.id === normId;
+            const isSelected = Boolean(normId) && ctx.selection.id === normId;
             const problems = getRecordProblems(model, kind, record, idx);
 
             const card = button(doc, '', () => ctx.select(kind, normId), {
@@ -146,15 +146,18 @@ export function renderRecords(ctx) {
                 'aria-pressed': isSelected ? 'true' : 'false',
                 'data-id': normId,
             });
+            // A record with no key (no slug, and no name to make one from) cannot be told from another, so it cannot be picked.
+            if (!normId) card.disabled = true;
             if (problems.length > 0) card.setAttribute('data-has-problem', 'true');
 
             const nameRow = el(doc, 'span', '', { class: 'record-card-header' });
-            nameRow.append(el(doc, 'span', record.name || normId, { class: 'record-card-name' }));
+            nameRow.append(el(doc, 'span', record.name || normId || `${LABELS[kind] || kind} ${idx + 1}`, { class: 'record-card-name' }));
             const kindTrait = trait(kind, record);
             if (kindTrait) nameRow.append(el(doc, 'span', TRAITS[kindTrait], { class: `chip chip-${kindTrait}` }));
             if (problems.length > 0) nameRow.append(el(doc, 'span', '', { class: 'problem-dot', 'aria-label': 'Has problems' }));
 
-            const metaText = normId !== record.name ? `${safeLabel(normId)}${record.kind ? ` · ${safeLabel(record.kind)}` : ''}` : (record.kind || '');
+            const metaText = !normId ? 'No ID: give it a name or a slug'
+                : normId !== record.name ? `${safeLabel(normId)}${record.kind ? ` · ${safeLabel(record.kind)}` : ''}` : (record.kind || '');
             card.append(nameRow);
             if (metaText) card.append(el(doc, 'span', metaText, { class: 'record-card-meta' }));
             listContainer.append(card);
@@ -185,14 +188,14 @@ function renderRecordsInspector(ctx, container, kind, schema, validRecords, sing
         return;
     }
 
-    const selItem = selId ? validRecords.find(item => localId(model, identity(item.record)) === selId) : null;
+    const selItem = selId ? validRecords.find(item => localId(model, identity(item.record, kind)) === selId) : null;
     if (!selItem) {
         container.append(el(doc, 'p', 'Select a record from the list to inspect and edit.', { class: 'muted' }));
         return;
     }
 
     const { record, idx } = selItem;
-    const id = identity(record);
+    const id = identity(record, kind);
     const normId = localId(model, id);
     const baseEnginePath = [...kindPath(kind), idx];
 
@@ -272,7 +275,7 @@ function renderAddForm(ctx, container, kind, schema, singularLabel) {
         if (!checked.ok) { ctx.notify(`${checked.code}: ${checked.message}`); return; }
         const res = add(ctx.model, kind, draft);
         if (res.ok) {
-            const newId = identity(draft);
+            const newId = identity(draft, kind);
             const normId = localId(res.model, newId);
             if (applyEdit(ctx, res, { id: normId })) {
                 ctx.select(kind, normId);
@@ -287,7 +290,7 @@ function renderAddForm(ctx, container, kind, schema, singularLabel) {
 }
 
 function openRecordRemoveDialog(ctx, kind, record, invoker) {
-    const id = identity(record);
+    const id = identity(record, kind);
     const previewRes = remove(ctx.model, kind, id, { cascade: false });
     if (previewRes.ok) {
         applyEdit(ctx, previewRes, { id: null });
