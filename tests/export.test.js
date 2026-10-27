@@ -29,8 +29,8 @@ test('download bytes exactly equal the canonical golden export and retain the en
     const bytes = new Uint8Array(await state.blobs[0].arrayBuffer());
     assert.deepEqual(bytes, new TextEncoder().encode(exportPack(state.ctx.model)));
     const reopened = openPack(new TextDecoder().decode(bytes));
-    assert.equal(reopened.rulesHash, 'abefa51fb43800ffca5fb0c8e5eb92ede0ebfffd2d09e6e334e2badb2342532a');
-    assert.equal(reopened.packHash, '15f199c52dab51676942a834ae2087d678f4b51bfa875744675b012dbfe0f175');
+    assert.equal(reopened.rulesHash, '73a9544b564fd03883162089690350a914c550c455b10ddfaf962c1d4e6b3d35');
+    assert.equal(reopened.packHash, '0e156cdbcfd8c02db87c44166582bee3071f8bc6d8fde51af66f31a63214cf63');
     assert.equal(state.exported, true);
     assert.equal(state.ctx.root.querySelector('a'), null);
     assert.equal(state.revoked.length, 0);

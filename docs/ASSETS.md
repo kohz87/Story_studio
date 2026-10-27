@@ -31,6 +31,7 @@ notes (`studio-mocks/`); the look is the glass themes, Nunito, accent `#7b6cf0`.
 | `budget` | Power budget meter | 24 |
 | `cascade-remove` | Remove with everything that depends on it: a branch with a cut | 24 |
 | `chevron-down` | The pack parts disclosure on a phone (closed or open) | 24 |
+| `copy` | Copy the narrator line of a trainer template | 24 |
 | `undo`, `redo` | History buttons; mirror images of each other | 24 |
 | `open-file` | Open a pack file | 24 |
 | `export-file` | Export a pack file | 24 |

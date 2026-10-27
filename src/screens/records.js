@@ -1,10 +1,11 @@
 import { applyEdit } from '../apply-edit.js';
 import { safeLabel, el, button, icon } from '../dom.js';
-import { KINDS, LABELS, records, identity, localId, kindPath, TRAITS, trait } from '../records.js';
+import { KINDS, LABELS, records, identity, localId, kindPath, TRAITS, trait, FILTERED_KINDS } from '../records.js';
 import { add, remove } from '../edits.js';
 import { cascadeChanges } from './classes.js';
 import { renderForm, createDefault } from '../forms.js';
-import { schemaForKind, validateField } from '../form-schema.js';
+import { renderTrainerTemplate, convertToTemplate, addTrainerTemplate, templateMeta, canConvertToTemplate } from './trainer-template.js';
+import { schemaForRecord, validateField } from '../form-schema.js';
 
 function getRecordProblems(model, kind, record, idx) {
     if (!model?.validation?.errors) return [];
@@ -47,7 +48,7 @@ function marketPlaces(model) {
 function headerNote(ctx, kind, count) {
     const doc = ctx.doc;
     if (kind === 'creatures') return note(doc, 'Base foes: each fight scales them to its danger; the narrator can make named variants.');
-    if (kind === 'trainers') return note(doc, 'Trainers are fixed records: each stands at a place, with set skills and a fee. Training refuses an unknown trainer.');
+    if (kind === 'trainers') return note(doc, 'Fixed trainers stand at one place with set skills and a fee. Templates are open: a skill list and a fee range by rank; RPG Battle places them where the story offers them.');
     if (kind !== 'shops') return null;
     const places = marketPlaces(ctx.model);
     const link = el(doc, 'a', 'Places / Markets', { class: 'link-ish', href: '#places' });
@@ -66,17 +67,22 @@ function templateNote(ctx, kind, record, id) {
         return note(doc, 'Base stat block. Each fight scales it to that fight\u2019s danger when it is offered. For a named variant the narrator writes ',
             el(doc, 'code', `! encounter <name> | like: ${safeLabel(id)}`));
     }
+    if (kind === 'trainers') {
+        return note(doc, 'Template: the fee is rolled from this range when a trainer is offered with ', el(doc, 'code', `| like: ${safeLabel(id)}`),
+            ', and the trainer stays where it was offered.');
+    }
     if (kind !== 'quests') return null;
     const rank = typeof record.rank === 'string' && record.rank ? ` for rank ${safeLabel(record.rank)}` : '';
     return note(doc, `Template: a reward range${rank}. The actual reward is fixed when the narrator offers one, with `, el(doc, 'code', `| like: ${safeLabel(id)}`));
 }
 
-function questFilter(ctx, counts, active) {
+// The All / Fixed / Templates filter of a list that holds both (quests, trainers). The choice lives in ctx.filters for the session only.
+function recordFilter(ctx, kind, counts, active) {
     const doc = ctx.doc;
-    const group = el(doc, 'div', '', { class: 'skill-tabs quest-filter', role: 'group', 'aria-label': 'Show quests' });
+    const group = el(doc, 'div', '', { class: 'skill-tabs quest-filter', role: 'group', 'aria-label': `Show ${LABELS[kind].toLowerCase()}` });
     for (const [key, label] of FILTERS) {
         const choice = button(doc, '', () => {
-            (ctx.filters ??= {}).quests = key;
+            (ctx.filters ??= {})[kind] = key;
             ctx.render();
             ctx.main.querySelector?.(`[data-filter="${key}"]`)?.focus?.();
         }, { class: 'skill-tab-btn', 'aria-pressed': key === active ? 'true' : 'false', 'data-filter': key });
@@ -84,6 +90,64 @@ function questFilter(ctx, counts, active) {
         group.append(choice);
     }
     return group;
+}
+
+function filterHelp(doc, kind) {
+    const help = el(doc, 'p', '', { class: 'muted filter-help' });
+    if (kind === 'trainers') {
+        help.append('Templates have no place: the story offers one with ', el(doc, 'code', '| like: <slug>'),
+            ', or the reader uses Make this a trainer. The fee is rolled from the range then.');
+    } else help.append('Templates are open quests: a reward range by rank. The actual reward is fixed when the narrator offers one.');
+    return help;
+}
+
+// "+ Add Trainer" opens a two-item menu: a fixed trainer (the generic form) or a trainer template (added at once, then edited).
+function addTrainerMenu(ctx, singularLabel) {
+    const doc = ctx.doc;
+    const wrap = el(doc, 'span', '', { class: 'add-wrap' });
+    const trigger = button(doc, `+ Add ${singularLabel}`, () => setOpen(menu.hidden, 'first'), { 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+    const menu = el(doc, 'div', '', { class: 'add-menu', role: 'menu' });
+    menu.hidden = true;
+    const item = (label, help, action, disabled) => {
+        const choice = button(doc, label, () => { setOpen(false); action(); }, { role: 'menuitem' });
+        choice.append(el(doc, 'small', help, { class: 'muted' }));
+        choice.disabled = disabled;
+        return choice;
+    };
+    const blocked = canConvertToTemplate(ctx.model);
+    menu.append(
+        item('Fixed trainer', 'Stands at one place, one fee', () => ctx.select('trainers', '__new__'), false),
+        item('Trainer template', blocked || 'No place; a skill list and a fee range by rank', () => addTrainerTemplate(ctx), Boolean(blocked)),
+    );
+    const items = () => [...menu.querySelectorAll('[role="menuitem"]')].filter(choice => !choice.disabled);
+    function setOpen(open, which) {
+        menu.hidden = !open;
+        trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open && which) items().at(which === 'last' ? -1 : 0)?.focus?.();
+    }
+    // The menu pattern: Down and Up from the button open it, then Up, Down, Home and End move through the items; Escape closes it.
+    wrap.addEventListener('keydown', event => {
+        const now = items();
+        const at = now.indexOf(doc.activeElement);
+        if (event.key === 'Escape' && !menu.hidden) { event.preventDefault?.(); setOpen(false); trigger.focus?.(); return; }
+        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+        if (menu.hidden) {
+            if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+            event.preventDefault?.();
+            setOpen(true, event.key === 'ArrowUp' ? 'last' : 'first');
+            return;
+        }
+        if (!now.length) return;
+        event.preventDefault?.();
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? now.length - 1
+            : event.key === 'ArrowDown' ? (at + 1) % now.length : (at <= 0 ? now.length - 1 : at - 1);
+        now[next].focus?.();
+    });
+    wrap.addEventListener('focusout', event => {
+        if (!menu.hidden && event.relatedTarget && !wrap.contains?.(event.relatedTarget)) setOpen(false);
+    });
+    wrap.append(trigger, menu);
+    return wrap;
 }
 
 // A helper line under a field of the open record's form (the form itself knows nothing about it).
@@ -103,7 +167,7 @@ export function renderRecords(ctx) {
     const model = ctx.model;
     const doc = ctx.doc;
     const kind = ctx.selection.kind;
-    const schema = schemaForKind(kind);
+    const schema = schemaForRecord(kind, null);
     const rawRecords = records(model, kind);
 
     const validRecords = [];
@@ -120,13 +184,13 @@ export function renderRecords(ctx) {
     header.append(
         el(doc, 'h1', LABELS[kind] || kind),
         el(doc, 'div', `${validRecords.length} ${validRecords.length === 1 ? 'record' : 'records'}`, { class: 'records-subtitle' }),
-        button(doc, `+ Add ${singularLabel}`, () => ctx.select(kind, '__new__'))
+        kind === 'trainers' ? addTrainerMenu(ctx, singularLabel) : button(doc, `+ Add ${singularLabel}`, () => ctx.select(kind, '__new__'))
     );
 
     const counts = { all: validRecords.length, fixed: 0, template: 0 };
     for (const { record } of validRecords) { const t = trait(kind, record); if (t) counts[t]++; }
-    const filtered = kind === 'quests';
-    const active = filtered && FILTERS.some(([key]) => key === ctx.filters?.quests) ? ctx.filters.quests : 'all';
+    const filtered = FILTERED_KINDS.has(kind);
+    const active = filtered && FILTERS.some(([key]) => key === ctx.filters?.[kind]) ? ctx.filters[kind] : 'all';
     const shown = validRecords.filter(({ record }) => active === 'all' || trait(kind, record) === active);
 
     const listContainer = el(doc, 'div', '', { class: 'records-list' });
@@ -157,6 +221,7 @@ export function renderRecords(ctx) {
             if (problems.length > 0) nameRow.append(el(doc, 'span', '', { class: 'problem-dot', 'aria-label': 'Has problems' }));
 
             const metaText = !normId ? 'No ID: give it a name or a slug'
+                : kind === 'trainers' && kindTrait === 'template' ? templateMeta(normId, record)
                 : normId !== record.name ? `${safeLabel(normId)}${record.kind ? ` · ${safeLabel(record.kind)}` : ''}` : (record.kind || '');
             card.append(nameRow);
             if (metaText) card.append(el(doc, 'span', metaText, { class: 'record-card-meta' }));
@@ -168,8 +233,7 @@ export function renderRecords(ctx) {
     const intro = headerNote(ctx, kind, validRecords.length);
     if (intro) screen.append(intro);
     if (filtered) {
-        screen.append(questFilter(ctx, counts, active),
-            el(doc, 'p', 'Templates are open quests: a reward range by rank. The actual reward is fixed when the narrator offers one.', { class: 'muted filter-help' }));
+        screen.append(recordFilter(ctx, kind, counts, active), filterHelp(doc, kind));
     }
     screen.append(listContainer);
     ctx.main.append(screen);
@@ -218,12 +282,17 @@ function renderRecordsInspector(ctx, container, kind, schema, validRecords, sing
     }
 
     const problems = getRecordProblems(model, kind, record, idx);
+    // A trainer template has its own editor: it shows the problems beside the fields they belong to, and owns the actions.
+    if (kind === 'trainers' && kindTrait === 'template') {
+        renderTrainerTemplate(ctx, container, { record, idx, id: normId, problems, onDelete: invoker => openRecordRemoveDialog(ctx, kind, record, invoker) });
+        return;
+    }
     if (problems.length > 0) {
         container.append(el(doc, 'div', problems.map(p => p.message).join('\n'), { role: 'status', class: 'warning' }));
     }
 
     const formBody = el(doc, 'div', '', { class: 'inspector-form-body' });
-    renderForm(ctx, formBody, schema, record, baseEnginePath, { kind, record, label: singularLabel });
+    renderForm(ctx, formBody, schemaForRecord(kind, record), record, baseEnginePath, { kind, record, label: singularLabel });
     if (kind === 'places') {
         addFieldHint(ctx, formBody, [...baseEnginePath, 'market'], ['RPG Battle\u2019s trade makes traders at places with a market type. ',
             ...marketsClause(ctx.doc, records(model, 'markets').length, 'price factors and stock size', true), '.']);
@@ -232,7 +301,13 @@ function renderRecordsInspector(ctx, container, kind, schema, validRecords, sing
 
     const actionsRow = el(doc, 'div', '', { class: 'row' });
     const removeBtn = button(doc, 'Remove…', () => openRecordRemoveDialog(ctx, kind, record, removeBtn), { class: 'danger' });
-    actionsRow.append(removeBtn);
+    if (kind === 'trainers') {
+        const toTemplate = button(doc, 'Convert to template', () => convertToTemplate(ctx, idx, normId));
+        const blocked = canConvertToTemplate(ctx.model);
+        toTemplate.disabled = Boolean(blocked);
+        actionsRow.append(toTemplate, removeBtn);
+        if (blocked) container.append(el(doc, 'p', blocked, { class: 'muted field-hint' }));
+    } else actionsRow.append(removeBtn);
     container.append(actionsRow);
 }
 

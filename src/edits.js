@@ -3,7 +3,7 @@
 import { LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 import { openPack } from './model.js';
 import { identity } from './identity.js';
-import { schemaForKind, validateChange } from './form-schema.js';
+import { schemaForKind, schemaForRecord, validateChange } from './form-schema.js';
 import { RULES_V2_LIMITS, RULES_V2_PROGRESSION, rulesV2Schema } from '../vendor/story-block/src/v2/packs/rules-v2.js';
 
 const RULES_KINDS = new Set(['classes', 'skills', 'branches', 'itemRules', 'trainers']);
@@ -1764,14 +1764,17 @@ export function setSchemaField(model, path, value, scope) {
     if (path.some(key => typeof key === 'string' && UNSAFE_KEYS.has(key))) return setField(model, path, value);
     let rootPath = scope?.rootPath;
     let schema = scope?.rootSchema;
+    let kind;
     if (!rootPath) {
         const rules = path[0] === 'content' && path[1] === 'rules' && RULES_KINDS.has(path[3]);
-        const kind = rules ? path[3] : path[1] === 'skills' ? 'legacySkills' : path[1];
+        kind = rules ? path[3] : path[1] === 'skills' ? 'legacySkills' : path[1];
         rootPath = path[0] === 'content' && schemaForKind(kind) ? path.slice(0, rules ? 5 : 3) : [];
         schema = rootPath.length ? schemaForKind(kind) : { type: 'object', properties: { name: { type: 'string', minLength: 1, maxLength: LIMITS.name } } };
     }
     let current = model?.document;
     for (const key of rootPath) current = current?.[key];
+    // A trainer is checked against its own variant, so one written without the optional fields still edits.
+    if (!scope?.rootSchema && rootPath.length && kind === 'trainers') schema = schemaForRecord(kind, current);
     const checked = validateChange(schema, current, path.slice(rootPath.length), safeValue.value);
     if (!checked.ok) return { ok: false, model, errors: [{ ...checked, path: path.join('.') }] };
     return setField(model, path, safeValue.value);

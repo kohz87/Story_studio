@@ -2,9 +2,10 @@
 // generated tests need (base64, from Studio's own vendored copy) and the licence. Run as a script:
 // `node scripts/code-module-assets.mjs` (from the repository root). scripts/build.mjs calls codeModuleAssets() too.
 
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeGenerated } from './write-generated.mjs';
 
 export const TESTKIT_ROOTS = Object.freeze(['testkit/index.js', 'src/v2/store.js', 'src/v2/commands.js']);
 const IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)['"](\.{1,2}\/[^'"]+)['"]/g;
@@ -63,6 +64,6 @@ const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(imp
 if (isMain) {
     const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
     const text = codeModuleAssets(repo);
-    writeFileSync(join(repo, 'src', 'code-module', 'assets.js'), text);
+    writeGenerated(join(repo, 'src', 'code-module', 'assets.js'), text);
     console.log(`src/code-module/assets.js: ${Buffer.byteLength(text)} bytes`);
 }

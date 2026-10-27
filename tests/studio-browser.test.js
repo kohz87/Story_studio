@@ -8,10 +8,11 @@ import { chromium } from 'playwright';
 import { smallRulesPack } from './fixtures/smallRulesPack.js';
 import { makeValidExtendedPack } from './fixtures/builders.js';
 import { openPack, exportPack } from '../src/model.js';
+import { openParts } from './helpers/parts.js';
 
 const URL = pathToFileURL(resolve('dist/story-studio.html')).href;
-const RULES_HASH = 'abefa51fb43800ffca5fb0c8e5eb92ede0ebfffd2d09e6e334e2badb2342532a';
-const PACK_HASH = '15f199c52dab51676942a834ae2087d678f4b51bfa875744675b012dbfe0f175';
+const RULES_HASH = '73a9544b564fd03883162089690350a914c550c455b10ddfaf962c1d4e6b3d35';
+const PACK_HASH = '0e156cdbcfd8c02db87c44166582bee3071f8bc6d8fde51af66f31a63214cf63';
 
 async function withPage(options, action) {
     const browser = await chromium.launch({
@@ -446,5 +447,302 @@ test('offline name edit and export preserve Unicode-distinct keys in layouts and
         await page.reload();
         await page.locator('.studio').waitFor();
         assert.deepEqual(await download(page), bytes, 'Raw data also survives draft persistence');
+    });
+});
+
+// ---- Trainers: chips, filter, Add menu and the template editor, at 1280 and 390 px (Ersveil 1.6.0: 7 fixed trainers and 4 templates) ----
+
+const BLUEWATCH_160 = readFileSync(new globalThis.URL('./fixtures/ersveil-bluewatch-1.6.0.json', import.meta.url), 'utf8');
+const hits = (page, selector) => page.evaluate(sel => [...document.querySelectorAll(sel)].filter(node => node.getClientRects().length).length, selector);
+const activeKey = page => page.evaluate(() => document.activeElement?.getAttribute('data-ctl') ?? document.activeElement?.tagName);
+
+async function openTrainers(page) {
+    await upload(page, BLUEWATCH_160);
+    await page.waitForFunction(() => document.getElementById('pack-name').value !== '');
+    await openParts(page);
+    await navigate(page, 'Trainers');
+    await page.locator('main h1', { hasText: 'Trainers' }).waitFor();
+}
+
+// No horizontal page scroll, and no button, field, select or summary under 44 px (a checkbox is 22 px inside a 44 px row).
+async function assertFits(page, where) {
+    const scroll = await page.evaluate(() => ({ page: document.documentElement.scrollWidth, window: window.innerWidth, body: document.body.scrollWidth }));
+    assert.ok(scroll.page <= scroll.window && scroll.body <= scroll.window, `${where}: no horizontal scroll ${JSON.stringify(scroll)}`);
+    const measured = await page.evaluate(() => [...document.querySelectorAll('main button, main input:not([type=checkbox]), main select, .inspector button, .inspector input:not([type=checkbox]), .inspector select, .inspector summary, .check-row')]
+        .filter(node => node.getClientRects().length && node.closest('dialog') === null)
+        .map(node => [node.tagName, node.getAttribute('data-ctl') ?? node.textContent.slice(0, 20), Math.round(node.getBoundingClientRect().height * 10) / 10]));
+    assert.ok(measured.length >= 10, `${where}: the controls were found`);
+    assert.deepEqual(measured.filter(([, , height]) => height < 43.5), [], `${where}: every control is at least 44 px tall`);
+}
+
+for (const width of [1280, 390]) {
+    test(`trainers at ${width} px: chips, the filter, the template editor, no horizontal scroll and 44 px controls`, { timeout: 90000 }, async () => {
+        await withPage({ width }, async page => {
+            await openTrainers(page);
+            const counts = await page.locator('[aria-label="Show trainers"] button').evaluateAll(nodes => nodes.map(node => [node.getAttribute('data-filter'), node.querySelector('.count').textContent]));
+            assert.deepEqual(counts, [['all', '11'], ['fixed', '7'], ['template', '4']]);
+            assert.equal(await page.locator('.record-card .chip-fixed').count(), 7);
+            assert.equal(await page.locator('.record-card .chip-template').count(), 4);
+            await assertFits(page, 'list');
+
+            await page.locator('[data-filter="template"]').click();
+            assert.equal(await page.locator('.record-card').count(), 4);
+            assert.equal(await page.locator('[data-filter="template"]').evaluate(node => node === document.activeElement), true, 'the filter keeps focus');
+            await page.locator('.record-card', { hasText: 'Blade drills' }).click();
+            await page.locator('[data-ctl="coinMin"]').waitFor();
+            assert.match(await page.locator('.record-card[aria-pressed="true"]').textContent(), /Blade drills/);
+            assert.match(await page.locator('.inspector').textContent(), /A session costs between 40 and 90 copper/);
+            assert.equal(await page.locator('[data-ctl="coinMin"]').inputValue(), '40');
+            const rows = await page.locator('.fee-row .fieldset-row').evaluateAll(nodes => nodes.map(node => Math.round(node.getBoundingClientRect().top)));
+            assert.equal(rows[0] === rows[1], width === 1280, 'the fee fields sit side by side on a desktop and stack on a phone');
+            await assertFits(page, 'editor');
+            assert.equal(await page.locator('.check-row .slug').first().isVisible(), width === 1280, 'slugs are dropped from the skill rows on a phone');
+
+            // The search box keeps focus while typing, and the list narrows in place.
+            await page.locator('[data-ctl="search"]').click();
+            await page.keyboard.type('frost');
+            assert.equal(await activeKey(page), 'search');
+            assert.equal(await page.locator('[data-ctl="search"]').inputValue(), 'frost');
+            assert.equal(await hits(page, '.skill-group'), 2);
+            // Ticking a skill redraws the editor but leaves focus on the box and the search as typed.
+            await page.locator('[data-ctl="skill:frost-shard"]').click();
+            assert.equal(await activeKey(page), 'skill:frost-shard');
+            assert.equal(await page.locator('[data-ctl="search"]').inputValue(), 'frost');
+            assert.equal(await page.locator('.skill-count').textContent(), '7 of 30 at most');
+            await page.keyboard.press('Space');
+            assert.equal(await page.locator('.skill-count').textContent(), '6 of 30 at most');
+            assert.equal(await activeKey(page), 'skill:frost-shard');
+        });
+    });
+
+    test(`trainers at ${width} px: an inverted fee range names the checker's path and blocks export until it is fixed`, { timeout: 90000 }, async () => {
+        await withPage({ width }, async page => {
+            await openTrainers(page);
+            await page.locator('.record-card', { hasText: 'Hedge-magic' }).click();
+            await page.locator('[data-ctl="coinMin"]').click();
+            await page.keyboard.press('Control+A');
+            await page.keyboard.type('170');
+            assert.equal(await activeKey(page), 'coinMin', 'typing keeps focus');
+            await page.keyboard.press('Tab');
+            assert.equal(await activeKey(page), 'coinMax', 'Tab moves on and the page is redrawn around it');
+            assert.equal(await page.locator('.field-error').textContent(), 'Lowest fee must not be above the highest. content.rules[0].trainers[10].fee');
+            assert.equal(await page.locator('[data-ctl="coinMin"]').getAttribute('aria-invalid'), 'true');
+            assert.equal(await page.locator('[data-ctl="coinMax"]').getAttribute('aria-invalid'), 'true');
+            assert.equal(await page.locator('#pack-name').evaluate(() => document.querySelector('.topbar .primary').disabled), true, 'Export is blocked');
+            assert.match(await page.getByRole('button', { name: /^Problems/ }).textContent(), /\(1\)/);
+            await assertFits(page, 'error state');
+            await page.keyboard.press('Control+A');
+            await page.keyboard.type('180');
+            await page.keyboard.press('Enter');
+            assert.equal(await activeKey(page), 'coinMax');
+            assert.equal(await page.locator('.field-error').isVisible(), false);
+            assert.equal(await page.locator('.topbar .primary').isDisabled(), false, 'Export works again');
+            assert.match(await page.getByRole('button', { name: /^Problems/ }).textContent(), /\(0\)/);
+        });
+    });
+
+    test(`trainers at ${width} px: the Add menu, a new template, and the conversions both ways`, { timeout: 90000 }, async () => {
+        await withPage({ width }, async page => {
+            await openTrainers(page);
+            const trigger = page.getByRole('button', { name: '+ Add Trainer' });
+            await trigger.click();
+            assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
+            assert.deepEqual(await page.locator('[role="menuitem"]').evaluateAll(nodes => nodes.map(node => node.childNodes[0].textContent)), ['Fixed trainer', 'Trainer template']);
+            await assertFits(page, 'Add menu');
+            await page.keyboard.press('Escape');
+            assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+            await trigger.click();
+            await page.getByRole('menuitem', { name: /^Trainer template/ }).click();
+            await page.locator('[data-ctl="coinMin"]').waitFor();
+            assert.equal(await page.locator('.inspector h2').textContent(), 'New trainer template');
+            assert.match(await page.locator('.field-warn').first().textContent(), /1 problem in this record/);
+            assert.equal(await page.locator('.topbar .primary').isDisabled(), true, 'no skill yet');
+            await page.locator('[data-ctl="skill:swift-thrust"]').click();
+            assert.equal(await page.locator('.topbar .primary').isDisabled(), false);
+
+            // template to fixed through the dialog, then back
+            await page.getByRole('button', { name: /^Convert to fixed trainer/ }).click();
+            const dialog = page.locator('dialog[open]');
+            await dialog.waitFor();
+            assert.equal(await dialog.locator('[aria-label="fee"]').inputValue(), '1');
+            await dialog.locator('[aria-label="fee"]').fill('45');
+            await dialog.getByRole('button', { name: 'Convert', exact: true }).click();
+            await page.getByRole('button', { name: /^Convert to template/ }).waitFor();
+            assert.equal(await page.locator('.topbar .primary').isDisabled(), false);
+            await page.getByRole('button', { name: /^Convert to template/ }).click();
+            await page.locator('[data-ctl="coinMin"]').waitFor();
+            assert.equal(await page.locator('[data-ctl="coinMin"]').inputValue(), '45');
+            assert.equal(await page.locator('[data-ctl="coinMax"]').inputValue(), '45');
+            await page.getByRole('button', { name: 'Undo' }).click();
+            await page.getByRole('button', { name: /^Convert to template/ }).waitFor();
+        });
+    });
+}
+
+// ---- Trainers: what a commit does to focus, the caret and the next click (the page is redrawn when a field is committed) ----
+
+const SETTLE = 60; // the redraw after a click is queued one task later
+
+for (const width of [1280, 390]) {
+    test(`trainers at ${width} px: after a commit the caret is selected, so the next typing replaces the field`, { timeout: 90000 }, async () => {
+        await withPage({ width }, async page => {
+            await openTrainers(page);
+            await page.locator('.record-card', { hasText: 'Blade drills' }).click();
+            // 41, Tab, 95: the Tab commits 41 and lands in coinMax with its text selected
+            await page.locator('[data-ctl="coinMin"]').click();
+            await page.keyboard.press('Control+A');
+            await page.keyboard.type('41');
+            await page.keyboard.press('Tab');
+            assert.equal(await activeKey(page), 'coinMax');
+            await page.keyboard.type('95');
+            assert.equal(await page.locator('[data-ctl="coinMax"]').inputValue(), '95');
+            await page.keyboard.press('Tab');
+            assert.equal(await page.locator('[data-ctl="coinMin"]').inputValue(), '41');
+            assert.equal(await page.locator('[data-ctl="coinMax"]').inputValue(), '95');
+            assert.match(await page.locator('.inspector').textContent(), /between 41 and 95 copper/);
+
+            // slug, then name
+            await page.locator('[data-ctl="slug"]').click();
+            await page.keyboard.press('Control+A');
+            await page.keyboard.type('open-blade-lessons');
+            await page.keyboard.press('Tab');
+            assert.equal(await activeKey(page), 'name');
+            await page.keyboard.type('Blade lessons');
+            assert.equal(await page.locator('[data-ctl="name"]').inputValue(), 'Blade lessons');
+            await page.keyboard.press('Tab');
+            assert.equal(await page.locator('.inspector h2').textContent(), 'Blade lessons');
+            assert.equal(await page.locator('[data-ctl="slug"]').inputValue(), 'open-blade-lessons');
+            assert.match(await page.locator('.record-card[aria-pressed="true"]').textContent(), /open-blade-lessons/, 'the selection followed the rename');
+
+            // a click from one field to the next
+            await page.locator('[data-ctl="coinMin"]').click();
+            await page.keyboard.press('Control+A');
+            await page.keyboard.type('42');
+            await page.locator('[data-ctl="coinMax"]').click();
+            await page.waitForTimeout(SETTLE);
+            assert.equal(await activeKey(page), 'coinMax');
+            await page.keyboard.type('96');
+            await page.keyboard.press('Enter');
+            assert.equal(await page.locator('[data-ctl="coinMin"]').inputValue(), '42');
+            assert.equal(await page.locator('[data-ctl="coinMax"]').inputValue(), '96');
+        });
+    });
+
+    test(`trainers at ${width} px: the first click after typing is not lost to the redraw`, { timeout: 90000 }, async () => {
+        await withPage({ width }, async page => {
+            await openTrainers(page);
+            await page.locator('.record-card', { hasText: 'Blade drills' }).click();
+            // edit coinMax, then one click on a skill: the fee commits and the box changes
+            await page.locator('[data-ctl="coinMax"]').fill('95');
+            await page.locator('[data-ctl="skill:swift-thrust"]').click();
+            await page.waitForTimeout(SETTLE);
+            assert.equal(await page.locator('[data-ctl="skill:swift-thrust"]').isChecked(), false, 'the click took effect');
+            assert.equal(await page.locator('.skill-count').textContent(), '5 of 30 at most');
+            assert.equal(await page.locator('[data-ctl="coinMax"]').inputValue(), '95', 'the fee was committed too');
+            assert.match(await page.locator('.inspector').textContent(), /between 40 and 95 copper/);
+            assert.equal(await page.getByRole('button', { name: 'Undo' }).isDisabled(), false);
+
+            // a click on the label text of a box (the label hands it on to the box)
+            await page.locator('[data-ctl="coinMin"]').fill('41');
+            await page.locator('.check-row', { hasText: 'Parrying Turn' }).locator('span').first().click();
+            await page.waitForTimeout(SETTLE);
+            assert.equal(await page.locator('[data-ctl="skill:parrying-turn"]').isChecked(), false);
+            assert.equal(await page.locator('[data-ctl="coinMin"]').inputValue(), '41');
+
+            // Convert to fixed trainer opens its dialog straight after an edit
+            await page.locator('[data-ctl="coinMax"]').fill('97');
+            await page.getByRole('button', { name: /^Convert to fixed trainer/ }).click();
+            await page.locator('dialog[open]').waitFor();
+            await page.waitForTimeout(SETTLE);
+            assert.equal(await page.locator('dialog[open]').count(), 1);
+            await page.getByRole('button', { name: 'Keep the template' }).click();
+            assert.equal(await page.locator('[data-ctl="coinMax"]').inputValue(), '97');
+
+            // Delete works on the first click after an edit, and the edit does not bring the record back
+            await page.locator('[data-ctl="coinMax"]').fill('98');
+            await page.getByRole('button', { name: 'Delete', exact: true }).click();
+            await page.waitForTimeout(SETTLE);
+            assert.equal(await page.locator('.record-card', { hasText: 'Blade drills' }).count(), 0);
+            assert.equal(await page.locator('.record-card').count(), 10);
+            assert.equal(await page.locator('.field-error:visible').count(), 0);
+        });
+    });
+}
+
+test('the Add menu follows the menu keys: Down opens it, Up and Down wrap, Home and End jump, Escape closes it', { timeout: 60000 }, async () => {
+    await withPage({ width: 1280 }, async page => {
+        await openTrainers(page);
+        const trigger = page.getByRole('button', { name: '+ Add Trainer' });
+        const items = () => page.locator('[role="menuitem"]');
+        const focused = () => page.evaluate(() => document.activeElement?.childNodes[0]?.textContent ?? document.activeElement?.tagName);
+        await trigger.focus();
+        await page.keyboard.press('ArrowDown');
+        assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
+        assert.equal(await focused(), 'Fixed trainer');
+        await page.keyboard.press('ArrowDown');
+        assert.equal(await focused(), 'Trainer template');
+        await page.keyboard.press('ArrowDown');
+        assert.equal(await focused(), 'Fixed trainer', 'wraps');
+        await page.keyboard.press('ArrowUp');
+        assert.equal(await focused(), 'Trainer template', 'wraps upward');
+        await page.keyboard.press('Home');
+        assert.equal(await focused(), 'Fixed trainer');
+        await page.keyboard.press('End');
+        assert.equal(await focused(), 'Trainer template');
+        await page.keyboard.press('Escape');
+        assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+        assert.equal(await page.evaluate(() => document.activeElement.textContent), '+ Add Trainer');
+        await page.keyboard.press('ArrowUp');
+        assert.equal(await focused(), 'Trainer template', 'Up from the button opens it on the last item');
+        await page.keyboard.press('Enter');
+        await page.locator('[data-ctl="coinMin"]').waitFor();
+        assert.equal(await items().first().isVisible(), false, 'choosing an item closes the menu');
+    });
+});
+
+test('a trainer template opens a wider inspector (480 px) than the default, and the creator\'s own width still wins', { timeout: 90000 }, async () => {
+    const inspectorWidth = page => page.locator('.inspector').evaluate(node => Math.round(node.getBoundingClientRect().width));
+    await withPage({ width: 1280 }, async page => {
+        await openTrainers(page);
+        await page.locator('.record-card', { hasText: 'Guild Drillmaster' }).click();
+        assert.equal(await inspectorWidth(page), 330, 'a fixed trainer keeps the default');
+        await page.locator('.record-card', { hasText: 'Blade drills' }).click();
+        await page.locator('[data-ctl="coinMin"]').waitFor();
+        assert.equal(await inspectorWidth(page), 480);
+        assert.equal(await page.locator('.divider-inspector').getAttribute('aria-valuenow'), '480');
+        assert.equal(await page.locator('[data-ctl="search"]').evaluate(node => node.scrollWidth <= node.clientWidth), true, 'the search placeholder is not cut');
+        // the creator resizes (here: a key widens it) and that width is kept for every inspector
+        await page.locator('.divider-inspector').focus();
+        await page.keyboard.press('ArrowLeft');
+        assert.equal(await inspectorWidth(page), 496);
+        await page.locator('.record-card', { hasText: 'Guild Drillmaster' }).click();
+        assert.equal(await inspectorWidth(page), 496);
+    });
+    await withPage({ width: 1280 }, async page => {
+        await page.evaluate(() => localStorage.setItem('story-studio-columns', JSON.stringify({ rail: 230, inspector: 400 })));
+        await page.reload();
+        await page.locator('.studio').waitFor();
+        await openTrainers(page);
+        await page.locator('.record-card', { hasText: 'Blade drills' }).click();
+        await page.locator('[data-ctl="coinMin"]').waitFor();
+        assert.equal(await inspectorWidth(page), 400, 'a stored width wins over the template default');
+    });
+    await withPage({ width: 1280 }, async page => {
+        // only the rail was ever moved: the inspector's stored 330 is the default, not a choice
+        await page.evaluate(() => localStorage.setItem('story-studio-columns', JSON.stringify({ rail: 230, inspector: 330 })));
+        await page.reload();
+        await page.locator('.studio').waitFor();
+        await openTrainers(page);
+        await page.locator('.record-card', { hasText: 'Blade drills' }).click();
+        await page.locator('[data-ctl="coinMin"]').waitFor();
+        assert.equal(await inspectorWidth(page), 480);
+    });
+    await withPage({ width: 390 }, async page => {
+        await openTrainers(page);
+        await page.locator('.record-card', { hasText: 'Blade drills' }).click();
+        await page.locator('[data-ctl="coinMin"]').waitFor();
+        const tops = await page.locator('.template-ids .fieldset-row').evaluateAll(nodes => nodes.map(node => Math.round(node.getBoundingClientRect().top)));
+        assert.equal(tops.length, 2);
+        assert.notEqual(tops[0], tops[1], 'slug and name stack on a phone');
     });
 });

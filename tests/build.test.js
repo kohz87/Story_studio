@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { firstReference, NETWORK, LOADERS } from '../scripts/dist-scan.mjs';
+import { writeGenerated } from '../scripts/write-generated.mjs';
 
 const html = readFileSync(new URL('../dist/story-studio.html', import.meta.url), 'utf8');
 test('distribution has one classic inline script, inline styles, credits, and no runtime network or HTML injection', () => {
@@ -44,6 +45,35 @@ test('two builds match each other and the committed distribution byte for byte',
         });
         assert.equal(pages[0], pages[1]);
         assert.equal(pages[0], html);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// Test files run in parallel and import src/assets/drawings.js and src/code-module/assets.js while this file runs the build. A build that
+// truncated them first (a plain writeFile) could show another file an empty module: its import failed and the whole file was reported
+// failed, now and then (class-skills-repair.test.js was the one that lost the race).
+test('a build leaves the generated sources it did not change untouched, so no other test can import a half-written one', () => {
+    const files = ['src/assets/drawings.js', 'src/code-module/assets.js'];
+    const stamp = () => files.map(file => { const s = statSync(new URL(`../${file}`, import.meta.url)); return [s.ino, s.mtimeMs, s.size]; });
+    const before = stamp();
+    const dir = mkdtempSync(join(tmpdir(), 'studio-generated-'));
+    try {
+        execFileSync(process.execPath, ['scripts/build.mjs', '--out', join(dir, 'page.html')], { stdio: 'pipe' });
+        assert.deepEqual(stamp(), before);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('writeGenerated writes only a change, through a sibling file renamed into place, and leaves no stray file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'studio-write-generated-'));
+    try {
+        const path = join(dir, 'generated.js');
+        assert.equal(writeGenerated(path, 'one\n'), true, 'a new file is written');
+        const first = statSync(path);
+        assert.equal(writeGenerated(path, 'one\n'), false, 'the same text is not written again');
+        assert.equal(statSync(path).ino, first.ino);
+        assert.equal(statSync(path).mtimeMs, first.mtimeMs);
+        assert.equal(writeGenerated(path, 'two\n'), true);
+        assert.equal(readFileSync(path, 'utf8'), 'two\n');
+        assert.deepEqual(readdirSync(dir), ['generated.js']);
     } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

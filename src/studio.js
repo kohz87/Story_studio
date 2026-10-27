@@ -3,7 +3,7 @@ import { openPack } from './model.js';
 import { setSchemaField as setField } from './edits.js';
 import { createHistory } from './history.js';
 import { safeLabel, el, button, field, icon } from './dom.js';
-import { KINDS, LABELS, records } from './records.js';
+import { KINDS, LABELS, records, identity, localId } from './records.js';
 import { renderScreen } from './screens/index.js';
 import { downloadPack } from './export.js';
 import { readDraft, writeDraft, MAX_PACK_BYTES } from './session.js';
@@ -98,7 +98,10 @@ export function mountStudio(root) {
     const notice = el(doc, 'div', '', { role: 'status', 'aria-live': 'polite', class: 'notice' });
     const problemsHost = el(doc, 'div', '', { class: 'problems-drawer-host' });
     const overlays = el(doc, 'div', '', { class: 'overlays' });
-    const columns = createColumns({ doc, win, workspace, inspectorShown: () => !inspector.hidden });
+    // A trainer template's editor has long slugs and a search box: it starts wider than the other inspectors (the creator's own width still wins).
+    const templateOpen = () => selection.kind === 'trainers' && selection.id !== null
+        && records(ctx.model, 'trainers').some(record => record?.open === true && localId(ctx.model, identity(record, 'trainers')) === selection.id);
+    const columns = createColumns({ doc, win, workspace, inspectorShown: () => !inspector.hidden, inspectorDefault: () => (templateOpen() ? 480 : null) });
     workspace.append(rail, columns.railDivider, main, columns.inspectorDivider, inspector);
     app.append(header, workspace, notice, problemsHost, overlays);
     root.replaceChildren(app);
@@ -221,6 +224,7 @@ export function mountStudio(root) {
                 history = createHistory(model);
                 ctx.authoring = {};
                 ctx.filters = {};
+                ctx.trainerUi = null;
                 selection.kind = 'classes';
                 selection.id = null;
                 selection.form = null;

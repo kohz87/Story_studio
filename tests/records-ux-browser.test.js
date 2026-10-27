@@ -341,7 +341,7 @@ for (const width of [1280, 900, 390]) {
             await open(page, 'Trainers');
             assert.equal(await cards().count(), pack.content.rules[0].trainers.length);
             assert.deepEqual([...new Set(await chips())], ['Fixed']);
-            assert.match(await page.locator('main .records-note').innerText(), /^Trainers are fixed records: each stands at a place, with set skills and a fee\./);
+            assert.match(await page.locator('main .records-note').innerText(), /^Fixed trainers stand at one place with set skills and a fee\. Templates are open: a skill list and a fee range by rank; RPG Battle places them where the story offers them\.$/);
 
             for (const kind of ['Items', 'Places']) {
                 await open(page, kind);
