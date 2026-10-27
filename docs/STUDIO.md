@@ -1162,7 +1162,8 @@ the fee from the range then. The design is `docs/v2/OPEN_TRAINERS_SPEC.md` in St
   **+ Add Trainer** opens a menu: *Fixed trainer* (the generic form) or *Trainer template* (added at once with the first pack rank,
   an empty skill list and a fee of 1, then edited; off with "Add a rank in Pack settings first." when the pack has no ranks).
 - **Editor.** A template opens `src/screens/trainer-template.js`: rank (with that rank's quest pay), the fee range with a live
-  sentence and bar, minutes and place as read-only lines, a skill picker grouped by class (search, count, at most 30), event
+  sentence (in the pack's own money: the coin worth 1 when the pack lists coins, else `currency.name` and `plural`, else Story Block's
+  default, as `domains/money.js` names it) and bar, minutes and place as read-only lines, a skill picker grouped by class (search, count, at most 30), event
   templates (at most 8), the narrator line with a Copy button, **Convert to fixed trainer…** and **Delete**. A fee that is not a
   whole number from 1 to 1,000,000 is explained on the field and not committed; an inverted range is committed, so the checker
   reports it: the fee fields show "Lowest fee must not be above the highest." with the checker's path and Export stays off until

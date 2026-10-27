@@ -8,6 +8,7 @@ import { records, identity, localId, kindPath } from '../records.js';
 import { add, renameId, setSchemaField as setField } from '../edits.js';
 import { schemaForKind, schemaForRecord, validateField } from '../form-schema.js';
 import { parseIntegerInput, referenceId } from '../forms.js';
+import { baseUnit, coinsOf } from '../../vendor/story-block/src/v2/domains/money.js';
 
 export const NO_RANKS = 'Add a rank in Pack settings first.';
 const FEE_CHECK_MESSAGE = 'Lowest fee must not be above the highest.';
@@ -44,6 +45,25 @@ export function trainerToTemplate(record, rank) {
 /** Template to fixed: it stands at `place` and charges `fee`; the rank and the range go. */
 export function templateToFixed(record, place, fee) {
     return { slug: record.slug, name: record.name, place, skills: record.skills ?? [], fee, minutes: 60, eventTemplates: record.eventTemplates ?? [] };
+}
+
+/**
+ * What the pack calls the money a fee is paid in, the way Story Block names it: the coin worth 1 when the pack lists coins, else the
+ * currency's own name and plural (a plural left out follows Story Block's rule), and Story Block's own default when the pack names none.
+ * Fees are in that smallest unit. Returns `{ name, plural }`.
+ */
+export function feeUnit(model) {
+    const currency = model?.document?.currency;
+    const name = typeof currency?.name === 'string' ? currency.name.trim() : '';
+    if (!name) return baseUnit();
+    const plural = typeof currency.plural === 'string' && currency.plural.trim() ? currency.plural.trim() : undefined;
+    return baseUnit({ name, ...(plural ? { plural } : {}), coins: coinsOf(currency.coins) });
+}
+
+/** An amount with its unit: "1 crown", "40 copper", "90 crowns". */
+export function feeAmount(model, amount) {
+    const unit = feeUnit(model);
+    return `${number(amount)} ${amount === 1 ? unit.name : unit.plural}`;
 }
 
 const basePath = idx => [...kindPath('trainers'), idx];
@@ -288,7 +308,7 @@ function feeFieldset(ctx, ui, { record, base, feePath, feeIssue, schema, reward 
         const shown = low !== null && high !== null && !inverted;
         sentence.hidden = bar.hidden = scale.hidden = !shown;
         if (shown) {
-            sentence.textContent = `A session costs between ${number(low)} and ${number(high)} crowns, rolled when a trainer is offered; the narrator never sets it. Each bound ${number(bounds.minimum)} to ${number(bounds.maximum)}.`;
+            sentence.textContent = `A session costs between ${number(low)} and ${feeAmount(ctx.model, high)}, rolled when a trainer is offered; the narrator never sets it. Each bound ${number(bounds.minimum)} to ${number(bounds.maximum)}.`;
             const top = Math.max(reward?.[1] ?? 0, high, 1);
             range.setAttribute('style', `left:${(low / top * 100).toFixed(1)}%;right:${(100 - high / top * 100).toFixed(1)}%`);
         }
@@ -510,7 +530,7 @@ function openConvertDialog(ctx, invoker, idx, record) {
         applyEdit(ctx, result, { id: localId(model, record.slug) });
     }, { class: 'primary' });
     if (places.length) {
-        dialog.append(row(doc, labelled(doc, 'Place', place)), row(doc, labelled(doc, 'Fee (starts at the lowest fee of the range)', fee)), problem);
+        dialog.append(row(doc, labelled(doc, 'Place', place)), row(doc, labelled(doc, `Fee, in ${feeUnit(model).plural} (starts at the lowest fee of the range)`, fee)), problem);
     } else {
         dialog.append(el(doc, 'p', 'This pack has no places yet. Add one in Places, then convert.', { class: 'warning' }));
         confirm.disabled = true;

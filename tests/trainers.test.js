@@ -9,7 +9,7 @@ import { schemaForRecord } from '../src/form-schema.js';
 import { setField } from '../src/edits.js';
 import { createTestContext } from './helpers/dom.js';
 import { renderScreen } from '../src/screens/index.js';
-import { trainerToTemplate, templateToFixed, templateMeta } from '../src/screens/trainer-template.js';
+import { trainerToTemplate, templateToFixed, templateMeta, feeUnit, feeAmount } from '../src/screens/trainer-template.js';
 import { exportRulesV2 } from '../vendor/story-block/src/v2/packs/rules-v2.js';
 
 const text = readFileSync(new URL('./fixtures/ersveil-bluewatch-1.6.0.json', import.meta.url), 'utf8');
@@ -132,7 +132,7 @@ test('the template editor: rank, fee range, skills grouped by class, events, the
     assert.match(ctx.inspector.textContent, /Rank F \(Registered\) quests pay 50–400\./);
     assert.equal(ctl(ctx, 'coinMin').value, '40');
     assert.equal(ctl(ctx, 'coinMax').value, '90');
-    assert.match(ctx.inspector.textContent, /A session costs between 40 and 90 crowns, rolled when a trainer is offered; the narrator never sets it\. Each bound 1 to 1,000,000\./);
+    assert.match(ctx.inspector.textContent, /A session costs between 40 and 90 copper, rolled when a trainer is offered; the narrator never sets it\. Each bound 1 to 1,000,000\./);
     assert.match(ctx.inspector.textContent, /60 minutes \(fixed by the rules\)/);
     assert.match(ctx.inspector.textContent, /None: stands where the story offers it/);
     const headings = ctx.inspector.querySelectorAll('.skill-group h4').map(h => h.childNodes[0].textContent);
@@ -342,4 +342,47 @@ test('the template screen builds no markup from text: no innerHTML or its relati
         const source = readFileSync(new URL(file, import.meta.url), 'utf8');
         assert.doesNotMatch(source, /innerHTML|outerHTML|insertAdjacentHTML|DOMParser|\beval\(|new Function/, file);
     }
+});
+
+// ---- The fee is named in the pack's own money, never a word of the editor's choosing ----
+
+const feeSentence = (currency) => {
+    const pack = JSON.parse(text);
+    if (currency === undefined) delete pack.currency; else pack.currency = currency;
+    const ctx = createTestContext(pack);
+    ctx.onRender = () => renderScreen(ctx);
+    ctx.select('trainers', 'open-blade-drills');
+    const hints = ctx.inspector.querySelectorAll('.form-fieldset .field-hint').map(h => h.textContent);
+    return { sentence: hints.find(h => h.startsWith('A session costs')), ctx };
+};
+
+test('the fee sentence uses the pack\'s own currency: Ersveil counts in copper', () => {
+    const { sentence, ctx } = feeSentence(JSON.parse(text).currency);
+    assert.equal(sentence, 'A session costs between 40 and 90 copper, rolled when a trainer is offered; the narrator never sets it. Each bound 1 to 1,000,000.');
+    assert.doesNotMatch(ctx.inspector.textContent, /crown/i);
+    change(ctl(ctx, 'coinMin'), '1');
+    assert.match(ctx.inspector.textContent, /between 1 and 90 copper,/);
+});
+
+test('a pack whose currency is crowns reads crowns, with its singular for exactly one', () => {
+    const { sentence, ctx } = feeSentence({ name: 'crown', plural: 'crowns', short: 'cr' });
+    assert.equal(sentence, 'A session costs between 40 and 90 crowns, rolled when a trainer is offered; the narrator never sets it. Each bound 1 to 1,000,000.');
+    change(ctl(ctx, 'coinMax'), '1');
+    change(ctl(ctx, 'coinMin'), '1');
+    assert.match(ctx.inspector.textContent, /between 1 and 1 crown,/);
+});
+
+test('the money word follows Story Block: the coin worth 1, a plural left out, and its default when the pack names none', () => {
+    assert.equal(feeAmount(openPack(text), 90), '90 copper');
+    assert.deepEqual(feeUnit({ document: { currency: { name: 'penny', plural: 'pennies', short: 'p', coins: [{ name: 'penny', plural: 'pennies', value: 1 }, { name: 'silver', value: 10 }] } } }), { name: 'penny', plural: 'pennies' });
+    assert.deepEqual(feeUnit({ document: { currency: { name: 'mark', short: 'mk' } } }), { name: 'mark', plural: 'marks' });
+    assert.deepEqual(feeUnit({ document: { currency: { name: 'crowns', short: 'cr' } } }), { name: 'crowns', plural: 'crowns' });
+    assert.deepEqual(feeUnit({ document: {} }), { name: 'gold', plural: 'gold' });
+    assert.equal(feeSentence(undefined).sentence.slice(0, 50), 'A session costs between 40 and 90 gold, rolled whe');
+});
+
+test('the convert dialog names the unit the fee is in', () => {
+    const { ctx } = feeSentence({ name: 'crown', plural: 'crowns', short: 'cr' });
+    buttons(ctx.inspector, 'Convert to fixed trainer')[0].click();
+    assert.match(ctx.overlays.querySelector('dialog').textContent, /Fee, in crowns \(starts at the lowest fee of the range\)/);
 });

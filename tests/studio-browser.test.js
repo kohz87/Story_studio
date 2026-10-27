@@ -491,7 +491,7 @@ for (const width of [1280, 390]) {
             await page.locator('.record-card', { hasText: 'Blade drills' }).click();
             await page.locator('[data-ctl="coinMin"]').waitFor();
             assert.match(await page.locator('.record-card[aria-pressed="true"]').textContent(), /Blade drills/);
-            assert.match(await page.locator('.inspector').textContent(), /A session costs between 40 and 90 crowns/);
+            assert.match(await page.locator('.inspector').textContent(), /A session costs between 40 and 90 copper/);
             assert.equal(await page.locator('[data-ctl="coinMin"]').inputValue(), '40');
             const rows = await page.locator('.fee-row .fieldset-row').evaluateAll(nodes => nodes.map(node => Math.round(node.getBoundingClientRect().top)));
             assert.equal(rows[0] === rows[1], width === 1280, 'the fee fields sit side by side on a desktop and stack on a phone');
