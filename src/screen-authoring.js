@@ -29,8 +29,10 @@ export function replacePresentation(model, field, value) {
 }
 
 // Documented query examples from PACKS.md, TEMPLATES.md, LAYOUTS.md, WIDGETS.md and MODULES.md.
-// Queries are names, never callbacks: Studio answers them only from the sample JSON.
+// Queries are names, never callbacks: Studio answers them only from the sample JSON. `party.pc` is the host's
+// documented example of a main character another module supplies; no suite module answers it.
 export const QUERIES = Object.freeze([
+    ['party.pc', 'Party module', 'Main character'],
     ['director.time', 'Story Director', 'Story clock'], ['director.threads', 'Story Director', 'Thread list'],
     ['director.thread', 'Story Director', 'Thread by key'],
     ['scene.place', 'Story Block', 'Current place'], ['scene.map', 'Story Block', 'Known places'],
@@ -47,6 +49,7 @@ export const SAMPLE = Object.freeze({
     state: { v: 2, meta: {}, domains: { scene: { place: { name: 'Sample village' } } } },
     draft: {}, settings: {}, ops: [],
     queries: {
+        'party.pc': { name: 'River', level: 3, hp: { cur: 24, max: 30 } },
         'inventory.items': [{ id: 'rope', name: 'Rope', qty: 2 }, { id: 'torch', name: 'Torch', qty: 1 }],
         'scene.place': { name: 'Sample village' },
     },
