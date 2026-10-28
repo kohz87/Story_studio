@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { smallRulesPack } from './fixtures/smallRulesPack.js';
+import { worldPack } from './fixtures/world.js';
 
 import { mountDev } from '../src/dev.js';
 import { exportPack } from '../src/model.js';
@@ -190,8 +190,8 @@ test('loadText renders checker errors with path, code, and message', () => {
     const { root, byId } = createFakeDOM();
     const dev = mountDev(root);
 
-    const broken = smallRulesPack();
-    broken.content.rules[0].classes[0].skills = ['s00']; // Class requires exactly 3 skills
+    const broken = worldPack();
+    broken.content.places[0].x = 'not a coordinate';
 
     const model = dev.loadText(JSON.stringify(broken));
     assert.equal(model.validation.ok, false);
@@ -199,11 +199,11 @@ test('loadText renders checker errors with path, code, and message', () => {
     const errorsList = byId('errors');
     assert.ok(errorsList.children.length >= 1);
 
-    const classSkillError = errorsList.children.find(c => c.dataset.code === 'class-skills');
-    assert.ok(classSkillError, 'class-skills error must be present');
-    assert.equal(classSkillError.dataset.path, 'content.rules[0].classes[0].skills');
-    assert.match(classSkillError.textContent, /class-skills/);
-    assert.match(classSkillError.textContent, /content\.rules\[0\]\.classes\[0\]\.skills/);
+    const placeError = errorsList.children.find(c => c.dataset.code === 'BAD_RECORD');
+    assert.ok(placeError, 'The invalid coordinate must be reported');
+    assert.equal(placeError.dataset.path, 'content.places[0].x');
+    assert.match(placeError.textContent, /BAD_RECORD/);
+    assert.match(placeError.textContent, /content\.places\[0\]\.x/);
 
     assert.equal(byId('export-pack').disabled, true);
 
@@ -220,7 +220,7 @@ test('successful load replaces previous errors and lists contents', () => {
     assert.equal(byId('export-pack').disabled, true);
 
     // Now load valid golden seed
-    const valid = smallRulesPack();
+    const valid = worldPack();
     const model = dev.loadText(JSON.stringify(valid));
 
     assert.equal(model.validation.ok, true);
@@ -232,9 +232,6 @@ test('successful load replaces previous errors and lists contents', () => {
     assert.ok(contentsList.children.length > 0, 'Contents list should contain records');
 
     const kinds = new Set(contentsList.children.map(c => c.dataset.kind));
-    assert.ok(kinds.has('classes'));
-    assert.ok(kinds.has('skills'));
-    assert.ok(kinds.has('branches'));
     assert.ok(kinds.has('places'));
 
     dev.destroy();
@@ -244,7 +241,7 @@ test('valid apply updates export/name and history undo/redo', () => {
     const { root, byId } = createFakeDOM();
     const dev = mountDev(root);
 
-    dev.loadText(JSON.stringify(smallRulesPack()));
+    dev.loadText(JSON.stringify(worldPack()));
     assert.equal(byId('pack-name').value, 'Fixture');
     assert.equal(byId('undo').disabled, true);
     assert.equal(byId('redo').disabled, true);
@@ -276,7 +273,7 @@ test('invalid edit preserves export and history and displays a refusal code', ()
     const { root, byId } = createFakeDOM();
     const dev = mountDev(root);
 
-    dev.loadText(JSON.stringify(smallRulesPack()));
+    dev.loadText(JSON.stringify(worldPack()));
     assert.equal(byId('export-pack').disabled, false);
     assert.equal(byId('errors').children.length, 0);
 
@@ -302,7 +299,7 @@ test('refused edit shows useful error text and leaves document unchanged', () =>
     const { root, byId } = createFakeDOM();
     const dev = mountDev(root);
 
-    dev.loadText(JSON.stringify(smallRulesPack()));
+    dev.loadText(JSON.stringify(worldPack()));
     assert.equal(byId('errors').children.length, 0);
 
     // Attempting to set name exceeding MAX_STRING limit (4000)
@@ -321,7 +318,7 @@ test('adversarial markup is rendered strictly as text', () => {
     const { root, byId } = createFakeDOM();
     const dev = mountDev(root);
 
-    const malicious = smallRulesPack();
+    const malicious = worldPack();
     malicious.name = '<script>alert("xss")</script>';
 
     dev.loadText(JSON.stringify(malicious));
@@ -343,7 +340,7 @@ test('adversarial markup is rendered strictly as text', () => {
     assert.equal(root.querySelectorAll('img').length, 0, 'No img elements created');
 
     // Also verify content records render markup strictly via textContent
-    const validWithMarkup = smallRulesPack();
+    const validWithMarkup = worldPack();
     validWithMarkup.content.places[0].name = '<b>Haven</b>';
     dev.loadText(JSON.stringify(validWithMarkup));
 
@@ -437,7 +434,7 @@ test('destroy removes listeners and children, guarding late async file read', as
     assert.equal(root.children.length, 0, 'destroy must remove all root children');
 
     // Complete late read
-    resolveRead(JSON.stringify(smallRulesPack()));
+    resolveRead(JSON.stringify(worldPack()));
     await Promise.resolve();
     await Promise.resolve();
 
@@ -464,7 +461,7 @@ test('superseded async file reads are discarded', async () => {
     fileInput.dispatchEvent({ type: 'change', target: fileInput });
 
     // Start fast read 2
-    const fastPack = smallRulesPack({ name: 'Fast Pack' });
+    const fastPack = worldPack({ name: 'Fast Pack' });
     fileInput.files = [{
         name: 'fast.json',
         size: 100,
@@ -477,7 +474,7 @@ test('superseded async file reads are discarded', async () => {
     assert.equal(byId('pack-name').value, 'Fast Pack');
 
     // Slow read 1 finishes later with old pack
-    const slowPack = smallRulesPack({ name: 'Slow Pack' });
+    const slowPack = worldPack({ name: 'Slow Pack' });
     resolveFirst(JSON.stringify(slowPack));
     await Promise.resolve();
     await Promise.resolve();
@@ -504,9 +501,9 @@ test('malformed document with non-string identity fields or name does not throw'
     const { root, byId } = createFakeDOM();
     const dev = mountDev(root);
 
-    // 1. Malformed class slug with non-callable toString
-    const badSlugPack = smallRulesPack();
-    badSlugPack.content.rules[0].classes[0].slug = { toString: 'invalid' };
+    // 1. Malformed place slug with non-callable toString
+    const badSlugPack = worldPack();
+    badSlugPack.content.places[0].slug = { toString: 'invalid' };
     let model1;
     assert.doesNotThrow(() => {
         model1 = dev.loadText(JSON.stringify(badSlugPack));
@@ -516,7 +513,7 @@ test('malformed document with non-string identity fields or name does not throw'
     assert.ok(byId('errors').children.length > 0);
 
     // 2. Malformed place id with non-callable toString
-    const badIdPack = smallRulesPack();
+    const badIdPack = worldPack();
     badIdPack.content.places[0].id = { toString: 'invalid' };
     let model2;
     assert.doesNotThrow(() => {
@@ -526,9 +523,9 @@ test('malformed document with non-string identity fields or name does not throw'
     assert.equal(byId('export-pack').disabled, true);
     assert.ok(byId('errors').children.length > 0);
 
-    // 3. Malformed itemRule def with non-callable toString
-    const badDefPack = smallRulesPack();
-    badDefPack.content.rules[0].itemRules = [{ def: { toString: 'invalid' } }];
+    // 3. Malformed route endpoint with non-callable toString
+    const badDefPack = worldPack();
+    badDefPack.content.routes = [{ from: { toString: 'invalid' }, to: 'mill', kind: 'road' }];
     let model3;
     assert.doesNotThrow(() => {
         model3 = dev.loadText(JSON.stringify(badDefPack));
@@ -538,7 +535,7 @@ test('malformed document with non-string identity fields or name does not throw'
     assert.ok(byId('errors').children.length > 0);
 
     // 4. Malformed top-level name with non-callable toString
-    const badNamePack = smallRulesPack();
+    const badNamePack = worldPack();
     badNamePack.name = { toString: 'invalid' };
     let model4;
     assert.doesNotThrow(() => {
@@ -571,13 +568,13 @@ test('loadText supersedes pending async file read success and rejection', async 
     fileInput.dispatchEvent({ type: 'change', target: fileInput });
 
     // Explicit loadText called while file read is still pending
-    const newerPack = smallRulesPack({ name: 'Newer explicit load' });
+    const newerPack = worldPack({ name: 'Newer explicit load' });
     dev.loadText(JSON.stringify(newerPack));
     assert.equal(byId('pack-name').value, 'Newer explicit load');
     assert.equal(byId('export-pack').disabled, false);
 
     // Now resolve old pending read with stale pack
-    const stalePack = smallRulesPack({ name: 'Stale file' });
+    const stalePack = worldPack({ name: 'Stale file' });
     resolveRead1(JSON.stringify(stalePack));
     await Promise.resolve();
     await Promise.resolve();
@@ -599,7 +596,7 @@ test('loadText supersedes pending async file read success and rejection', async 
     fileInput.dispatchEvent({ type: 'change', target: fileInput });
 
     // Another direct loadText called while second read is pending
-    const newerPack2 = smallRulesPack({ name: 'Newer explicit load 2' });
+    const newerPack2 = worldPack({ name: 'Newer explicit load 2' });
     dev.loadText(JSON.stringify(newerPack2));
     assert.equal(byId('pack-name').value, 'Newer explicit load 2');
     assert.equal(byId('errors').children.length, 0);
@@ -621,7 +618,7 @@ test('failed or oversize file read resets controls coherently and subsequent loa
     const dev = mountDev(root);
 
     // Start from edited valid pack with undo enabled
-    dev.loadText(JSON.stringify(smallRulesPack({ name: 'Initial Pack' })));
+    dev.loadText(JSON.stringify(worldPack({ name: 'Initial Pack' })));
     byId('pack-name').value = 'Edited Pack';
     byId('apply-name').click();
 
@@ -651,7 +648,7 @@ test('failed or oversize file read resets controls coherently and subsequent loa
     assert.equal(errorsList.children[0].dataset.code, 'too-large');
 
     // Next valid load clears error and re-enables controls
-    const validPack = smallRulesPack({ name: 'Reloaded Valid Pack' });
+    const validPack = worldPack({ name: 'Reloaded Valid Pack' });
     dev.loadText(JSON.stringify(validPack));
 
     assert.equal(byId('errors').children.length, 0, 'Next valid load must clear errors');

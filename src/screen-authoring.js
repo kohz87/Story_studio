@@ -31,22 +31,14 @@ export function replacePresentation(model, field, value) {
 // Documented query examples from PACKS.md, TEMPLATES.md, LAYOUTS.md, WIDGETS.md and MODULES.md.
 // Queries are names, never callbacks: Studio answers them only from the sample JSON.
 export const QUERIES = Object.freeze([
-    ['party.pc', 'RPG Battle', 'Player character'], ['party.actor', 'RPG Battle', 'Actor by id or name'],
-    ['party.combatNumbers', 'RPG Battle', 'Actor numbers with gear'], ['party.ranks', 'RPG Battle', 'Rank ladder'], ['party.actors', 'RPG Battle', 'Party members'],
-    ['party.creation', 'RPG Battle', 'Character creation choices'], ['party.offers', 'RPG Battle', 'Party offers'],
-    ['party.encumbered', 'RPG Battle', 'Carry status'], ['items.carry', 'RPG Battle', 'Capacity from items'],
-    ['items.usable', 'RPG Battle', 'Usable items for an actor'], ['items.gear', 'RPG Battle', 'Equipped gear'],
-    ['combat.offers', 'RPG Battle', 'Encounter offers'], ['combat.session', 'RPG Battle', 'Current fight view'],
-    ['combat.foesBeaten', 'RPG Battle', 'Foes beaten since a reply'],
     ['director.time', 'Story Director', 'Story clock'], ['director.threads', 'Story Director', 'Thread list'],
-    ['director.thread', 'Story Director', 'Thread by key'], ['quest.progress', 'Story Director', 'Quest progress'],
-    ['quest.details', 'Story Director', 'Quest details'], ['quest.ranks', 'Story Director', 'Quest rank ladder'],
+    ['director.thread', 'Story Director', 'Thread by key'],
     ['scene.place', 'Story Block', 'Current place'], ['scene.map', 'Story Block', 'Known places'],
     ['inventory.items', 'Story Block', 'Item stacks'], ['inventory.wallet', 'Story Block', 'Wallet'],
     ['inventory.economy', 'Story Block', 'Effective money scale'],
     ['npc.present', 'NPC State Delta', 'Present NPCs'], ['npc.dossier', 'NPC State Delta', 'Dossier by name'],
     ['npc.known', 'NPC State Delta', 'Known NPCs'], ['npc.portrait', 'NPC State Delta', 'Portrait by name'],
-    ...['list', 'content', 'markets', 'crafts', 'calendar', 'weather', 'economy', 'rules', 'item', 'start']
+    ...['list', 'content', 'markets', 'crafts', 'calendar', 'weather', 'economy', 'item', 'start']
         .map(name => [`packs.${name}`, 'Story Block', `Pack ${name}`]),
     ['events.status', 'Story Block', 'Event status'],
 ]);
@@ -55,7 +47,6 @@ export const SAMPLE = Object.freeze({
     state: { v: 2, meta: {}, domains: { scene: { place: { name: 'Sample village' } } } },
     draft: {}, settings: {}, ops: [],
     queries: {
-        'party.pc': { name: 'River', level: 3, hp: { cur: 24, max: 30 } },
         'inventory.items': [{ id: 'rope', name: 'Rope', qty: 2 }, { id: 'torch', name: 'Torch', qty: 1 }],
         'scene.place': { name: 'Sample village' },
     },

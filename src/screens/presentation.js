@@ -37,20 +37,20 @@ export function renderSettingsDefaults(ctx) {
     const { doc, main } = ctx;
     main.append(el(doc, 'h1', 'Settings defaults'), el(doc, 'p',
         'This Story Block version accepts no per-module settings defaults in a pack. Reader settings are not pack fields. No defaults will be added to your export.'),
-    el(doc, 'p', 'Pack-supported economy, currency, calendar, weather, start state, terms, ranks and rules remain available in Pack settings.', { class: 'muted' }),
+    el(doc, 'p', 'Pack-supported economy, currency, calendar, weather, start state remain available in Pack settings.', { class: 'muted' }),
     button(doc, 'Open pack settings', () => ctx.select('settings')));
     const table = el(doc, 'table', '', { 'aria-label': 'Pack-settable module settings' });
     const head = el(doc, 'tr');
     for (const text of ['Module', 'Pack-settable fields', 'Type', 'Range', 'Story Block default']) head.append(el(doc, 'th', text));
     table.append(head);
-    for (const name of ['Story Block', 'RPG Battle', 'Story Director', 'NPC State Delta']) {
+    for (const name of ['Story Block', 'Story Director', 'NPC State Delta']) {
         const row = el(doc, 'tr');
         for (const text of [name, 'None', '—', '—', 'Not exposed to packs']) row.append(el(doc, 'td', text));
         table.append(row);
     }
     main.append(table, el(doc, 'h2', 'Check a defaults request'), el(doc, 'p', 'This checks a proposed settings field against the pack importer without changing the pack. Refused fields stay refused.'));
     const status = el(doc, 'pre', '', { id: 'defaults-result', role: 'status' });
-    const requested = { settings: { 'rpg-battle': {} } };
+    const requested = { settings: { 'story-director': {} } };
     status.textContent = issues(checkDefaults(ctx.model, requested));
     control(doc, main, 'Requested defaults JSON', requested, value => {
         status.textContent = object(value) ? issues(checkDefaults(ctx.model, value)) : 'Refused: enter an object of proposed pack fields.';
@@ -71,7 +71,7 @@ function defaultNode(type) {
     if (type === 'list') return { type, bind: { query: 'inventory.items' }, item: { type: 'text', value: '$item.name' } };
     if (type === 'tabs') return { type, pages: [{ title: 'Page', node: { type: 'text', value: 'Page' } }] };
     if (type === 'when') return { type, cond: 'true', children: [] };
-    if (type === 'button') return { type, label: 'Action', command: 'party.create' };
+    if (type === 'button') return { type, label: 'Action', command: 'inventory.grant' };
     if (['box', 'row', 'col'].includes(type)) return { type, children: [] };
     if (Object.hasOwn(standardWidgets, type)) return { type, props: {} };
     return { type, ...(type === 'text' ? { value: 'Text' } : {}) };

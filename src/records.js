@@ -1,29 +1,15 @@
 import { safeLabel } from './dom.js';
 export { identity } from './identity.js';
-export const RULES_KINDS = new Set(['classes', 'skills', 'branches', 'itemRules', 'trainers']);
-export const KINDS = ['classes', 'skills', 'items', 'creatures', 'places', 'quests', 'shops', 'trainers', 'branches', 'itemRules', 'recipes', 'events', 'routes', 'races', 'talents', 'presets', 'legacySkills'];
-export const LABELS = { classes: 'Classes', skills: 'Skills', items: 'Items', creatures: 'Foes', places: 'Places', quests: 'Quests', shops: 'Shops', trainers: 'Trainers', branches: 'Branches', itemRules: 'Item rules', recipes: 'Recipes', events: 'Events', routes: 'Routes', races: 'Races', talents: 'Talents', presets: 'Presets', legacySkills: 'Legacy skills' };
-export function kindPath(kind) {
-    return RULES_KINDS.has(kind) ? ['content', 'rules', 0, kind] : ['content', kind === 'legacySkills' ? 'skills' : kind];
-}
+export const KINDS = ['places', 'routes', 'events', 'items', 'creatures', 'races', 'talents', 'presets', 'legacySkills'];
+export const CASCADE_KINDS = [...KINDS, 'shops', 'recipes', 'quests'];
+export const LABELS = { places: 'Places', routes: 'Routes', events: 'Events', items: 'Items', creatures: 'People / creatures', races: 'Races', talents: 'Talents', presets: 'Presets', legacySkills: 'Skills' };
+export function kindPath(kind) { return ['content', kind === 'legacySkills' ? 'skills' : kind]; }
 export function records(model, kind) {
-    let value = model?.document;
-    for (const key of kindPath(kind)) value = value?.[key];
-    return Array.isArray(value) ? value : [];
+    const key = kind === 'legacySkills' ? 'skills' : kind;
+    const list = model?.document?.content?.[key];
+    return Array.isArray(list) ? list : [];
 }
 export function localId(model, id) {
     const prefix = `pack.${safeLabel(model?.document?.id)}/`;
     return typeof id === 'string' && id.startsWith(prefix) ? id.slice(prefix.length) : id;
 }
-
-// Whether a record is a template (a base the narrator offers scaled or filled in) or fixed (exactly as written):
-// foes are templates, shops are fixed, and a quest or a trainer is a template when it is open. Other kinds have neither.
-export const TRAITS = { template: 'Template', fixed: 'Fixed' };
-export function trait(kind, record) {
-    if (kind === 'creatures') return 'template';
-    if (kind === 'shops') return 'fixed';
-    if (kind === 'quests' || kind === 'trainers') return record?.open === true ? 'template' : 'fixed';
-    return null;
-}
-// The kinds whose list has the All / Fixed / Templates filter: both traits occur in them.
-export const FILTERED_KINDS = new Set(['quests', 'trainers']);

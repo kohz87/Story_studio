@@ -142,7 +142,7 @@ export function renderLoreImport(ctx) {
             review.append(field(doc, label, control));
         }
         if (draft.kind === 'creatures') review.append(el(doc, 'p',
-            'NPCs are narrative creature drafts. In a rules pack, author combat fields and resolve schema problems before pack export.', { class: 'warning' }));
+            'NPCs are narrative creature drafts.', { class: 'warning' }));
         if (entry.errors.length) review.append(el(doc, 'p', entry.errors.join('\n'), { class: 'warning', role: 'alert' }));
         const advance = () => {
             const next = queue.findIndex((item, index) => index > state.active && !['accepted', 'skipped'].includes(item.status));

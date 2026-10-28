@@ -1,21 +1,15 @@
 // Pack model: openPack, exportPack, and indexReferences (pure).
 
-import {
-    rulesV2Schema,
-    RULES_V2_LIMITS,
-} from '../vendor/story-block/src/v2/packs/rules-v2.js';
 import { validatePack } from './data-modules/sb-adapter.js';
 import { LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 import { foldKey } from '../vendor/story-block/src/text.js';
 import { identity } from './identity.js';
 
-export { rulesV2Schema };
-
-const MAX_DEPTH = RULES_V2_LIMITS.depth;
-const MAX_ARRAY = RULES_V2_LIMITS.array;
-const MAX_KEYS = RULES_V2_LIMITS.keys;
-const MAX_STRING = RULES_V2_LIMITS.string;
-const MAX_BYTES = RULES_V2_LIMITS.packBytes;
+const MAX_DEPTH = LIMITS.depth;
+const MAX_ARRAY = LIMITS.array;
+const MAX_KEYS = LIMITS.keys;
+const MAX_STRING = LIMITS.string;
+const MAX_BYTES = LIMITS.packBytes;
 // Original text belongs to the frozen snapshot; undo restores the same snapshot and bytes.
 const sourceTexts = new WeakMap();
 
@@ -179,7 +173,7 @@ function addRef(refs, kind, id, path, targetKind, targetId) {
 }
 
 /**
- * Indexes all typed references in a rules pack document in traversal order.
+ * Indexes typed references in a pack document in traversal order.
  * Returns an array of { kind, id, path, targetKind, targetId }.
  */
 export function indexReferences(document) {
@@ -327,110 +321,6 @@ export function indexReferences(document) {
     }
 
     const refs = [];
-
-    const rulesList = Array.isArray(safeDoc.content?.rules) ? safeDoc.content.rules : [];
-    for (let rIdx = 0; rIdx < rulesList.length; rIdx++) {
-        const m = rulesList[rIdx];
-        if (!m || typeof m !== 'object') continue;
-
-        if (Array.isArray(m.classes)) {
-            for (let cIdx = 0; cIdx < m.classes.length; cIdx++) {
-                const cls = m.classes[cIdx];
-                if (!cls || typeof cls !== 'object') continue;
-                const ownerId = toFull(identity(cls, 'classes') || `class-${cIdx}`);
-
-                if (cls.parent !== null && cls.parent !== undefined) {
-                    addRef(refs, 'classes', ownerId, ['content', 'rules', rIdx, 'classes', cIdx, 'parent'], 'classes', toFull(cls.parent));
-                }
-
-                if (Array.isArray(cls.skills)) {
-                    for (let sIdx = 0; sIdx < cls.skills.length; sIdx++) {
-                        const sRef = cls.skills[sIdx];
-                        if (typeof sRef === 'string') {
-                            addRef(refs, 'classes', ownerId, ['content', 'rules', rIdx, 'classes', cIdx, 'skills', sIdx], 'skills', toFull(sRef));
-                        }
-                    }
-                }
-            }
-        }
-
-        if (Array.isArray(m.skills)) {
-            for (let sIdx = 0; sIdx < m.skills.length; sIdx++) {
-                const skl = m.skills[sIdx];
-                if (!skl || typeof skl !== 'object') continue;
-                const ownerId = toFull(identity(skl, 'skills') || `skill-${sIdx}`);
-
-                if (skl.replaces !== null && skl.replaces !== undefined) {
-                    addRef(refs, 'skills', ownerId, ['content', 'rules', rIdx, 'skills', sIdx, 'replaces'], 'skills', toFull(skl.replaces));
-                }
-
-                if (skl.base && typeof skl.base === 'object' && skl.base.unit && typeof skl.base.unit === 'object') {
-                    if (skl.base.unit.class) {
-                        addRef(refs, 'skills', ownerId, ['content', 'rules', rIdx, 'skills', sIdx, 'base', 'unit', 'class'], 'classes', toFull(skl.base.unit.class));
-                    }
-                }
-            }
-        }
-
-        if (Array.isArray(m.branches)) {
-            for (let bIdx = 0; bIdx < m.branches.length; bIdx++) {
-                const br = m.branches[bIdx];
-                if (!br || typeof br !== 'object') continue;
-                const ownerId = toFull(identity(br, 'branches') || `branch-${bIdx}`);
-
-                if (br.skill) {
-                    addRef(refs, 'branches', ownerId, ['content', 'rules', rIdx, 'branches', bIdx, 'skill'], 'skills', toFull(br.skill));
-                }
-
-                if (br.fromForm) {
-                    addRef(refs, 'branches', ownerId, ['content', 'rules', rIdx, 'branches', bIdx, 'fromForm'], 'forms', toFull(br.fromForm));
-                }
-            }
-        }
-
-        if (Array.isArray(m.itemRules)) {
-            for (let irIdx = 0; irIdx < m.itemRules.length; irIdx++) {
-                const ir = m.itemRules[irIdx];
-                if (!ir || typeof ir !== 'object') continue;
-                const ownerId = toFull(ir.def || `itemRule-${irIdx}`);
-
-                if (ir.def) {
-                    addRef(refs, 'itemRules', ownerId, ['content', 'rules', rIdx, 'itemRules', irIdx, 'def'], 'items', toFull(ir.def));
-                }
-            }
-        }
-
-        if (Array.isArray(m.trainers)) {
-            for (let tIdx = 0; tIdx < m.trainers.length; tIdx++) {
-                const trn = m.trainers[tIdx];
-                if (!trn || typeof trn !== 'object') continue;
-                const ownerId = toFull(identity(trn, 'trainers') || `trainer-${tIdx}`);
-
-                // A template has no place: it stands where the story offers it.
-                if (trn.place && trn.open !== true) {
-                    addRef(refs, 'trainers', ownerId, ['content', 'rules', rIdx, 'trainers', tIdx, 'place'], 'places', resolvePlaceRef(trn.place));
-                }
-
-                if (Array.isArray(trn.skills)) {
-                    for (let sIdx = 0; sIdx < trn.skills.length; sIdx++) {
-                        const sRef = trn.skills[sIdx];
-                        if (typeof sRef === 'string') {
-                            addRef(refs, 'trainers', ownerId, ['content', 'rules', rIdx, 'trainers', tIdx, 'skills', sIdx], 'skills', toFull(sRef));
-                        }
-                    }
-                }
-
-                if (Array.isArray(trn.eventTemplates)) {
-                    for (let eIdx = 0; eIdx < trn.eventTemplates.length; eIdx++) {
-                        const eRef = trn.eventTemplates[eIdx];
-                        if (typeof eRef === 'string') {
-                            addRef(refs, 'trainers', ownerId, ['content', 'rules', rIdx, 'trainers', tIdx, 'eventTemplates', eIdx], 'events', toFull(eRef));
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     if (Array.isArray(safeDoc.content?.creatures)) {
         for (let cIdx = 0; cIdx < safeDoc.content.creatures.length; cIdx++) {
@@ -630,9 +520,7 @@ export function indexReferences(document) {
                 }
             }
 
-            // Preset content.skills references legacy Story Block skills (content.skills),
-            // not rules-v2 manifest skills. We use targetKind 'legacySkills' to prevent
-            // S4 skill renaming from accidentally renaming legacy SB skills.
+            // Presets refer to the host's content.skills collection.
             if (Array.isArray(prs.skills)) {
                 for (let sIdx = 0; sIdx < prs.skills.length; sIdx++) {
                     const sRef = prs.skills[sIdx];
@@ -699,7 +587,6 @@ export function openPack(json) {
         document,
         validation: { ok: checked.ok, errors: checked.errors ?? [], warnings: checked.warnings ?? [] },
         references: document ? indexReferences(document) : [],
-        rulesHash: checked.ok ? checked.rulesHash ?? null : null,
         packHash: checked.ok ? checked.packHash ?? null : null,
     });
     if (checked.ok && typeof json === 'string') sourceTexts.set(model, json);
@@ -712,7 +599,7 @@ export function openPack(json) {
  */
 export function exportPack(model) {
     if (!model || !model.document || typeof model.document !== 'object') {
-        const err = new Error('Cannot export invalid rules pack');
+        const err = new Error('Cannot export invalid pack');
         err.errors = model?.validation?.errors || [{
             code: 'bad-schema',
             path: '',
@@ -722,7 +609,7 @@ export function exportPack(model) {
     }
 
     if (model.validation && !model.validation.ok) {
-        const err = new Error('Cannot export invalid rules pack');
+        const err = new Error('Cannot export invalid pack');
         err.errors = model.validation.errors;
         throw err;
     }
@@ -730,7 +617,7 @@ export function exportPack(model) {
     const source = sourceTexts.get(model);
     const checked = checkPack(source ?? model.document);
     if (!checked.ok) {
-        const err = new Error('Cannot export invalid rules pack');
+        const err = new Error('Cannot export invalid pack');
         err.errors = checked.errors;
         throw err;
     }

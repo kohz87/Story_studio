@@ -53,7 +53,7 @@ test('only the line that says where Story Block is differs from Story Block\'s o
 });
 
 test('the copy\'s checker runs against the vendored Story Block and agrees with Studio\'s own verdict', async () => {
-    for (const rel of ['examples/tiny-world/pack.json', 'reference/example-rules-pack.json', 'reference/data-modules/faction-standing.pack.json', 'reference/data-modules/survival-meters.pack.json']) {
+    for (const rel of ['examples/tiny-world/pack.json', 'reference/data-modules/faction-standing.pack.json', 'reference/data-modules/survival-meters.pack.json']) {
         const text = read(rel);
         const run = node(join(kit, 'check.mjs'), join(kit, rel));
         assert.equal(run.status, 0, `${rel}: ${run.out}${run.err ?? ''}`);
@@ -62,25 +62,25 @@ test('the copy\'s checker runs against the vendored Story Block and agrees with 
     }
     // A broken pack fails both, with the same message at the same path.
     const broken = JSON.parse(read('examples/tiny-world/pack.json'));
-    broken.content.rules[0].skills[0].base.effects[0].target = 'all';
+    broken.content.routes[0].to = 'missing-place';
     const studio = openPack(JSON.stringify(broken)).validation;
     assert.equal(studio.ok, false);
-    const budget = studio.errors.find(error => error.code === 'budget-closure');
-    assert.ok(budget);
+    const problem = studio.errors.find(error => error.code === 'UNKNOWN_REF');
+    assert.ok(problem);
     const { checkPack, report } = await import(pathToFileURL(join(kit, 'check.mjs')).href);
     const result = checkPack(broken);
     assert.equal(result.ok, false);
-    assert.ok(result.errors.some(error => error.code === budget.code && error.path === budget.path && error.message === budget.message));
-    assert.match(report('x.json', result), /^1 problem in x\.json\n\n 1\. content\.rules\[0\]\.skills\[0\]\.base\.powerScore/);
+    assert.ok(result.errors.some(error => error.code === problem.code && error.path === problem.path && error.message === problem.message));
+    assert.match(report('x.json', result), /content\.routes/);
     const written = node(join(kit, 'check.mjs'), join(kit, 'nothing.json'));
     assert.equal(written.status, 1);
 });
 
-test('LIMITS.md and the schema in the kit are what the vendored Story Block says', () => {
+test('LIMITS.md in the kit matches the vendored Story Block', () => {
     const printed = node(join(kit, 'scripts/limits.mjs'));
     assert.equal(printed.status, 0, printed.err);
     assert.equal(read('reference/LIMITS.md'), printed.out, 'the vendored Story Block and the kit disagree on a limit; run npm run sync-sb and npm run sync-kit from one Story Block commit');
-    assert.equal(read('reference/rules-v2.schema.json'), readFileSync(new URL('../vendor/story-block/src/v2/packs/rules-v2.schema.json', import.meta.url), 'utf8'));
+    assert.equal(existsSync(join(kit, 'reference/rules-v2.schema.json')), false);
 });
 
 test('the page points to the kit in plain text: no link, no request', async () => {
@@ -110,7 +110,7 @@ test('Pack settings shows the same pointer once a pack is open', async () => {
     const hints = ctx.main.querySelectorAll('.draft-hint');
     assert.equal(hints.length, 1);
     assert.equal(hints[0].textContent, DRAFT_WITH_AI);
-    ctx.select('classes');
+    ctx.select('places');
     assert.equal(ctx.main.querySelectorAll('.draft-hint').length, 0);
     ctx.destroy();
 });
@@ -206,7 +206,7 @@ test('the checker in the copy refuses a capability the suite does not provide, a
     const dir = mkdtempSync(join(tmpdir(), 'studio-kit-cap-'));
     try {
         const pack = JSON.parse(read('examples/tiny-world/pack.json'));
-        pack.requires.capabilities.push('mystery-module');
+        pack.requires.capabilities = ['mystery-module'];
         const file = join(dir, 'pack.json');
         writeFileSync(file, JSON.stringify(pack));
         const refused = node(join(kit, 'check.mjs'), file);

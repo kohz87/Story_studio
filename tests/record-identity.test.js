@@ -9,9 +9,9 @@ import { KINDS, records, identity } from '../src/records.js';
 import { createTestContext } from './helpers/dom.js';
 import { renderScreen } from '../src/screens/index.js';
 import { goToProblem } from '../src/screens/problems.js';
-import { smallRulesPack } from './fixtures/smallRulesPack.js';
+import { worldPack } from './fixtures/world.js';
 
-const bluewatch = () => JSON.parse(readFileSync(new URL('./fixtures/ersveil-bluewatch.json', import.meta.url), 'utf8'));
+const bluewatch = () => JSON.parse(readFileSync(new URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8'));
 
 function controls(ctx, tag, key) {
     return ctx.inspector.querySelectorAll(tag).filter(node => {
@@ -29,7 +29,7 @@ const names = (model, kind) => records(model, kind).map(record => record.name);
 
 // A pack shaped like Bluewatch: items and places carry a name and no slug, id or def.
 function nameKeyedPack() {
-    const pack = smallRulesPack();
+    const pack = worldPack();
     pack.content.items = [
         { name: 'Cane Blade', kind: 'equipment', rarity: 'common', slot: 'weapon' },
         { name: 'Patched Oilcloth Coat', kind: 'equipment', rarity: 'common', slot: 'body' },
@@ -41,11 +41,6 @@ function nameKeyedPack() {
         { name: "Hollin's Reach", x: 3, y: 3 },
     ];
     pack.content.routes = [{ from: 'Auvoth', to: "Hollin's Reach", kind: 'road' }];
-    pack.content.rules[0].itemRules = [
-        { def: 'cane-blade', allowedSlots: ['weapon'], hands: 1, requires: { DEX: 6 }, weight: 800 },
-        { def: 'patched-oilcloth-coat', allowedSlots: ['body'], hands: 0, requires: { DEX: 3 }, weight: 1200 },
-        { def: 'knife', allowedSlots: ['weapon'], hands: 1, requires: { DEX: 4 }, weight: 300 },
-    ];
     pack.content.shops = [];
     pack.content.recipes = [];
     return pack;
@@ -72,15 +67,6 @@ test('identity follows each kind\'s key rule', () => {
         ['routes', { slug: 'ferry', from: 'A', to: 'B', kind: 'river' }, 'ferry'],
         ['markets', { type: 'town', buy: 1 }, 'town'],
         ['markets', { tag: 'coastal', prices: {} }, 'coastal'],
-        ['itemRules', { def: 'cane-blade' }, 'cane-blade'],
-        ['itemRules', { name: 'Cane Blade' }, ''],
-        ['classes', { slug: 'c0', name: 'Warrior' }, 'c0'],
-        ['skills', { slug: 's00', name: 'Slash' }, 's00'],
-        ['branches', { slug: 's00-base-a' }, 's00-base-a'],
-        ['trainers', { slug: 'morn', name: 'Morn' }, 'morn'],
-        // Only the kinds Story Block keys by name use the name; a class without a slug stays without a key.
-        ['classes', { name: 'Warrior' }, ''],
-        ['trainers', { name: 'Morn' }, ''],
     ];
     for (const [kind, record, expected] of cases) assert.equal(identity(record, kind), expected, `${kind} ${JSON.stringify(record)}`);
     // A slug always wins over the name.
@@ -108,8 +94,7 @@ test('identity agrees with the slug Story Block gives every record of the Bluewa
     const checked = validatePack(raw);
     assert.equal(checked.ok, true);
     let compared = 0;
-    for (const [content, kind] of [['items', 'items'], ['creatures', 'creatures'], ['shops', 'shops'], ['recipes', 'recipes'], ['events', 'events'],
-        ['quests', 'quests'], ['races', 'races'], ['talents', 'talents'], ['skills', 'legacySkills'], ['presets', 'presets'], ['places', 'places'], ['routes', 'routes']]) {
+    for (const [content, kind] of [['events', 'events'], ['places', 'places'], ['routes', 'routes']]) {
         const given = raw.content[content];
         assert.ok(given.length > 0, content);
         given.forEach((record, i) => {
@@ -117,11 +102,6 @@ test('identity agrees with the slug Story Block gives every record of the Bluewa
             compared++;
         });
     }
-    raw.content.markets.forEach((record, i) => assert.equal(identity(record, 'markets'), checked.pack.content.markets[i].type ?? checked.pack.content.markets[i].tag));
-    for (const kind of ['classes', 'skills', 'branches', 'trainers']) {
-        raw.content.rules[0][kind].forEach(record => assert.ok(identity(record, kind)));
-    }
-    raw.content.rules[0].itemRules.forEach(record => assert.ok(identity(record, 'itemRules')));
     assert.ok(compared > 200);
 });
 
@@ -156,12 +136,10 @@ test('remove takes away only the record asked for, and an empty ID takes away no
     assert.equal(none.ok, false);
     assert.equal(none.errors[0].code, 'not-found');
     const plain = remove(model, 'items', 'patched-oilcloth-coat');
-    assert.equal(plain.ok, false, 'its item rule still names it');
-    assert.equal(plain.errors[0].code, 'referenced');
+    assert.equal(plain.ok, true, 'an unreferenced item can be removed');
     const one = remove(model, 'items', identity(model.document.content.items[1], 'items'), { cascade: true });
     assert.equal(one.ok, true);
     assert.deepEqual(names(one.model, 'items'), ['Cane Blade', 'Knife']);
-    assert.deepEqual(records(one.model, 'itemRules').map(rule => rule.def), ['cane-blade', 'knife']);
     const place = remove(model, 'places', 'auvoth');
     assert.equal(place.ok, false, 'a route still ends there');
     const away = remove(model, 'places', 'hollin-s-reach', { cascade: true });
@@ -313,5 +291,5 @@ test('a problem is shown on the card of the record it belongs to and no other', 
     const ctx = createTestContext(pack);
     ctx.onRender = () => renderScreen(ctx);
     ctx.select('items');
-    assert.deepEqual(ctx.main.querySelectorAll('.record-card').map(card => card.getAttribute('data-has-problem')), [null, 'true', null]);
+    assert.deepEqual(ctx.main.querySelectorAll('.record-card').map(card => !!card.querySelector('.problem-dot')), [false, true, false]);
 });

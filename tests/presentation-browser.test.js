@@ -132,12 +132,12 @@ test('layout node form, renderer diagnostics and pack acceptance remain separate
 }));
 
 test('Ersveil stays byte-faithful across defaults refusals, presentation apply/undo and reload', async () => pageTest(1280, async page => {
-    const source = readFileSync(new URL('./fixtures/ersveil-bluewatch.json', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8');
     await upload(page, source); await nav(page, 'Settings defaults');
     assert.match(await page.locator('main').innerText(), /accepts no per-module settings defaults/);
     assert.match(await page.locator('#defaults-result').innerText(), /UNKNOWN_FIELD/);
     for (const key of ['defaults', 'settingsDefaults']) {
-        await page.locator('#defaults-request').fill(JSON.stringify({ [key]: { 'rpg-battle': { levelCap: 100 } } }));
+        await page.locator('#defaults-request').fill(JSON.stringify({ [key]: { 'example-module': { mode: 'custom' } } }));
         assert.match(await page.locator('#defaults-result').innerText(), /UNKNOWN_FIELD/);
     }
     assert.equal(await exported(page), source);

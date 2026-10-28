@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openPack, exportPack } from '../src/model.js';
 import { downloadPack } from '../src/export.js';
-import { smallRulesPack } from './fixtures/smallRulesPack.js';
+import { worldPack } from './fixtures/world.js';
 import { MockDocument } from './helpers/dom.js';
 
-function context(pack = smallRulesPack()) {
+function context(pack = worldPack()) {
     const doc = new MockDocument();
     const blobs = [];
     const revoked = [];
@@ -23,14 +23,14 @@ function context(pack = smallRulesPack()) {
     return { ctx, blobs, revoked, timers, messages, get exported() { return exported; } };
 }
 
-test('download bytes exactly equal the canonical golden export and retain the engine fingerprints', async () => {
+test('download bytes exactly equal the pack export and reopen successfully', async () => {
     const state = context();
     assert.equal(downloadPack(state.ctx, 'golden.json'), true);
     const bytes = new Uint8Array(await state.blobs[0].arrayBuffer());
     assert.deepEqual(bytes, new TextEncoder().encode(exportPack(state.ctx.model)));
     const reopened = openPack(new TextDecoder().decode(bytes));
-    assert.equal(reopened.rulesHash, '4350400203831b86069c7e1230894db0524645c2671289cfe251072254d6cd74');
-    assert.equal(reopened.packHash, '378883318fde8ee731404fb2fbecb9bb54b09e9d7898078a5f8c1da1ab422fec');
+    assert.equal(reopened.validation.ok, true);
+    assert.deepEqual(reopened.document, state.ctx.model.document);
     assert.equal(state.exported, true);
     assert.equal(state.ctx.root.querySelector('a'), null);
     assert.equal(state.revoked.length, 0);
@@ -39,8 +39,8 @@ test('download bytes exactly equal the canonical golden export and retain the en
 });
 
 test('invalid draft cannot download or clear its dirty state', () => {
-    const pack = smallRulesPack();
-    pack.content.rules[0].classes[0].skills.pop();
+    const pack = worldPack();
+    pack.content.places[0].x = 'invalid';
     const state = context(pack);
     assert.equal(downloadPack(state.ctx, 'draft.json'), false);
     assert.equal(state.blobs.length, 0);

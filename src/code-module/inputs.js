@@ -36,8 +36,8 @@ export const EXAMPLE_INPUTS = Object.freeze({
 });
 
 // Snapshots of what Story Block and the other Story Suite modules own at the baseline (section 5.4).
-export const RESERVED_MODULE_IDS = Object.freeze(['fishing-activity', 'npc-state-delta', 'rpg-battle', 'story-block', 'story-director', 'story-studio']);
-// Domains and command/query prefixes of Story Block (core), RPG Battle (with its pinned-rules parts) and Story Director
+export const RESERVED_MODULE_IDS = Object.freeze(['fishing-activity', 'npc-state-delta', 'story-block', 'story-director', 'story-studio']);
+// Domains and command/query prefixes of Story Block (core) and Story Director
 // at the baseline. The state name is also the scaffold's command and query prefix, so both kinds of name are here.
 export const RESERVED_NAMES = Object.freeze([
     'arc', 'assist', 'atlas', 'bestiary', 'capture', 'chatter', 'checks', 'chronicle', 'combat', 'craft', 'creation',
@@ -45,7 +45,7 @@ export const RESERVED_NAMES = Object.freeze([
     'module', 'npc', 'packs', 'party', 'progress', 'quest', 'quests', 'return', 'rules', 'savepoint', 'savepoints',
     'scene', 'state', 'story', 'threads', 'time', 'trade', 'training', 'wallet', 'world',
 ]);
-// Capture kinds of the same three modules at the baseline.
+// Capture kinds reserved by the suite at the baseline.
 export const RESERVED_KINDS = Object.freeze([
     'agenda', 'beat', 'check', 'chatter', 'choice', 'clock', 'coin', 'craft', 'dm', 'effect', 'encounter', 'event',
     'faction', 'hook', 'intervention', 'item', 'join', 'landmark', 'leave', 'lethal', 'loot', 'market', 'place',

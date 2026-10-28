@@ -31,7 +31,7 @@ test('settings defaults catalogue is empty because the host has no module-settin
     assert.deepEqual(SETTINGS_DEFAULTS, []);
     const model = openPack(pack());
     for (const key of ['settings', 'defaults', 'settingsDefaults', 'moduleSettings']) await t.test(key, () => {
-        const requested = { [key]: { 'rpg-battle': { levelCap: 100 } } };
+        const requested = { [key]: { 'story-director': { enabled: true } } };
         const sb = validatePack({ ...pack(), ...requested });
         assert.equal(sb.ok, false);
         assert.ok(sb.errors.some(e => e.code === 'UNKNOWN_FIELD' && e.path === key));
@@ -42,10 +42,10 @@ test('settings defaults catalogue is empty because the host has no module-settin
 
 test('all SCREEN_FIELDS accept/refuse through exactly the vendored importer', async t => {
     const cases = [
-        ['all fields', [screen({ title: 'Camp', icon: 'fa-tent', mounts: [...MOUNTS], css: '.camp { color: red; }', layout: { root: { type: 'text', value: 'Camp' } }, theme: { '--ss-accent': '#123456' }, data: { pc: { query: 'party.pc' } }, steps: [{ id: 'first', title: 'First', template: '<p>{{ q.pc.name }}</p>' }] })], true],
+        ['all fields', [screen({ title: 'Camp', icon: 'fa-tent', mounts: [...MOUNTS], css: '.camp { color: red; }', layout: { root: { type: 'text', value: 'Camp' } }, theme: { '--ss-accent': '#123456' }, data: { pc: { query: 'scene.place' } }, steps: [{ id: 'first', title: 'First', template: '<p>{{ q.pc.name }}</p>' }] })], true],
         ['layout instead of template', [{ id: 'camp', layout: {} }], true],
         ['empty template', [screen({ template: '' })], true],
-        ['restyle module id', [screen({ id: 'rpg-battle/party' })], true],
+        ['restyle module id', [screen({ id: 'example-module/board' })], true],
         ['empty list', [], true], ['null list', null, false], ['non-list', {}, false], ['non-object record', [1], false],
         ['duplicate id', [screen({}), screen({})], false], ['unknown field', [screen({ extra: 1 })], false],
         ['id wrong type', [screen({ id: 1 })], false], ['id bad spelling', [screen({ id: 'Bad id' })], false],
@@ -93,7 +93,7 @@ test('layouts retain pack-level acceptance separately from renderer diagnostics'
 });
 
 test('Ersveil presentation edits preserve all other authored data and undo exact source bytes', () => {
-    const source = readFileSync(new URL('./fixtures/ersveil-bluewatch.json', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8');
     const original = openPack(source);
     assert.equal(exportPack(original), source);
     const history = createHistory(original);

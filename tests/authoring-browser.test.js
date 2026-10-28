@@ -7,11 +7,11 @@ import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import { openPack } from '../src/model.js';
 import { exportWorldInfo } from '../src/lorebook.js';
-import { smallRulesPack } from './fixtures/smallRulesPack.js';
+import { worldPack } from './fixtures/world.js';
 
 const URL = pathToFileURL(resolve('dist/story-studio.html')).href;
 const SHOTS = resolve(process.env.STUDIO_SCREENSHOTS_DIR || 'artifacts/part-3');
-const fixture = readFileSync(new globalThis.URL('./fixtures/ersveil-bluewatch.json', import.meta.url), 'utf8');
+const fixture = readFileSync(new globalThis.URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8');
 const golden = name => readFileSync(new globalThis.URL(`./golden/${name}.json`, import.meta.url), 'utf8');
 
 async function withPage(action, options = {}) {
@@ -79,13 +79,13 @@ test('offline narrator flow edits V2 JSON and exports a decodable PNG with ident
         await navigate(page, 'Narrator card');
         assert.equal(await page.locator('#card-name').inputValue(), 'Bluewatch Narrator', 'Edits survive navigation');
         const json = await download(page, 'Download card JSON');
-        assert.equal(json.name, 'ersveil-bluewatch-narrator.json');
+        assert.equal(json.name, 'ersveil-narrator.json');
         const card = JSON.parse(json.bytes);
         assert.equal(card.data.personality, 'Measured pace; salt air and quiet tension.');
         assert.match(card.data.first_mes, /Bluewatch Village/);
         assert.match(card.data.description, /op kind Name\[ — text\]\[ \| label: value\]\*/);
         const png = await download(page, 'Download card PNG');
-        assert.equal(png.name, 'ersveil-bluewatch-narrator.png');
+        assert.equal(png.name, 'ersveil-narrator.png');
         let metadata;
         for (let at = 8; at < png.bytes.length;) {
             const length = png.bytes.readUInt32BE(at);
@@ -111,7 +111,7 @@ test('offline narrator flow edits V2 JSON and exports a decodable PNG with ident
 
 test('blank card names visibly refuse JSON and PNG downloads until corrected', { timeout: 60000 }, async () => {
     await withPage(async page => {
-        await upload(page, smallRulesPack());
+        await upload(page, worldPack());
         await navigate(page, 'Narrator card');
         const downloads = [];
         page.on('download', file => downloads.push(file.suggestedFilename()));
@@ -145,9 +145,9 @@ test('offline lorebook flow previews names, aliases and regions and exports the 
         const expected = JSON.parse(golden('ersveil-world-info'));
         assert.equal(await page.locator('.lore-entry').count(), Object.keys(expected.entries).length);
         await page.locator('.lore-entry').first().locator('summary').click();
-        assert.match(await page.locator('.lore-entry').first().textContent(), /region: River Confederacy: core cities/);
+        assert.match(await page.locator('.lore-entry').first().textContent(), /region: Highmark Empire/);
         const file = await download(page, 'Download World Info JSON');
-        assert.equal(file.name, 'ersveil-bluewatch-world-info.json');
+        assert.equal(file.name, 'ersveil-world-info.json');
         assert.equal(file.bytes.toString(), golden('ersveil-world-info'));
         await assertLayout(page);
         await screenshot(page, 'lorebook');
@@ -238,18 +238,16 @@ test('imported HTML is literal, malformed entries and files stay visible, long t
     });
 });
 
-test('narrative NPC imports in rules packs show draft validation problems and preserve undo', { timeout: 60000 }, async () => {
+test('narrative NPC imports in world packs stay valid and preserve undo', { timeout: 60000 }, async () => {
     await withPage(async page => {
-        const pack = smallRulesPack();
+        const pack = worldPack();
         await upload(page, pack);
         await navigate(page, 'Import lorebook');
         await importLore(page, { entries: { 0: { key: ['Clerk'], content: 'Keeps records.' } } });
         await page.locator('#lore-kind').selectOption('creatures');
         await page.getByRole('button', { name: 'Accept draft', exact: true }).click();
-        assert.match(await page.locator('.notice').textContent(), /Resolve the pack’s Problems/);
-        assert.equal(await page.locator('.topbar button.primary').isDisabled(), true);
-        await page.getByRole('button', { name: 'Undo', exact: true }).click();
         assert.equal(await page.locator('.topbar button.primary').isEnabled(), true);
+        await page.getByRole('button', { name: 'Undo', exact: true }).click();
         assert.deepEqual(JSON.parse(await packDownload(page)), pack);
     });
 });
@@ -270,7 +268,7 @@ test('import refuses an existing host-derived ID and retains the original file b
 
 test('card drafts reset when opening another pack and derived exports never mark pack edits as saved', { timeout: 60000 }, async () => {
     await withPage(async page => {
-        const pack = smallRulesPack();
+        const pack = worldPack();
         await upload(page, pack);
         await page.locator('#pack-name').fill('An edited pack');
         await page.locator('#pack-name').press('Tab');

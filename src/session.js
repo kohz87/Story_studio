@@ -1,8 +1,8 @@
-import { RULES_V2_LIMITS } from '../vendor/story-block/src/v2/packs/rules-v2.js';
+import { LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 import { openPack, sourceTextOf } from './model.js';
 
 export const DRAFT_KEY = 'story-studio-draft';
-export const MAX_PACK_BYTES = RULES_V2_LIMITS.packBytes;
+export const MAX_PACK_BYTES = LIMITS.packBytes;
 const MAX_DRAFT_BYTES = MAX_PACK_BYTES * 6;
 
 export function readDraft(win) {

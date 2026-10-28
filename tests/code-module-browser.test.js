@@ -12,7 +12,7 @@ import { DRAFT_WITH_AI } from '../src/draft-hint.js';
 import { SHIPPED, withPage, upload } from './helpers/dm-browser.js';
 import { openParts } from './helpers/parts.js';
 
-const pack = readFileSync(new globalThis.URL('./fixtures/valid-pack.json', import.meta.url), 'utf8');
+const pack = readFileSync(new globalThis.URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8');
 
 async function openCodeModule(page) {
     await openParts(page);
@@ -148,7 +148,7 @@ test('a download leaves the pack, its export button and Undo as they were', { ti
     await withPage(SHIPPED, { width: 1280 }, async page => {
         await upload(page, pack);
         await page.locator('#pack-name').waitFor();
-        assert.equal(await page.locator('#pack-name').inputValue(), 'Valid Fixture Pack');
+        assert.equal(await page.locator('#pack-name').inputValue(), 'Ersveil (open world)');
         const undo = page.getByRole('button', { name: 'Undo', exact: true });
         assert.equal(await undo.isDisabled(), true);
         // One edit that goes into history, so Undo is available.
@@ -167,7 +167,7 @@ test('a download leaves the pack, its export button and Undo as they were', { ti
         // One Undo returns the pack name, so the download added nothing to history.
         await undo.click();
         await settle(page);
-        assert.equal(await page.locator('#pack-name').inputValue(), 'Valid Fixture Pack');
+        assert.equal(await page.locator('#pack-name').inputValue(), 'Ersveil (open world)');
     });
 });
 
