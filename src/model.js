@@ -368,14 +368,7 @@ export function indexReferences(document) {
                     const req = q.requirements[rIdx];
                     if (!req || typeof req !== 'object') continue;
 
-                    if (req.kind === 'class' && Array.isArray(req.classes)) {
-                        for (let clIdx = 0; clIdx < req.classes.length; clIdx++) {
-                            const cRef = req.classes[clIdx];
-                            if (typeof cRef === 'string') {
-                                addRef(refs, 'quests', ownerId, ['content', 'quests', qIdx, 'requirements', rIdx, 'classes', clIdx], 'classes', toFull(cRef));
-                            }
-                        }
-                    } else if (req.kind === 'item' && req.def) {
+                    if (req.kind === 'item' && req.def) {
                         addRef(refs, 'quests', ownerId, ['content', 'quests', qIdx, 'requirements', rIdx, 'def'], 'items', toFull(req.def));
                     } else if (req.kind === 'quest' && req.template) {
                         addRef(refs, 'quests', ownerId, ['content', 'quests', qIdx, 'requirements', rIdx, 'template'], 'quests', toFull(req.template));

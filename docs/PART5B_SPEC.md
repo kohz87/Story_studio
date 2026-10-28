@@ -37,7 +37,7 @@ Contents: 1 Scope · 2 Contracts relied on · 3 The scaffold · 4 Golden example
 
 ### 1.2 Out of scope
 
-- Any change to Story Block, RPG Battle or Story Director, or to `vendor/story-block/` by hand.
+- Any change to Story Block or Story Director, or to `vendor/story-block/` by hand.
 - Several state fields, several parts, features, settings, widgets, hooks other than `replayGuard`, prompt context.
   The README the scaffold ships says how to add them.
 - Keeping code-module drafts across reloads (session only, like the narrator card).
@@ -49,7 +49,6 @@ Contents: 1 Scope · 2 Contracts relied on · 3 The scaffold · 4 Golden example
 |---|---|
 | Story Studio | `studio/part-5a` at `68ea1a10409883353f5f81b0a9a097a2f720cd03` (part 5a, data modules; not yet merged) |
 | Story Block | `main` at `076764b786296a93d1e9812e0c8b69955a7e243d` (version 2.1.0) |
-| RPG Battle | `main` at `1e01275` |
 | Story Director | `main` at `8233c89` |
 
 Part 5b starts **after part 5a is merged into Studio's `main`**. All Studio line numbers below are part 5a's. Story
@@ -84,7 +83,7 @@ at `68ea1a1`.
 | Known definition fields, including `replayQueries` and `capabilities`; any other field is a warning | SB `src/v2/registry.js:56`, `:343-375` (`definitionWarnings`) |
 | Module id `^[a-z0-9][a-z0-9._-]*$`; domain `^[a-z][a-zA-Z0-9_-]*$`; command and query names `^[a-z][a-zA-Z0-9_-]*(?:\.[a-zA-Z0-9_-]+)*$`; capture kind `^[a-z][a-z0-9_-]*$` | SB `src/v2/registry.js:65-69` |
 | `capabilities`: a list of at most 32 slugs | SB `src/v2/registry.js:61`, `:170-176`; MODULES.md:41-45; PACKS.md:64 |
-| Slug rule `^(?=.{1,64}$)[a-z0-9]+(?:-[a-z0-9]+)*$` (exported `SLUG`); host capabilities `rb-rules-v2`, `data-modules-v1` (`HOST_CAPABILITIES`) | SB `src/v2/packs/limits.js:146`, `:39` |
+| Slug rule `^(?=.{1,64}$)[a-z0-9]+(?:-[a-z0-9]+)*$` (exported `SLUG`); host capability `data-modules-v1` (`HOST_CAPABILITIES`) | SB `src/v2/packs/limits.js:146`, `:39` |
 | Domain: `initial()` returns a plain-JSON object; `validate` and `counters` optional; the host's `savepoints` domain is refused | SB `src/v2/registry.js:178-198` |
 | Commands may not start with `capture.` or `module.` | SB `src/v2/registry.js:200-209` |
 | `replayQueries` must name the module's own queries | SB `src/v2/registry.js:216-226` |
@@ -139,9 +138,6 @@ at `68ea1a1`.
 | What | Where |
 |---|---|
 | A separate extension that registers through `StoryBlock.ready` only; manifest `dependencies: ["third-party/Story_block"]` | SB `examples/fishing/index.js`, `examples/fishing/manifest.json`, `examples/fishing/README.md:10-17` |
-| One definition merged from parts; a name two parts claim is refused; `replayGuard` dispatched to the part that answers | RPG Battle `src/v2/module.js:1-40`, `:216-245`, `:504-512` |
-| A small real part with a domain, kinds, `replayQueries` and a `replayGuard` hook | RPG Battle `src/v2/death/index.js:21-36` |
-| A guard that reads only the state, its declared queries and `info.recorded`, then compares `inputHash` | RPG Battle `src/v2/death/guard.js:42-70` |
 | The minimal guard construction (`owner`, `version: 2`, `epoch`, `rulesHash: null`, `inputHash: ctx.hash(...)`) | SB `tests/v2/helpers/guarded.js:43-56` |
 
 ### 2.6 Studio (part 5a)
@@ -1044,8 +1040,7 @@ unzipped folder passes (6 tests).
   guard: predicate `{ kind: <command>, amount }`, inputs `{ enough: true }`, `inputHash = hash({ predicate, inputs,
   source })` with the block's source, `recorded = { before }`. On replay the hook asks only its own replay query, works
   out `enough` from the state before the block, and compares hashes; `recorded.before` is only used for the reason
-  text. It never reads settings, the clock, other modules or receipts (REPLAY.md:55-69). The module merges guards the
-  way RPG Battle does: each part answers the guards it made and `undefined` for the rest; none answering fails closed.
+  text. It never reads settings, the clock, other modules or receipts (REPLAY.md:55-69). The module merges guards: each part answers the guards it made and `undefined` for the rest; none answering fails closed.
 - **The query** reads the state alone, so it is a valid `replayQueries` entry (REPLAY.md:64-69).
 - **The screen** has fixed template text. Display text enters it only through the `LABEL` and `ACTION` constants,
   whose allowed characters are inert in HTML text (no `<`, `&`, `{`, `}`, `"`). Numbers come from the query through
@@ -1712,8 +1707,8 @@ Length bounds: `name` 40, `description` 160, `author` 60, `label` 24, `action` 3
 ### 5.4 Reserved names (exact lists)
 
 ```js
-export const RESERVED_MODULE_IDS = Object.freeze(['fishing-activity', 'npc-state-delta', 'rpg-battle', 'story-block', 'story-director', 'story-studio']);
-// Domains and command/query prefixes of Story Block (core), RPG Battle (with its pinned-rules parts) and Story Director
+export const RESERVED_MODULE_IDS = Object.freeze(['fishing-activity', 'npc-state-delta', 'story-block', 'story-director', 'story-studio']);
+// Domains and command/query prefixes of Story Block (core) and Story Director
 // at the baseline. The state name is also the scaffold's command and query prefix, so both kinds of name are here.
 export const RESERVED_NAMES = Object.freeze([
     'arc', 'assist', 'atlas', 'bestiary', 'capture', 'chatter', 'checks', 'chronicle', 'combat', 'craft', 'creation',
@@ -1732,7 +1727,7 @@ export const RESERVED_FIELDS = Object.freeze(['constructor', 'hasOwnProperty', '
 ```
 
 These lists are a snapshot. The real guard is M7's host test, which registers generated modules next to Story Block's
-core module; a clash with Story Block there fails the test. A clash with an installed RPG Battle or Story Director that
+core module; a clash with Story Block there fails the test. A clash with an installed module that
 added a name later is caught by Story Block itself at registration, with a plain sentence (SB `registry.js:456-466`).
 
 ---

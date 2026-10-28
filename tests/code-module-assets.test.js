@@ -18,7 +18,7 @@ const copied = new Map(VENDOR_FILES.map(([path, base64]) => [path, Buffer.from(b
 
 // The baseline these counts describe: Story Block 2.6.0. The closure contains
 // 122 files, so the copied set has 125 entries (the closure, plus LICENSE, package.json and the generated VERSION text).
-const BASELINE = { version: '2.6.0', commit: 'cbcb07587a4c6fc90ddd491cff5c665deac0fec9', files: 122 };
+const BASELINE = { version: '2.6.0', commit: 'e0d97e193c6bdb4d8a0c69995f28b50cec5ad0e8', files: 122 };
 
 test('the committed assets.js is exactly what the generator writes now', () => {
     assert.equal(committed, codeModuleAssets(root));

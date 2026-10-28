@@ -155,11 +155,10 @@ export function renderForm(ctx, container, input, value, path, passed = {}) {
     const commit = next => mutate(ctx, path, next, options);
     const leaf = schema.type !== 'array' && schema.type !== 'object' && !Array.isArray(value) && !(value && typeof value === 'object');
     const idField = path.length === options.rootPath.length + 1 && ['slug', 'id', 'def'].includes(path.at(-1));
-    if (schema.const !== undefined || (idField && path.at(-1) === 'def' && options.kind === 'itemRules' && !options.isNew)) {
+    if (schema.const !== undefined) {
         const control = append(el(doc, 'input', '', { ...attrs, readonly: '', value: display(value) }));
         control.readOnly = true;
-        if (schema.const === undefined) container.append(el(doc, 'p', 'Rename the item to change this reference.', { class: 'muted' }));
-        if (schema.const !== undefined && !Object.is(value, schema.const)) container.append(button(doc, `Reset ${title}`, () => commit(schema.const)));
+        if (!Object.is(value, schema.const)) container.append(button(doc, `Reset ${title}`, () => commit(schema.const)));
         return;
     }
     const target = leaf ? referenceTarget(options.kind, path, options.record) : null;

@@ -1,4 +1,4 @@
-// Adjustable columns: the two dividers between the pack parts rail, the list and the inspector (docs/mockups/records-ux).
+// Adjustable columns: the two dividers between the pack parts rail, the list and the inspector.
 // The widths are the creator's own and live on this device only (localStorage); with no storage the defaults are used.
 import { el } from './dom.js';
 

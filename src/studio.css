@@ -222,7 +222,7 @@ button.primary:not(:disabled):not(.danger):hover{background:color-mix(in srgb,va
 .code-module-workspace textarea{font-family:inherit;min-height:64px}
 @media(min-width:1101px){.code-module-workspace>section[aria-label="Files"]{position:sticky;top:0}}
 
-/* Record chips, notes and the quest filter (docs/mockups/records-ux) */
+/* Record chips, notes and the quest filter */
 .chip{white-space:nowrap;flex-shrink:0}
 .chip-template{background:var(--accent-soft);border:1px dashed var(--accent);color:var(--text);font-weight:700;padding:2px 9px;font-size:11px}
 .chip-fixed{background:var(--tile);border:1px solid var(--border);color:var(--muted);font-weight:700;padding:2px 9px;font-size:11px}
@@ -239,7 +239,7 @@ button.primary:not(:disabled):not(.danger):hover{background:color-mix(in srgb,va
 /* The cards keep their height and the list scrolls; a flex column used to squeeze them until the second line was cut off. */
 .record-card{flex-shrink:0}
 
-/* Adjustable columns (docs/mockups/records-ux): a divider is a 12 px grid column between two panes */
+/* Adjustable columns: a divider is a 12 px grid column between two panes */
 .divider{position:relative;cursor:col-resize;touch-action:none;display:flex;align-items:center;justify-content:center;min-height:0;z-index:3}
 .divider::before{content:"";position:absolute;top:0;bottom:0;left:50%;width:1px;background:var(--border);transform:translateX(-50%)}
 .divider .grip{position:relative;z-index:1;width:8px;height:44px;border-radius:999px;background:var(--accent);opacity:0;background-image:radial-gradient(circle,#fff 1.3px,transparent 1.7px);background-size:8px 12px;background-position:center 2px;background-repeat:repeat-y}

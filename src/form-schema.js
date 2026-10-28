@@ -199,7 +199,6 @@ export function referenceTarget(kind, path, record) {
         if (last === 'place') return 'places';
         if (last === 'template') return 'quests';
         if (last === 'previous' || last === 'next') return 'quests';
-        if (prev === 'classes' && /^\d+$/.test(last)) return 'classes';
         if (last === 'def' || last === 'item') return 'items';
     }
     if (last === 'def' || last === 'makes') return 'items';
