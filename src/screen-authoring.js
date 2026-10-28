@@ -28,14 +28,13 @@ export function replacePresentation(model, field, value) {
     return { ok: true, model: next, undo: () => model };
 }
 
-// Documented query examples from PACKS.md, TEMPLATES.md, LAYOUTS.md, WIDGETS.md and MODULES.md.
-// Queries are names, never callbacks: Studio answers them only from the sample JSON. `party.pc` is the host's
-// documented example of a main character another module supplies; no suite module answers it.
+// The queries the suite's modules answer, under the module that answers them (PACKS.md, TEMPLATES.md, LAYOUTS.md,
+// MODULES.md). Queries are names, never callbacks: Studio answers them only from the sample JSON. Another module's
+// query is typed into the screen's data by hand.
 export const QUERIES = Object.freeze([
-    ['party.pc', 'Party module', 'Main character'],
+    ['scene.place', 'Story Block', 'Current place'], ['scene.present', 'Story Block', 'Who is here'],
     ['director.time', 'Story Director', 'Story clock'], ['director.threads', 'Story Director', 'Thread list'],
     ['director.thread', 'Story Director', 'Thread by key'],
-    ['scene.place', 'Story Block', 'Current place'], ['scene.map', 'Story Block', 'Known places'],
     ['inventory.items', 'Story Block', 'Item stacks'], ['inventory.wallet', 'Story Block', 'Wallet'],
     ['inventory.economy', 'Story Block', 'Effective money scale'],
     ['npc.present', 'NPC State Delta', 'Present NPCs'], ['npc.dossier', 'NPC State Delta', 'Dossier by name'],
@@ -45,13 +44,25 @@ export const QUERIES = Object.freeze([
     ['events.status', 'Story Block', 'Event status'],
 ]);
 
+// The commands a reader's button may run in the suite, with the payload for a row of `inventory.items` (the ones Story
+// Block's own Inventory screen uses). Commands that make items or money (`inventory.grant`, `wallet.receive`) are refused
+// from a button, so the builder never offers them; another module's command is typed into the node by hand.
+export const UI_COMMANDS = Object.freeze([
+    ['inventory.drop', 'Drop one', { stack: '$item.stack', qty: 1 }],
+    ['inventory.equip', 'Equip', { stack: '$item.stack' }],
+    ['inventory.unequip', 'Unequip', { stack: '$item.stack' }],
+]);
+
 export const SAMPLE = Object.freeze({
     state: { v: 2, meta: {}, domains: { scene: { place: { name: 'Sample village' } } } },
     draft: {}, settings: {}, ops: [],
     queries: {
-        'party.pc': { name: 'River', level: 3, hp: { cur: 24, max: 30 } },
-        'inventory.items': [{ id: 'rope', name: 'Rope', qty: 2 }, { id: 'torch', name: 'Torch', qty: 1 }],
+        'inventory.items': [
+            { stack: 'it_sample01', def: 'story/rope', name: 'Rope', kind: 'goods', qty: 2, owner: 'party', equipped: null, note: '' },
+            { stack: 'it_sample02', def: 'story/torch', name: 'Torch', kind: 'goods', qty: 1, owner: 'party', equipped: null, note: '' },
+        ],
         'scene.place': { name: 'Sample village' },
+        'scene.present': ['Hollis'],
     },
 });
 

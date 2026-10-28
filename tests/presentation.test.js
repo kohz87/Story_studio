@@ -6,7 +6,7 @@ import { createHistory } from '../src/history.js';
 import { validatePack } from '../vendor/story-block/src/v2/packs/validate.js';
 import { validateLayout } from '../vendor/story-block/src/v2/layout/validate.js';
 import { SCREEN_FIELDS, MOUNTS, LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
-import { SETTINGS_DEFAULTS, QUERIES, replacePresentation, checkDefaults, elementSnippet, widgetSnippet, standardWidgets } from '../src/screen-authoring.js';
+import { SETTINGS_DEFAULTS, QUERIES, UI_COMMANDS, replacePresentation, checkDefaults, elementSnippet, widgetSnippet, standardWidgets } from '../src/screen-authoring.js';
 
 const pack = () => ({ id: 'test', version: '1.0.0', requires: { storyBlock: '^2' } });
 const screen = extra => ({ id: 'camp', template: '<p>Camp</p>', ...extra });
@@ -124,4 +124,44 @@ test('palette snippets escape author markup and include every registered standar
     }
     assert.equal(Object.keys(standardWidgets).length, 18);
     assert.ok(QUERIES.some(([name]) => name === 'packs.weather'));
+});
+
+// What the builder offers is what the suite answers: Story Block's queries resolve on the real host, and a button's
+// reader command runs there from a click on a row of the inventory list the builder starts with.
+test('the query catalogue names only real providers, and the builder\'s button commands run from a button on the host', async () => {
+    const { createHost } = await import('../vendor/story-block/testkit/index.js');
+    const { defaultNode } = await import('../src/screens/presentation.js');
+    const sword = { name: 'Short Sword', slug: 'short-sword', kind: 'equipment', rarity: 'common', value: 10, slot: 'hand' };
+    const kit = { ...pack(), requires: { storyBlock: '^2', capabilities: ['inventory'] }, content: { items: [sword] }, start: { inventory: { items: [{ item: 'short-sword' }] } } };
+    const host = await createHost({ settings: { packs: [{ id: kit.id, version: kit.version, enabled: true, source: 'file', origin: 'test', pack: kit }] } });
+    try {
+        for (const [name, module] of QUERIES) {
+            if (module === 'Story Block') assert.equal(host.registry.queryOwner(name), 'story-block', name);
+            else {
+                assert.ok(['Story Director', 'NPC State Delta'].includes(module), `${name}: ${module}`);
+                assert.equal(host.registry.queryOwner(name), null, `${name} is not Story Block's`);
+            }
+        }
+        assert.equal(QUERIES.some(([name]) => ['party.pc', 'scene.map'].includes(name)), false);
+
+        const button = defaultNode('button', true);
+        const outside = defaultNode('button');
+        assert.equal(outside.command, undefined, 'no row outside a list: the author picks the command');
+        const list = { ...defaultNode('list'), item: { type: 'row', children: [{ type: 'text', value: '$item.name' }, button] } };
+        const layout = { id: 'bag', title: 'Bag', icon: 'fa-box', root: list };
+        assert.deepEqual(validateLayout(layout), []);
+        assert.ok(validateLayout({ id: 'bag', root: { type: 'box', children: [outside] } }).length, 'an unset command is reported until it is chosen');
+        const model = replacePresentation(openPack(kit), 'layouts', [layout]);
+        assert.equal(model.ok, true);
+        assert.equal(validatePack(JSON.parse(exportPack(model.model))).ok, true);
+
+        const row = () => host.sdk.query('inventory.items').find(item => item.name === 'Short Sword');
+        const fill = payload => JSON.parse(JSON.stringify(payload).replaceAll('"$item.stack"', JSON.stringify(row().stack)));
+        for (const [type, , payload] of [UI_COMMANDS.find(([name]) => name === 'inventory.equip'), UI_COMMANDS.find(([name]) => name === 'inventory.unequip'), [button.command, button.label, button.payload]]) {
+            const out = await host.sdk.command(type, fill(payload));
+            assert.equal(out.ok, true, `${type}: ${out.message}`);
+        }
+        assert.equal(row(), undefined, 'the default button dropped the sword');
+        assert.equal((await host.sdk.command('inventory.grant', { name: 'Rope', qty: 1, owner: 'party' })).code, 'REFUSED', 'never offered: refused from a button');
+    } finally { host.close(); }
 });

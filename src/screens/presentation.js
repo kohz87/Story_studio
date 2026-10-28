@@ -3,7 +3,7 @@ import { parseJsonInput } from '../forms.js';
 import { applyEdit } from '../apply-edit.js';
 import { validatePack } from '../data-modules/sb-adapter.js';
 import { createPreview } from '../preview.js';
-import { SCREEN_FIELDS, MOUNTS, NODE_TYPES, standardWidgets, QUERIES, SAMPLE, replacePresentation, checkDefaults, elementSnippet, widgetSnippet } from '../screen-authoring.js';
+import { SCREEN_FIELDS, MOUNTS, NODE_TYPES, standardWidgets, QUERIES, UI_COMMANDS, SAMPLE, replacePresentation, checkDefaults, elementSnippet, widgetSnippet } from '../screen-authoring.js';
 
 const copy = value => JSON.parse(JSON.stringify(value));
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -66,12 +66,17 @@ function nodePaths(root, path = [], out = []) {
     if (Array.isArray(root.pages)) root.pages.forEach((page, i) => nodePaths(page?.node, [...path, 'pages', i, 'node'], out));
     return out;
 }
-function defaultNode(type) {
+// A new node of a type. A button in a list's item drops one of the row's item (the list starts on `inventory.items`);
+// elsewhere it has no command until the author picks one: no row to act on, and no reader command needs none.
+export function defaultNode(type, inList = false) {
     if (type === 'grid') return { type, cols: 2, children: [] };
     if (type === 'list') return { type, bind: { query: 'inventory.items' }, item: { type: 'text', value: '$item.name' } };
     if (type === 'tabs') return { type, pages: [{ title: 'Page', node: { type: 'text', value: 'Page' } }] };
     if (type === 'when') return { type, cond: 'true', children: [] };
-    if (type === 'button') return { type, label: 'Action', command: 'inventory.grant' };
+    if (type === 'button') {
+        const [command, label, payload] = UI_COMMANDS[0];
+        return inList ? { type, label, command, payload: copy(payload) } : { type, label: 'Action' };
+    }
     if (['box', 'row', 'col'].includes(type)) return { type, children: [] };
     if (Object.hasOwn(standardWidgets, type)) return { type, props: {} };
     return { type, ...(type === 'text' ? { value: 'Text' } : {}) };
@@ -110,7 +115,19 @@ function layoutForm(doc, parent, getLayout, putLayout, state) {
         select(doc, body, 'Selected layout node', paths.map(([p, n]) => [JSON.stringify(p), `root${p.map(k => typeof k === 'number' ? `[${k}]` : `.${k}`).join('')} · ${safeLabel(n.type)}`]), JSON.stringify(path), value => { state.node = value; draw(); });
         const types = [...Object.keys(NODE_TYPES), ...Object.keys(standardWidgets)];
         if (!types.includes(node.type)) types.push(safeLabel(node.type));
-        select(doc, body, 'Node type', types.map(key => [key, key]), node.type, type => update(defaultNode(type), true));
+        const inList = path.includes('item');
+        select(doc, body, 'Node type', types.map(key => [key, key]), node.type, type => update(defaultNode(type, inList), true));
+        if (node.type === 'button') {
+            // Only commands a reader's button may run; another module's command goes in "Node command" below.
+            const known = UI_COMMANDS.find(([name]) => name === node.command);
+            select(doc, body, 'Reader command', [['', known || !node.command ? 'Choose a command' : 'Another module\'s command'],
+                ...UI_COMMANDS.map(([name, label]) => [name, `${name} · ${label}`])], known ? node.command : '', value => {
+                const chosen = UI_COMMANDS.find(([name]) => name === value);
+                if (!chosen) return;
+                update({ ...node, label: chosen[1], command: chosen[0], payload: copy(chosen[2]) }, true);
+            });
+            if (!inList) body.append(el(doc, 'p', 'These act on one row of an inventory list: put the button in a list\'s item.', { class: 'muted' }));
+        }
         const spec = NODE_TYPES[node.type];
         const fields = { ...(spec?.fields ?? { props: 'payload' }), bind: 'payload' };
         for (const [key, kind] of Object.entries(fields)) {
@@ -145,7 +162,7 @@ export function renderPresentation(ctx) {
         state.index = list.length;
         let suffix = 1;
         while (list.some(record => record?.id === `new-${suffix}`)) suffix++;
-        state.draft = state.field === 'screens' ? { id: `new-${suffix}`, title: 'New screen', mounts: ['tab'], data: { pc: { query: 'party.pc' } }, template: '<p>{{ q.pc.name }}</p>' }
+        state.draft = state.field === 'screens' ? { id: `new-${suffix}`, title: 'New screen', mounts: ['tab'], data: { place: { query: 'scene.place' } }, template: '<p>{{ q.place.name }}</p>' }
             : { id: `new-${suffix}`, title: 'New layout', root: defaultNode('box') };
         ctx.render();
     }));
@@ -246,13 +263,13 @@ export function renderPresentation(ctx) {
         const palette = el(doc, 'details', '', { class: 'card stack' }); palette.open = true; palette.append(el(doc, 'summary', 'Template palette'));
         editor.append(palette);
         const append = snippet => { put('template', `${state.draft.template ?? ''}\n${snippet}`); templates.get('template').value = state.draft.template; };
-        let tag = 'p', text = '{{ q.pc.name }}', condition = '', each = '';
+        let tag = 'p', text = '{{ q.place.name }}', condition = '', each = '';
         select(doc, palette, 'Element', ['section', 'div', 'p', 'span', 'h2', 'ul', 'li', 'button', 'input'].map(value => [value, value]), tag, value => { tag = value; });
         control(doc, palette, 'Element text / binding', text, value => { text = value; });
         control(doc, palette, 'Condition (data-if)', '', value => { condition = value; });
         control(doc, palette, 'Repeat (data-each)', '', value => { each = value; });
         palette.append(button(doc, 'Insert element', () => append(elementSnippet(tag, text, condition, each))));
-        let widget = 'ss.meter', props = { value: '{{ q.pc.hp.cur }}', max: '{{ q.pc.hp.max }}', label: 'HP' };
+        let widget = 'ss.meter', props = { value: 1, max: 3, label: 'Progress' };
         const propHelp = el(doc, 'pre', '', { id: 'widget-prop-help' });
         const showProps = () => { propHelp.textContent = JSON.stringify(standardWidgets[widget].props, null, 2); };
         select(doc, palette, 'Widget', Object.keys(standardWidgets).map(name => [name, name]), widget, value => { widget = value; showProps(); });
@@ -262,7 +279,7 @@ export function renderPresentation(ctx) {
             if (!parsed.ok || !object(parsed.value)) { ctx.notify('Widget props refused: enter a JSON object.'); return; }
             append(widgetSnippet(widget, parsed.value));
         }), propHelp); showProps();
-        let query = QUERIES[0][0], alias = 'pc';
+        let query = QUERIES[0][0], alias = 'place';
         select(doc, palette, 'Query', QUERIES.map(([name, module, meaning]) => [name, `${name} · ${module} · ${meaning}`]), query, value => { query = value; });
         control(doc, palette, 'Query alias', alias, value => { alias = value; });
         const args = control(doc, palette, 'Query args JSON', {}, () => {}, { json: true });

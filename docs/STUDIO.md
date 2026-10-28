@@ -161,7 +161,7 @@ The vendored host and the authoring kit are synchronized from Story Block using 
 
 Select **Screen builder**, then **Screens** or **Layouts**. Choose an existing record, or **New screen** /
 **New layout**. Screen ids may name a module screen to restyle it, such as `example-module/overview`.
-New screens bind `data.pc` to `party.pc` for their initial `q.pc.name` template.
+New screens bind `data.place` to Story Block's `scene.place` for their initial `q.place.name` template.
 All ten host `SCREEN_FIELDS` are covered:
 
 | Field | Editor |
@@ -192,7 +192,11 @@ The node form uses the host's `NODE_TYPES` catalogue: `box`, `row`, `col`, `grid
 `image`, `badge`, `button`, `tabs`, `when`, plus the 18 standard widget types. Choose a node, change its
 type/fields, add children/pages, or use **Use node JSON** for an arbitrary node. Changing a type explicitly
 replaces that selected node; other nodes remain as authored. JSON fields handle bindings, props, payloads
-and theme tokens. All top-level layout object keys remain available through whole-record JSON.
+and theme tokens. A new `button` in a list's item drops one of the row's item (`inventory.drop`, the list
+starting on `inventory.items`); elsewhere it has no command until one is chosen. **Reader command** offers only
+the commands a reader's button may run in the suite (`UI_COMMANDS`: drop, equip, unequip a row's item); a
+command that makes items or money, such as `inventory.grant`, is refused from a button and is not offered.
+Another module's command is typed into the node's `command`. All top-level layout object keys remain available through whole-record JSON.
 
 Pack validation accepts `layouts` as a list of safe plain objects, and a screen's `layout` as a safe plain
 object. It does **not** enforce the renderer's node schema. The builder preserves that distinction:
@@ -215,7 +219,8 @@ The host's strict sanitizer and rendering budgets apply. Malformed expressions p
 No author JavaScript is evaluated.
 
 The template palette provides plain elements, condition/repeat fields, every standard `ss.*` widget,
-and the documented query examples from the references above. Widget prop types/defaults come directly
+and the queries the suite's modules answer (`QUERIES`, under the module that answers each; a test checks
+Story Block's against the vendored host). Widget prop types/defaults come directly
 from each vendored widget's `props`. Query names, owners and descriptions appear in the picker. A query
 alias already in `data` is visibly refused; it is never overwritten. Other module widgets and query names
 can be authored in source/JSON without an extra Studio allow-list; an unavailable widget reports a preview

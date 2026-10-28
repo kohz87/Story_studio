@@ -10,7 +10,7 @@ import { openParts } from './helpers/parts.js';
 
 const APP_URL = pathToFileURL(resolve('dist/story-studio.html')).href;
 const base = () => ({ id: 'test', version: '1.0.0', requires: { storyBlock: '^2' }, description: 'Original text',
-    screens: [{ id: 'test-screen', title: 'Test screen', mounts: ['tab'], data: { pc: { query: 'party.pc' }, rows: { query: 'inventory.items' } }, template: '<p>{{ q.pc.name }}</p>' }] });
+    screens: [{ id: 'test-screen', title: 'Test screen', mounts: ['tab'], data: { pc: { query: 'scene.place' }, rows: { query: 'inventory.items' } }, template: '<p>{{ q.pc.name }}</p>' }] });
 async function pageTest(width, action) {
     const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.STUDIO_CHROMIUM_PATH ? { executablePath: process.env.STUDIO_CHROMIUM_PATH } : {}) });
     try {
@@ -44,14 +44,14 @@ async function exported(page) {
 for (const width of [1280, 390]) test(`screen form, live host bindings, widgets and escaped author text at ${width}`, async () => pageTest(width, async page => {
     await upload(page, base()); await nav(page, 'Screen builder');
     const body = () => page.frameLocator('iframe').locator('body');
-    assert.equal(await body().innerText(), 'River');
-    const template = '<h2>{{ q.pc.name }}</h2><ul><li data-each="q.rows as r, i" data-if="r.qty > 1" data-bind-attr="title: r.name">{{ i }}: {{ r.name }}</li></ul><p data-bind="q.pc.name"></p><ss-widget name="ss.meter" data-props=\'{"value":"{{ q.pc.hp.cur }}","max":30,"label":"HP"}\'></ss-widget>';
+    assert.equal(await body().innerText(), 'Sample village');
+    const template = '<h2>{{ q.pc.name }}</h2><ul><li data-each="q.rows as r, i" data-if="r.qty > 1" data-bind-attr="title: r.name">{{ i }}: {{ r.name }}</li></ul><p data-bind="q.pc.name"></p><ss-widget name="ss.meter" data-props=\'{"value":15,"max":30,"label":"HP"}\'></ss-widget>';
     await page.locator('#screen-template').fill(template);
     assert.match(await body().innerText(), /0: Rope/);
     assert.doesNotMatch(await body().innerText(), /Torch/);
     assert.equal(await page.frameLocator('iframe').locator('ss-widget .ss-w-meter').count(), 1);
     const hostile = '<img src=x onerror="globalThis.pwned=1"><b>literal</b>';
-    await page.locator('#preview-sample').fill(JSON.stringify({ queries: { 'party.pc': { name: hostile, hp: { cur: 15, max: 30 } }, 'inventory.items': [] } }));
+    await page.locator('#preview-sample').fill(JSON.stringify({ queries: { 'scene.place': { name: hostile }, 'inventory.items': [] } }));
     assert.match(await body().innerText(), /<img src=x onerror=/);
     assert.equal(await page.frameLocator('iframe').locator('img,b,script').count(), 0);
     assert.equal(await page.evaluate(() => globalThis.pwned), undefined);
@@ -80,14 +80,14 @@ test('screen refusals, palette insertion, steps, and inactive commands are visib
     await page.getByRole('button', { name: 'Insert widget', exact: true }).click();
     assert.match(await page.locator('#screen-template').inputValue(), /ss.meter/);
     await page.getByRole('button', { name: 'Add query binding', exact: true }).click();
-    assert.equal(JSON.parse(await page.locator('#screen-data').inputValue()).pc.query, 'party.pc');
+    assert.equal(JSON.parse(await page.locator('#screen-data').inputValue()).place.query, 'scene.place');
     await page.getByRole('button', { name: 'Add query binding', exact: true }).click();
     assert.match(await page.locator('.notice').innerText(), /already exists/);
-    await page.locator('#screen-steps').fill(JSON.stringify([{ id: 'first', template: '<p>Step {{ q.pc.name }}</p>' }]));
+    await page.locator('#screen-steps').fill(JSON.stringify([{ id: 'first', template: '<p>Step {{ q.place.name }}</p>' }]));
     await page.getByRole('checkbox', { name: 'Mount tab', exact: true }).uncheck();
     await page.getByRole('checkbox', { name: 'Mount dialog', exact: true }).check();
     await page.getByLabel('Preview source', { exact: true }).selectOption('0');
-    assert.equal(await page.frameLocator('iframe').locator('body').innerText(), 'Step River');
+    assert.equal(await page.frameLocator('iframe').locator('body').innerText(), 'Step Sample village');
     await page.getByLabel('Preview source', { exact: true }).selectOption('');
     await page.locator('#screen-template').fill('<button data-command="party.create">Act</button>');
     await page.frameLocator('iframe').getByRole('button', { name: 'Act', exact: true }).click();
@@ -143,9 +143,9 @@ test('Ersveil stays byte-faithful across defaults refusals, presentation apply/u
     assert.equal(await exported(page), source);
     await nav(page, 'Screen builder');
     await page.getByRole('button', { name: 'New screen', exact: true }).click();
-    assert.deepEqual(JSON.parse(await page.locator('#screen-data').inputValue()), { pc: { query: 'party.pc' } });
-    assert.equal(await page.frameLocator('iframe').locator('body').innerText(), 'River');
-    await page.locator('#screen-template').fill('<p>New {{ q.pc.name }}</p>');
+    assert.deepEqual(JSON.parse(await page.locator('#screen-data').inputValue()), { place: { query: 'scene.place' } });
+    assert.equal(await page.frameLocator('iframe').locator('body').innerText(), 'Sample village');
+    await page.locator('#screen-template').fill('<p>New {{ q.place.name }}</p>');
     await page.getByRole('button', { name: 'Apply screen', exact: true }).click();
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
     assert.equal(await exported(page), source);
