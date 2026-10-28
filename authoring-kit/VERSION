@@ -1,5 +1,5 @@
 Story Block authoring kit
-commit e0d97e193c6bdb4d8a0c69995f28b50cec5ad0e8
+commit 55e2bd40a88cb552f6936126e693fc8d63ee2f12
 rewritten scripts/sb-root.mjs
 files 20
 1043d72514fa50ce54b4a34d283745619d85f3f6afa685e692bcba0de547da66  .gitignore

@@ -68,7 +68,7 @@ function* walk(node) {
 }
 
 test('there are assets, and the file names are kebab-case', () => {
-    assert.ok(files.length >= 20);
+    for (const name of ['app-mark', 'open-file', 'export-file', 'undo', 'redo', 'no-pack', 'no-problems']) assert.ok(files.some(file => file.name === name), name);
     for (const { file } of files) assert.match(file, /^[a-z0-9]+(-[a-z0-9]+)*\.svg$/);
     const names = files.map(f => f.name);
     assert.equal(new Set(names).size, names.length, 'names must be unique across icons/ and empty/');
@@ -145,12 +145,6 @@ test('index.js exports a frozen map of exactly the files', () => {
     assert.ok(Object.isFrozen(ASSETS));
     assert.deepEqual(Object.keys(ASSETS).sort(), files.map(f => f.name).sort());
     assert.ok(Object.isFrozen(SB_ICONS));
-});
-
-test('the tier badges 0 to 3 exist and differ from each other', () => {
-    const tiers = [0, 1, 2, 3].map(n => ASSETS[`tier-${n}`]);
-    assert.ok(tiers.every(Boolean));
-    assert.equal(new Set(tiers).size, 4);
 });
 
 test('every Story Block icon Studio reuses exists in the vendored set and is not also drawn here', () => {

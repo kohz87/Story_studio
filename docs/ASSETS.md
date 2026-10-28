@@ -21,25 +21,17 @@ notes (`studio-mocks/`); the look is the glass themes, Nunito, accent `#7b6cf0`.
 | --- | --- | --- |
 | `logo-mark` | Studio logo, line version, in the header | 24 |
 | `app-mark` | App mark and favicon: accent tile, spark cut out of it (`fill-rule="evenodd"`, so the page shows through); the only filled icon | 64 (reads at 16) |
-| `tier-0`, `tier-1`, `tier-2`, `tier-3` | Tier badge beside a class name. Told apart by shape and number: circle 0, square 1, hexagon 2, shield 3 | 24 (use at 16-20) |
-| `form-written` | A form the creator writes: pencil on a line | 24 |
-| `form-generated` | A form Story Block generates, read-only: padlock | 24 |
-| `form-base` | The base skill: bolt on a base line | 24 |
-| `kind-classes` | Left rail: classes (three stacked layers, one per tier step) | 24 |
 | `kind-shops` | Left rail: shops | 24 |
-| `kind-trainers` | Left rail: trainers | 24 |
-| `budget` | Power budget meter | 24 |
 | `cascade-remove` | Remove with everything that depends on it: a branch with a cut | 24 |
 | `chevron-down` | The pack parts disclosure on a phone (closed or open) | 24 |
-| `copy` | Copy the narrator line of a trainer template | 24 |
+| `copy` | Copy text | 24 |
 | `undo`, `redo` | History buttons; mirror images of each other | 24 |
 | `open-file` | Open a pack file | 24 |
 | `export-file` | Export a pack file | 24 |
 | `no-pack` | Empty state, no pack open (folder with a plus) | 160x120 |
 | `no-problems` | Empty state, nothing to fix (shield with a check) | 160x120 |
 
-`kind-classes`, `kind-shops`, `kind-trainers`, `undo` and `redo` use the same paths as the inline icons in the mocks, so the
-screens match them. The empty states are line art in `currentColor` with the accent on the plus, the check and the spark;
+`kind-shops`, `undo` and `redo` use the same paths as the inline icons in the mocks. The empty states are line art in `currentColor` with the accent on the plus, the check and the spark;
 no gradients, no text.
 
 Check the drawings at 16, 20 and 24 px in the dark (`#151827` / `#f1f2f8`) and light (`#e8e6f3` / `#23253a`) themes
@@ -64,10 +56,7 @@ with that module's `svgIcon(doc, id)` (viewBox 256, `fill="currentColor"`, so th
 | `warning` (problem) | `ph-warning` |
 | `ready` (check) | `ph-check-circle` |
 
-Available in the set but not used, because drawn Studio marks fit their role better: `ph-lock-simple` (the generated-form
-mark is one of a set of three form marks drawn together) and `ph-arrow-counter-clockwise` (Story Block has no clockwise
-counterpart, and undo and redo must mirror each other). Story Block has no icon for open file or export file (`ph-download-simple`
-is a download, not an export).
+The drawn undo and redo marks mirror one another. The open and export file marks are drawn for Studio.
 
 Phosphor is MIT licensed, copyright (c) 2023 Phosphor Icons. Story Block keeps the notice in its `ICONS-CREDITS.md`, which is
 not part of the vendored copy. The single-file build inlines these icons, so the build's notices need to carry that licence.
