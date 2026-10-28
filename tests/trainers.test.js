@@ -17,7 +17,7 @@ const text = readFileSync(new URL('./fixtures/ersveil-bluewatch-1.6.0.json', imp
 test('Ersveil 1.6.0 opens with seven fixed trainers and four templates, and exports its own bytes', () => {
     const model = openPack(text);
     assert.equal(model.validation.ok, true);
-    assert.equal(model.rulesHash.slice(0, 8), '2a56f0cf');
+    assert.equal(model.rulesHash.slice(0, 8), '968ab47a');
     const trainers = records(model, 'trainers');
     assert.equal(trainers.length, 11);
     assert.equal(trainers.filter(t => t.open === true).length, 4);

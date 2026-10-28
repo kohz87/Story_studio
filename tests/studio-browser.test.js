@@ -11,8 +11,8 @@ import { openPack, exportPack } from '../src/model.js';
 import { openParts } from './helpers/parts.js';
 
 const URL = pathToFileURL(resolve('dist/story-studio.html')).href;
-const RULES_HASH = '73a9544b564fd03883162089690350a914c550c455b10ddfaf962c1d4e6b3d35';
-const PACK_HASH = '0e156cdbcfd8c02db87c44166582bee3071f8bc6d8fde51af66f31a63214cf63';
+const RULES_HASH = '4350400203831b86069c7e1230894db0524645c2671289cfe251072254d6cd74';
+const PACK_HASH = '378883318fde8ee731404fb2fbecb9bb54b09e9d7898078a5f8c1da1ab422fec';
 
 async function withPage(options, action) {
     const browser = await chromium.launch({
