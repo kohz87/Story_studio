@@ -29,8 +29,6 @@ const hearts = {
 function runOwnTests(dir) {
     const env = { ...process.env };
     delete env.NODE_TEST_CONTEXT;
-    // Report individual scaffold cases even when the surrounding runner reports only test files.
-    env.NODE_OPTIONS = [env.NODE_OPTIONS, '--test-isolation=none'].filter(Boolean).join(' ');
     const result = spawnSync(npmCommand(), ['test'], { cwd: dir, encoding: 'utf8', timeout: 120000, env });
     const output = `${result.stdout}${result.stderr}`;
     assert.equal(result.status, 0, output);
