@@ -1,13 +1,10 @@
 import { safeLabel, el, button, field, icon } from '../dom.js';
-import { KINDS, RULES_KINDS, records, identity, localId } from '../records.js';
+import { KINDS, LABELS, records, identity, localId } from '../records.js';
 
-import { formOptions } from '../forms.js';
 
 const UNSAFE = new Set(['__proto__', 'constructor', 'prototype']);
 const GROUP_TITLES = {
-    'class-skills': 'A class needs exactly 3 skills',
     'bad-ref': 'Something points at a missing record',
-    'budget-closure': 'A form is stronger than its step allows',
     'not-found': 'Record not found',
     'bad-value': 'Invalid value',
     'dup-id': 'Duplicate identifier',
@@ -71,64 +68,21 @@ export function goToProblem(ctx, issue) {
     }
 
     let norm = [...tokens];
-    if (norm[0] !== 'content') {
-        if (norm[0] === 'rules') norm.unshift('content');
-        else if (RULES_KINDS.has(norm[0])) norm = ['content', 'rules', 0, ...norm];
-        else if (KINDS.includes(norm[0])) norm = ['content', ...norm];
-    }
-
-    let coll = null, idx = null, rest = [];
+    if (norm[0] !== 'content' && KINDS.includes(norm[0])) norm = ['content', ...norm];
+    let coll = null, idx = null;
     if (norm[0] === 'content') {
-        if (norm[1] === 'rules' && typeof norm[2] === 'number') {
-            coll = norm[3]; idx = norm[4]; rest = norm.slice(5);
-        } else {
-            coll = norm[1] === 'skills' ? 'legacySkills' : norm[1]; idx = norm[2]; rest = norm.slice(3);
-        }
+        coll = norm[1] === 'skills' ? 'legacySkills' : norm[1];
+        idx = norm[2];
     }
-
-    if (coll === 'branches') {
-        const branchList = KINDS.includes('branches') ? records(ctx.model, 'branches') : [];
-        const branch = typeof idx === 'number' ? branchList[idx] : null;
-        const owning = localId(ctx.model, branch?.skill) || branch?.skill || '';
-        const bSlug = localId(ctx.model, identity(branch, 'branches')) || identity(branch, 'branches') || '';
-        const inPathInspector = ['name', 'transforms', 'power', 'powerScore'].includes(rest[0]) || issue.code === 'budget-closure';
-        if (owning && inPathInspector) ctx.select('skills', owning, bSlug);
-        else if (bSlug) ctx.select('branches', bSlug);
-    } else if (coll === 'skills') {
-        const skillList = KINDS.includes('skills') ? records(ctx.model, 'skills') : [];
-        const skill = typeof idx === 'number' ? skillList[idx] : null;
-        const sSlug = localId(ctx.model, identity(skill, 'skills')) || identity(skill, 'skills') || '';
-        if (sSlug) ctx.select('skills', sSlug, `${safeLabel(sSlug)}-base`);
-    } else if (coll === 'classes') {
-        const classList = KINDS.includes('classes') ? records(ctx.model, 'classes') : [];
-        const cls = typeof idx === 'number' ? classList[idx] : null;
-        const cSlug = localId(ctx.model, identity(cls, 'classes')) || identity(cls, 'classes') || '';
-        if (cSlug) ctx.select('classes', cSlug);
-    } else if (coll && KINDS.includes(coll)) {
-        const list = records(ctx.model, coll);
-        const rec = typeof idx === 'number' ? list[idx] : null;
-        const rId = localId(ctx.model, identity(rec, coll)) || identity(rec, coll) || '';
-        if (rId) ctx.select(coll, rId);
+    if (coll && KINDS.includes(coll)) {
+        const rec = typeof idx === 'number' ? records(ctx.model, coll)[idx] : null;
+        const id = localId(ctx.model, identity(rec, coll)) || identity(rec, coll) || '';
+        if (id) ctx.select(coll, id);
     }
 
     if (typeof ctx.closeProblems === 'function') ctx.closeProblems(false);
 
     let target = null;
-    if (coll === 'branches') {
-        if (rest.includes('powerScore') || rest.includes('power') || issue.code === 'budget-closure') {
-            target = findControl(ctx, '#form-power');
-        } else if (rest.includes('transforms')) {
-            target = findControl(ctx, '#form-transforms');
-        }
-    } else if (coll === 'skills') {
-        if (rest.includes('powerScore') || rest.includes('power') || issue.code === 'budget-closure') {
-            target = findControl(ctx, '#form-effects');
-        }
-    } else if (coll === 'classes') {
-        if (rest[0] === 'skills' && rest.length === 1) target = findControl(ctx, '#class-skills');
-        else if (rest[0] === 'parent' || rest[0] === 'tier') target = findControl(ctx, '#class-parent');
-    }
-
     if (!target) {
         const root = ctx.root || ctx.app || ctx.doc.body || ctx.doc.documentElement;
         const elements = root?.querySelectorAll?.('[data-path]') || [];
@@ -236,11 +190,7 @@ export function renderCheck(ctx) {
 
     const ok = Boolean(ctx.model?.validation?.ok);
     const errCount = (ctx.model?.validation?.errors || []).length;
-    const classesCount = records(ctx.model, 'classes').length;
-    const skillsCount = records(ctx.model, 'skills').length;
-    const formsCount = ctx.model?.document ? formOptions(ctx.model).length : 0;
-    const otherKinds = KINDS.filter(k => !['classes', 'skills', 'branches'].includes(k));
-    const otherCount = otherKinds.reduce((sum, k) => sum + records(ctx.model, k).length, 0);
+    const otherCount = KINDS.reduce((sum, k) => sum + records(ctx.model, k).length, 0);
 
     const root = el(doc, 'div', '', { class: 'check-screen' });
     const left = el(doc, 'section', '', { class: 'check-left', 'aria-label': 'Check' });
@@ -256,7 +206,7 @@ export function renderCheck(ctx) {
     left.append(statusBox);
 
     const countsGrid = el(doc, 'div', '', { class: 'counts-grid' });
-    for (const [k, v] of [['CLASSES', classesCount], ['SKILLS', skillsCount], ['SKILL FORMS', formsCount], ['OTHER RECORDS', otherCount]]) {
+    for (const [k, v] of [['PLACES', records(ctx.model, 'places').length], ['ROUTES', records(ctx.model, 'routes').length], ['EVENTS', records(ctx.model, 'events').length], ['RECORDS', otherCount]]) {
         const card = el(doc, 'div', '', { class: 'count-card' });
         card.append(el(doc, 'div', k, { class: 'count-k muted' }), el(doc, 'div', String(v), { class: 'count-v' }));
         countsGrid.append(card);
@@ -276,22 +226,15 @@ export function renderCheck(ctx) {
     const fpBox = el(doc, 'div', '', { class: 'fp-section' });
     fpBox.append(el(doc, 'div', 'FINGERPRINTS', { class: 'section-label muted' }));
     const fpCard = el(doc, 'div', '', { class: 'fp-card' });
-    const rRow = el(doc, 'div', '', { class: 'fp-row' });
-    rRow.append(el(doc, 'span', 'Rules', { class: 'fp-label muted' }), el(doc, 'span', ctx.model?.rulesHash || ctx.model?.validation?.rulesHash || '—', { class: 'fp-val mono' }));
     const pRow = el(doc, 'div', '', { class: 'fp-row' });
-    pRow.append(el(doc, 'span', 'Whole pack', { class: 'fp-label muted' }), el(doc, 'span', ctx.model?.packHash || ctx.model?.validation?.packHash || '—', { class: 'fp-val mono' }));
-    fpCard.append(rRow, pRow);
-    fpBox.append(fpCard, el(doc, 'div', 'A running story pins the rules fingerprint. Changing rules makes a new version; stories already under way keep the one they started with.', { class: 'fp-note muted' }));
+    pRow.append(el(doc, 'span', 'Whole pack', { class: 'fp-label muted' }), el(doc, 'span', ctx.model?.packHash || '—', { class: 'fp-val mono' }));
+    fpCard.append(pRow);
+    fpBox.append(fpCard);
     right.append(fpBox);
 
     const insideBox = el(doc, 'div', '', { class: 'inside-section' });
     insideBox.append(el(doc, 'div', "WHAT'S INSIDE", { class: 'section-label muted' }));
-    const insideRows = [
-        ['Classes (tiers 0–3)', `${classesCount}`],
-        ['Skills and forms', `${skillsCount} · ${formsCount}`],
-        ['Items and foes', `${records(ctx.model, 'items').length} · ${records(ctx.model, 'creatures').length}`],
-        ['Places, quests, shops, trainers', `${records(ctx.model, 'places').length} · ${records(ctx.model, 'quests').length} · ${records(ctx.model, 'shops').length} · ${records(ctx.model, 'trainers').length}`],
-    ];
+    const insideRows = KINDS.map(kind => [LABELS[kind] || kind, String(records(ctx.model, kind).length)]);
     for (const [label, val] of insideRows) {
         const row = el(doc, 'div', '', { class: 'inside-row' });
         row.append(el(doc, 'span', label), el(doc, 'span', val, { class: 'inside-val' }));

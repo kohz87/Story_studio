@@ -14,7 +14,7 @@ after(() => adapter.useBackendForTests(null));
 const waiting = () => adapter.useBackendForTests(oldBackend);
 const ready = () => adapter.useBackendForTests(null);
 const plain = { id: 'ersveil-factions', version: '1.0.0', name: 'Plain', requires: { storyBlock: '^2' }, content: {} };
-const ersveil = () => readFileSync(new URL('./fixtures/ersveil-bluewatch.json', import.meta.url), 'utf8');
+const ersveil = () => readFileSync(new URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8');
 
 test('waiting: a pack with data modules opens as a safe invalid draft that keeps every authored byte', () => {
     waiting();
@@ -186,7 +186,7 @@ test('ready: attaching a pack screen copies it into the module and refuses a dup
     assert.equal(attachPresentation(model, 0, 'themes', 'side').ok, false);
 });
 
-test('ready: editing a data module in the Ersveil pack and undoing restores its 247 KB source bytes', () => {
+test('ready: editing a data module in the open Ersveil pack and undoing restores its source bytes', () => {
     ready();
     const text = ersveil();
     const model = openPack(text);
@@ -200,7 +200,7 @@ test('ready: editing a data module in the Ersveil pack and undoing restores its 
     assert.match(exportPack(log.current), /"dataModules"/);
     assert.equal(log.undo(), model);
     assert.equal(exportPack(log.current), text);
-    assert.equal(log.current.rulesHash, model.rulesHash);
+    assert.equal(log.current.packHash, model.packHash);
 });
 
 test('refusals never mutate their inputs', () => {

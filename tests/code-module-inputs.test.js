@@ -177,7 +177,7 @@ test('a Query equal to the Command is refused, and only when both pass their own
 
 test('the reserved domain, capability and module ids are refused with the same sentence', () => {
     assert.deepEqual(errorsOf(withValue('domain', 'inventory')), one('reserved', 'domain', 'State name "inventory" is taken by Story Block or another Story Suite module.'));
-    assert.deepEqual(errorsOf(withValue('capability', 'rb-rules-v2')), one('reserved', 'capability', 'Capability "rb-rules-v2" is taken by Story Block or another Story Suite module.'));
+    assert.deepEqual(errorsOf(withValue('capability', 'data-modules-v1')), one('reserved', 'capability', 'Capability "data-modules-v1" is taken by Story Block or another Story Suite module.'));
     assert.deepEqual(errorsOf(withValue('capability', 'data-modules-v1')), one('reserved', 'capability', 'Capability "data-modules-v1" is taken by Story Block or another Story Suite module.'));
 });
 

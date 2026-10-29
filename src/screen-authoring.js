@@ -28,36 +28,41 @@ export function replacePresentation(model, field, value) {
     return { ok: true, model: next, undo: () => model };
 }
 
-// Documented query examples from PACKS.md, TEMPLATES.md, LAYOUTS.md, WIDGETS.md and MODULES.md.
-// Queries are names, never callbacks: Studio answers them only from the sample JSON.
+// The queries the suite's modules answer, under the module that answers them (PACKS.md, TEMPLATES.md, LAYOUTS.md,
+// MODULES.md). Queries are names, never callbacks: Studio answers them only from the sample JSON. Another module's
+// query is typed into the screen's data by hand.
 export const QUERIES = Object.freeze([
-    ['party.pc', 'RPG Battle', 'Player character'], ['party.actor', 'RPG Battle', 'Actor by id or name'],
-    ['party.combatNumbers', 'RPG Battle', 'Actor numbers with gear'], ['party.ranks', 'RPG Battle', 'Rank ladder'], ['party.actors', 'RPG Battle', 'Party members'],
-    ['party.creation', 'RPG Battle', 'Character creation choices'], ['party.offers', 'RPG Battle', 'Party offers'],
-    ['party.encumbered', 'RPG Battle', 'Carry status'], ['items.carry', 'RPG Battle', 'Capacity from items'],
-    ['items.usable', 'RPG Battle', 'Usable items for an actor'], ['items.gear', 'RPG Battle', 'Equipped gear'],
-    ['combat.offers', 'RPG Battle', 'Encounter offers'], ['combat.session', 'RPG Battle', 'Current fight view'],
-    ['combat.foesBeaten', 'RPG Battle', 'Foes beaten since a reply'],
+    ['scene.place', 'Story Block', 'Current place'], ['scene.present', 'Story Block', 'Who is here'],
     ['director.time', 'Story Director', 'Story clock'], ['director.threads', 'Story Director', 'Thread list'],
-    ['director.thread', 'Story Director', 'Thread by key'], ['quest.progress', 'Story Director', 'Quest progress'],
-    ['quest.details', 'Story Director', 'Quest details'], ['quest.ranks', 'Story Director', 'Quest rank ladder'],
-    ['scene.place', 'Story Block', 'Current place'], ['scene.map', 'Story Block', 'Known places'],
+    ['director.thread', 'Story Director', 'Thread by key'],
     ['inventory.items', 'Story Block', 'Item stacks'], ['inventory.wallet', 'Story Block', 'Wallet'],
     ['inventory.economy', 'Story Block', 'Effective money scale'],
     ['npc.present', 'NPC State Delta', 'Present NPCs'], ['npc.dossier', 'NPC State Delta', 'Dossier by name'],
     ['npc.known', 'NPC State Delta', 'Known NPCs'], ['npc.portrait', 'NPC State Delta', 'Portrait by name'],
-    ...['list', 'content', 'markets', 'crafts', 'calendar', 'weather', 'economy', 'rules', 'item', 'start']
+    ...['list', 'content', 'markets', 'crafts', 'calendar', 'weather', 'economy', 'item', 'start']
         .map(name => [`packs.${name}`, 'Story Block', `Pack ${name}`]),
     ['events.status', 'Story Block', 'Event status'],
+]);
+
+// The commands a reader's button may run in the suite, with the payload for a row of `inventory.items` (the ones Story
+// Block's own Inventory screen uses). Commands that make items or money (`inventory.grant`, `wallet.receive`) are refused
+// from a button, so the builder never offers them; another module's command is typed into the node by hand.
+export const UI_COMMANDS = Object.freeze([
+    ['inventory.drop', 'Drop one', { stack: '$item.stack', qty: 1 }],
+    ['inventory.equip', 'Equip', { stack: '$item.stack' }],
+    ['inventory.unequip', 'Unequip', { stack: '$item.stack' }],
 ]);
 
 export const SAMPLE = Object.freeze({
     state: { v: 2, meta: {}, domains: { scene: { place: { name: 'Sample village' } } } },
     draft: {}, settings: {}, ops: [],
     queries: {
-        'party.pc': { name: 'River', level: 3, hp: { cur: 24, max: 30 } },
-        'inventory.items': [{ id: 'rope', name: 'Rope', qty: 2 }, { id: 'torch', name: 'Torch', qty: 1 }],
+        'inventory.items': [
+            { stack: 'it_sample01', def: 'story/rope', name: 'Rope', kind: 'goods', qty: 2, owner: 'party', equipped: null, note: '' },
+            { stack: 'it_sample02', def: 'story/torch', name: 'Torch', kind: 'goods', qty: 1, owner: 'party', equipped: null, note: '' },
+        ],
         'scene.place': { name: 'Sample village' },
+        'scene.present': ['Hollis'],
     },
 });
 

@@ -3,19 +3,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { smallRulesPack } from './fixtures/smallRulesPack.js';
+const smallWorld = ({ places = [] } = {}) => ({ id: 'fixture', version: '1.0.0', name: 'World', requires: { storyBlock: '^2' }, content: { places } });
 
 import { openPack } from '../src/model.js';
 import { add, setField } from '../src/edits.js';
 import { createHistory } from '../src/history.js';
 
 test('initial history state has current model and empty undo/redo stacks', () => {
-    const pack = smallRulesPack();
+    const pack = smallWorld();
     const model = openPack(pack);
     assert.equal(model.validation.ok, true, JSON.stringify(model.validation.errors));
-    assert.ok(typeof model.rulesHash === 'string' && model.rulesHash.length === 64);
-    assert.ok(typeof model.packHash === 'string' && model.packHash.length === 64);
-    assert.equal(Object.hasOwn(model.document.content.rules[0], 'statLabels'), false);
+    assert.equal(model.packHash, null);
+    assert.equal(Object.hasOwn(model.document.content, 'rules'), false);
 
     const history = createHistory(model);
 
@@ -29,11 +28,10 @@ test('initial history state has current model and empty undo/redo stacks', () =>
 });
 
 test('successful commit updates current model, records undo, and clears redo', () => {
-    const pack = smallRulesPack({ statLabels: {}, places: [{ slug: 'haven', name: 'Haven', x: 0, y: 0 }] });
+    const pack = smallWorld({ statLabels: {}, places: [{ slug: 'haven', name: 'Haven', x: 0, y: 0 }] });
     const model0 = openPack(pack);
     assert.equal(model0.validation.ok, true, JSON.stringify(model0.validation.errors));
-    assert.ok(typeof model0.rulesHash === 'string' && model0.rulesHash.length === 64);
-    assert.ok(typeof model0.packHash === 'string' && model0.packHash.length === 64);
+    assert.equal(model0.packHash, null);
 
     const history = createHistory(model0);
 
@@ -58,12 +56,11 @@ test('successful commit updates current model, records undo, and clears redo', (
 });
 
 test('undo and redo restore exact model snapshots across multiple edits', () => {
-    const pack = smallRulesPack({ statLabels: {}, places: [{ slug: 'haven', name: 'Haven', x: 0, y: 0 }] });
+    const pack = smallWorld({ statLabels: {}, places: [{ slug: 'haven', name: 'Haven', x: 0, y: 0 }] });
     const m0 = openPack(pack);
     assert.equal(m0.validation.ok, true, JSON.stringify(m0.validation.errors));
-    assert.ok(typeof m0.rulesHash === 'string' && m0.rulesHash.length === 64);
-    assert.ok(typeof m0.packHash === 'string' && m0.packHash.length === 64);
-    assert.deepEqual(m0.document.content.rules[0].statLabels, {});
+    assert.equal(m0.packHash, null);
+    assert.equal(m0.document.name, 'World');
 
     const history = createHistory(m0);
 
@@ -79,8 +76,8 @@ test('undo and redo restore exact model snapshots across multiple edits', () => 
     history.commit(e2);
     const m2 = history.current;
 
-    // Edit 3: set statLabel STR
-    const e3 = setField(m2, ['content', 'rules', 0, 'statLabels', 'STR'], 'Strength');
+    // Edit 3: rename the pack
+    const e3 = setField(m2, ['name'], 'New World');
     assert.equal(e3.ok, true);
     history.commit(e3);
     const m3 = history.current;
@@ -130,7 +127,7 @@ test('undo and redo restore exact model snapshots across multiple edits', () => 
 });
 
 test('new commit after undo invalidates and clears redo stack', () => {
-    const pack = smallRulesPack();
+    const pack = smallWorld();
     const m0 = openPack(pack);
     const history = createHistory(m0);
 
@@ -158,7 +155,7 @@ test('new commit after undo invalidates and clears redo stack', () => {
 });
 
 test('history respects positive integer limit and discards oldest snapshots', () => {
-    const pack = smallRulesPack();
+    const pack = smallWorld();
     const m0 = openPack(pack);
     const history = createHistory(m0, { limit: 3 });
 
@@ -187,7 +184,7 @@ test('history respects positive integer limit and discards oldest snapshots', ()
 });
 
 test('createHistory throws RangeError on non-positive or invalid limit', () => {
-    const pack = smallRulesPack();
+    const pack = smallWorld();
     const model = openPack(pack);
 
     for (const badLimit of [0, -1, -100, 1.5, NaN, Infinity, '100', null, undefined]) {

@@ -52,9 +52,9 @@ test('binding parity: missing data stays blank despite sample aliases; declared 
     const sample = { ...SAMPLE, q: { pc: { name: 'Wrong alias override' } } };
     for (const [name, data, expected] of [
         ['missing binding', undefined, ''],
-        ['declared binding', { pc: { query: 'party.pc' } }, 'River'],
+        ['declared binding', { pc: { query: 'scene.place' } }, 'Sample village'],
         ['missing query answer', { pc: { query: 'unavailable.query' } }, ''],
-        ['dependent binding', { pc: { query: 'party.pc', args: { id: '$first.name' } }, first: { query: 'scene.place' } }, 'River'],
+        ['dependent binding', { pc: { query: 'scene.place', args: { id: '$first.name' } }, first: { query: 'scene.place' } }, 'Sample village'],
     ]) await t.test(name, async () => {
         const result = await compare(screen({ template, ...(data ? { data } : {}) }), sample);
         assert.equal(result.host.ok, true);
@@ -65,8 +65,8 @@ test('binding parity: missing data stays blank despite sample aliases; declared 
 test('screen validation parity: duplicate bodies, cyclic aliases and unknown aliases refuse before rendering', async t => {
     for (const [name, extra, reason] of [
         ['duplicate template/layout', { layout: { root: { type: 'text', value: 'Should not render' } } }, /exactly one/],
-        ['cyclic aliases', { data: { a: { query: 'party.pc', args: { id: '$b.name' } }, b: { query: 'party.pc', args: { id: '$a.name' } } } }, /circle/],
-        ['unknown alias', { data: { a: { query: 'party.pc', args: { id: '$absent.name' } } } }, /not one of/],
+        ['cyclic aliases', { data: { a: { query: 'scene.place', args: { id: '$b.name' } }, b: { query: 'scene.place', args: { id: '$a.name' } } } }, /circle/],
+        ['unknown alias', { data: { a: { query: 'scene.place', args: { id: '$absent.name' } } } }, /not one of/],
     ]) await t.test(name, async () => {
         const result = await compare(screen({ template: '<p>Should not render</p>', ...extra }));
         assert.equal(result.host.ok, false);

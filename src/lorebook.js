@@ -101,6 +101,5 @@ export function acceptLoreDraft(model, draft) {
     const record = { name: draft.name, slug: draft.slug, aliases: [...draft.aliases], note: draft.content };
     if (draft.kind === 'places') Object.assign(record, { x: 0, y: 0, region: draft.region });
     if (draft.kind === 'items') Object.assign(record, { kind: 'goods', rarity: 'common', value: 0, stack: true });
-    // NPCs are narrative creature drafts. Rules packs require combat fields to be authored afterward.
     return add(model, draft.kind, record);
 }

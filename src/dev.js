@@ -3,9 +3,9 @@
 import { openPack, exportPack } from './model.js';
 import { setSchemaField as setField } from './edits.js';
 import { createHistory } from './history.js';
-import { RULES_V2_LIMITS } from '../vendor/story-block/src/v2/packs/rules-v2.js';
+import { LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 
-const MAX_BYTES = RULES_V2_LIMITS.packBytes;
+const MAX_BYTES = LIMITS.packBytes;
 
 /**
  * Mounts the development editor interface into the provided root DOM element.
@@ -145,18 +145,6 @@ export function mountDev(root) {
         }
 
         const content = document.content;
-
-        if (Array.isArray(content.rules) && content.rules[0] && typeof content.rules[0] === 'object') {
-            const r = content.rules[0];
-            const rulesKinds = ['classes', 'skills', 'branches', 'itemRules', 'trainers'];
-            for (const kind of rulesKinds) {
-                if (Array.isArray(r[kind])) {
-                    for (const item of r[kind]) {
-                        addRecordItem(kind, item);
-                    }
-                }
-            }
-        }
 
         const sbKinds = [
             'items', 'creatures', 'quests', 'shops', 'recipes',

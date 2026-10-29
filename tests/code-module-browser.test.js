@@ -12,7 +12,7 @@ import { DRAFT_WITH_AI } from '../src/draft-hint.js';
 import { SHIPPED, withPage, upload } from './helpers/dm-browser.js';
 import { openParts } from './helpers/parts.js';
 
-const pack = readFileSync(new globalThis.URL('./fixtures/valid-pack.json', import.meta.url), 'utf8');
+const pack = readFileSync(new globalThis.URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8');
 
 async function openCodeModule(page) {
     await openParts(page);
@@ -38,7 +38,7 @@ for (const width of [1280, 390]) {
     test(`at ${width} px: Ready, the files, the part file, and a typed change updates the viewer`, { timeout: 60000 }, async () => {
         await withPage(SHIPPED, { width }, async page => {
             await openCodeModule(page);
-            assert.match(await page.locator('#cm-validation').textContent(), /^Ready: 9 files written by Studio, 128 copied from Story Block 2\.5\.0 \(commit 899a3ee\)\.$/);
+            assert.match(await page.locator('#cm-validation').textContent(), /^Ready: 9 files written by Studio, 125 copied from Story Block 2\.6\.0 \(commit d3413fe\)\.$/);
             const names = await page.locator('ul[aria-label="Files in the zip"] li button[aria-pressed]').allTextContents();
             assert.deepEqual(names, ['.gitignore', 'README.md', 'index.js', 'manifest.json', 'package.json', 'src/module.js', 'src/parts/lantern.js', 'tests/module.test.js', 'tests/vendor/README.md']);
             assert.match(await page.locator('#cm-file').textContent(), /export const LABEL = 'Oil';/);
@@ -148,7 +148,7 @@ test('a download leaves the pack, its export button and Undo as they were', { ti
     await withPage(SHIPPED, { width: 1280 }, async page => {
         await upload(page, pack);
         await page.locator('#pack-name').waitFor();
-        assert.equal(await page.locator('#pack-name').inputValue(), 'Valid Fixture Pack');
+        assert.equal(await page.locator('#pack-name').inputValue(), 'Ersveil (open world)');
         const undo = page.getByRole('button', { name: 'Undo', exact: true });
         assert.equal(await undo.isDisabled(), true);
         // One edit that goes into history, so Undo is available.
@@ -167,7 +167,7 @@ test('a download leaves the pack, its export button and Undo as they were', { ti
         // One Undo returns the pack name, so the download added nothing to history.
         await undo.click();
         await settle(page);
-        assert.equal(await page.locator('#pack-name').inputValue(), 'Valid Fixture Pack');
+        assert.equal(await page.locator('#pack-name').inputValue(), 'Ersveil (open world)');
     });
 });
 

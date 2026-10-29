@@ -7,7 +7,8 @@ import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 
 const URL = pathToFileURL(resolve('dist/story-studio.html')).href;
-const PACK = JSON.parse(readFileSync(resolve('tests/fixtures/ersveil-bluewatch.json'), 'utf8'));
+const PACK = JSON.parse(readFileSync(resolve('tests/fixtures/ersveil-open-world.json'), 'utf8'));
+PACK.content.items = Array.from({ length: 6 }, (_, i) => ({ name: `Item ${i + 1}`, kind: 'goods', rarity: 'common' }));
 
 async function withPage(action) {
     const browser = await chromium.launch({
@@ -43,7 +44,7 @@ async function open(page, label) {
 const pressedIndexes = page => page.locator('.record-card').evaluateAll(cards => cards.flatMap((card, i) => (card.getAttribute('aria-pressed') === 'true' ? [i] : [])));
 const listed = (page, kind) => page.evaluate(kind => JSON.parse(localStorage.getItem('story-studio-draft'))?.document?.content?.[kind]?.map(r => r.name), kind);
 
-for (const [label, kind, count] of [['Items', 'items', 43], ['Places', 'places', 54]]) {
+for (const [label, kind, count] of [['Items', 'items', PACK.content.items.length], ['Places', 'places', PACK.content.places.length]]) {
     test(`Bluewatch ${kind}: clicking the second record selects and shows only that record`, async () => {
         await withPage(async page => {
             await open(page, label);

@@ -2,12 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { MockDocument } from './helpers/dom.js';
-import { smallRulesPack } from './fixtures/smallRulesPack.js';
+import { worldPack } from './fixtures/world.js';
 import { mountStudio } from '../src/studio.js';
-import { resolveSkillForms } from '../src/screens/skills.js';
 import { DRAFT_KEY } from '../src/session.js';
 
-function setup(pack = smallRulesPack()) {
+function setup(pack = worldPack()) {
     const doc = new MockDocument();
     const storage = new Map();
     let saves = 0;
@@ -56,63 +55,15 @@ test('all controls call ctx.apply only through the shared refusal helper', () =>
     }
 });
 
-for (const [controlId, transform, next, stored] of [
-    ['form-power', { op: 'set-element', at: 0, value: 'fire' }, '2', form => form.effects[0].power],
-    ['form-cost', { op: 'set-element', at: 0, value: 'fire' }, '2', form => form.cost.sp],
-    ['form-effect', { op: 'set-stat', value: 'DEX' }, 'ice', form => form.effects[0].element],
-]) {
-    test(`skills: ninth transform refusal restores ${controlId} from the resolved model`, () => {
-        const state = setup();
-        const { ctx, root } = state;
-        ctx.select('skills', 's30', 's30-base-a');
-        change(ctx.inspector.querySelector('#form-transforms'), JSON.stringify(Array.from({ length: 8 }, () => ({ ...transform }))));
-        assert.equal(ctx.model.validation.ok, true);
-        const before = snapshot(state);
-        change(ctx.inspector.querySelector(`#${controlId}`), next);
-        unchanged(state, before);
-        const form = resolveSkillForms(ctx.model, 's30').find(node => node.id === 'pack.fixture/s30-base-a').form;
-        assert.equal(ctx.inspector.querySelector(`#${controlId}`).value, String(stored(form)));
-        assert.match(root.querySelector('.notice').textContent, /^bad-value:/);
-        ctx.history.undo();
-        assert.equal(ctx.model.document.content.rules[0].branches[0].transforms.length, 1);
-        ctx.destroy();
-    });
-}
-
 const cases = [
     {
-        kind: 'skills', select: ctx => ctx.select('skills', 's00', 's00-base'),
-        control: ctx => ctx.inspector.querySelector('#form-type'), next: 'magic',
-        stored: ctx => ctx.model.document.content.rules[0].skills[0].base.type,
-    },
-    {
-        kind: 'classes', select: ctx => ctx.select('classes', 'c1'),
-        control: ctx => ctx.inspector.querySelector('#class-parent'), next: '',
-        stored: ctx => ctx.model.document.content.rules[0].classes[1].parent,
-    },
-    {
-        kind: 'forms', select: ctx => ctx.select('places', 'haven'),
+        kind: 'place name', select: ctx => ctx.select('places', 'haven'),
         control: ctx => ctx.inspector.querySelectorAll('input').find(input => input.getAttribute('data-path') === '["content","places",0,"name"]'),
-        next: '[CHANGED NAME]', stored: ctx => ctx.model.document.content.places[0].name,
+        next: 'Changed place', stored: ctx => ctx.model.document.content.places[0].name,
     },
     {
-        kind: 'problems',
-        pack() { const pack = smallRulesPack(); pack.content.rules[0].classes[0].skills.pop(); return pack; },
-        select(ctx, root) {
-            ctx.select('check');
-            root.querySelectorAll('.problem-row').find(row => row.textContent.includes('classes[0].skills')).querySelector('button').click();
-        },
-        control: ctx => ctx.inspector.querySelectorAll('.skill-row select')[2], next: 's02',
-        stored: ctx => ctx.model.document.content.rules[0].classes[0].skills[2] ?? '',
-    },
-    {
-        kind: 'inspector', select: ctx => ctx.select('classes', 'c0'),
-        control: ctx => ctx.inspector.querySelector('#class-id'), next: 'renamed-class',
-        stored: ctx => ctx.model.document.content.rules[0].classes[0].slug,
-    },
-    {
-        kind: 'pack name', select: ctx => ctx.select('classes', 'c0'),
-        control: (ctx, root) => root.querySelector('#pack-name'), next: '[CHANGED PACK]',
+        kind: 'pack name', select: ctx => ctx.select('places', 'haven'),
+        control: (ctx, root) => root.querySelector('#pack-name'), next: 'Changed pack',
         stored: ctx => ctx.model.document.name,
     },
 ];

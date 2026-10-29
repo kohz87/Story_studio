@@ -3,12 +3,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { smallRulesPack } from './fixtures/smallRulesPack.js';
+import { worldPack } from './fixtures/world.js';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { exportRulesV2, validateRulesPack } from '../vendor/story-block/src/v2/packs/rules-v2.js';
+import { validatePack } from '../vendor/story-block/src/v2/packs/validate.js';
 
 test('dev page smoke test in Chromium', async t => {
     let pwModulePath = process.env.STUDIO_PLAYWRIGHT_MODULE || 'playwright';
@@ -104,8 +104,8 @@ test('dev page smoke test in Chromium', async t => {
         await page.goto(devHtmlUrl);
 
         // Upload broken fixture and assert checker error
-        const brokenPack = smallRulesPack();
-        brokenPack.content.rules[0].classes[0].skills = ['s00'];
+        const brokenPack = worldPack();
+        brokenPack.content.places[0].x = 'not a coordinate';
 
         await page.setInputFiles('#pack-file', {
             name: 'broken-fixture.json',
@@ -115,14 +115,14 @@ test('dev page smoke test in Chromium', async t => {
 
         await page.waitForSelector('#errors li');
         const errorsText = await page.textContent('#errors');
-        assert.match(errorsText, /class-skills/);
-        assert.match(errorsText, /content\.rules\[0\]\.classes\[0\]\.skills/);
+        assert.match(errorsText, /BAD_RECORD/);
+        assert.match(errorsText, /content\.places\[0\]\.x/);
 
         const isExportDisabled = await page.locator('#export-pack').isDisabled();
         assert.equal(isExportDisabled, true, 'Export button must be disabled for broken pack');
 
         // Load valid golden seed
-        const goldenPack = smallRulesPack();
+        const goldenPack = worldPack();
 
         await page.setInputFiles('#pack-file', {
             name: 'golden-seed.json',
@@ -175,8 +175,7 @@ test('dev page smoke test in Chromium', async t => {
 
         assert.equal(exportedText, JSON.stringify({ ...goldenPack, name: newName }, null, 2) + '\n');
         assert.deepEqual(JSON.parse(exportedText), { ...goldenPack, name: newName });
-        const expectedExport = exportRulesV2({ ...goldenPack, name: newName });
-        assert.equal(expectedExport.ok, true, 'Shared exportRulesV2 should succeed');
+        assert.equal(validatePack({ ...goldenPack, name: newName }).ok, true);
 
         // Reopen downloaded file in page and verify both hashes on reopen
         await page.setInputFiles('#pack-file', {
@@ -196,10 +195,8 @@ test('dev page smoke test in Chromium', async t => {
         const isReopenedExportEnabled = await page.locator('#export-pack').isEnabled();
         assert.equal(isReopenedExportEnabled, true, 'Export button must be enabled after reopening exported pack');
 
-        const reopenedValidation = validateRulesPack(exportedText);
+        const reopenedValidation = validatePack(exportedText);
         assert.equal(reopenedValidation.ok, true, 'Reopened pack must pass shared validation');
-        assert.equal(reopenedValidation.rulesHash, expectedExport.rulesHash, 'reopened rulesHash must match canonical export');
-        assert.equal(reopenedValidation.packHash, expectedExport.packHash, 'reopened packHash must match canonical export');
 
         assert.equal(pageErrors.length, 0, `Page errors encountered: ${pageErrors.map(e => e.message).join(', ')}`);
     } finally {

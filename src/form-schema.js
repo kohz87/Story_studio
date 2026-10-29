@@ -1,17 +1,4 @@
-import { rulesV2Schema } from './model.js';
 import { ITEM_KINDS, RARITIES, SKILL_TYPES, SKILL_TARGETS, LIMITS, RECORD_LIMITS, SLUG, ITEM_CARRY, EVENT_LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
-
-export const KIND_MAP = {
-    creatures: 'foe',
-    quests: 'quest',
-    shops: 'shop',
-    recipes: 'recipe',
-    itemRules: 'itemRule',
-    branches: 'branch',
-    trainers: 'trainer',
-    classes: 'class',
-    skills: 'skill',
-};
 
 export const HOST_SCHEMAS = {
     items: {
@@ -30,6 +17,15 @@ export const HOST_SCHEMAS = {
             tags: { type: 'array', items: { type: 'string', maxLength: RECORD_LIMITS.word } },
             stats: { type: 'object' },
             effect: { type: 'object' },
+            note: { type: 'string', maxLength: RECORD_LIMITS.note, default: '' },
+        },
+    },
+    creatures: {
+        type: 'object', required: ['name', 'slug'],
+        properties: {
+            name: { type: 'string', minLength: 1, maxLength: LIMITS.name },
+            slug: { type: 'string', minLength: 1, maxLength: RECORD_LIMITS.slug, pattern: SLUG.source },
+            aliases: { type: 'array', items: { type: 'string', maxLength: LIMITS.name } },
             note: { type: 'string', maxLength: RECORD_LIMITS.note, default: '' },
         },
     },
@@ -130,9 +126,9 @@ export const HOST_SCHEMAS = {
 };
 
 // How a form names the variants of a union whose `$defs` entries have a clear meaning (a quest is either closed or open).
-export const VARIANT_LABELS = Object.freeze({ closedQuest: 'Fixed', openQuest: 'Template', fixedTrainer: 'Fixed', openTrainer: 'Template' });
+export const VARIANT_LABELS = Object.freeze({});
 
-export function resolveSchema(schema, defs = rulesV2Schema?.$defs, seen = new Set()) {
+export function resolveSchema(schema, defs = {}, seen = new Set()) {
     if (!schema || typeof schema !== 'object') return schema;
     if (schema.$ref) {
         const refKey = schema.$ref.replace(/^#\/\$defs\//, '');
@@ -164,26 +160,11 @@ export function resolveSchema(schema, defs = rulesV2Schema?.$defs, seen = new Se
 }
 
 export function schemaForKind(kind) {
-    if (HOST_SCHEMAS[kind]) return resolveSchema(HOST_SCHEMAS[kind]);
-    const defKey = KIND_MAP[kind];
-    if (defKey && rulesV2Schema?.$defs?.[defKey]) {
-        return resolveSchema(rulesV2Schema.$defs[defKey]);
-    }
-    return null;
+    return HOST_SCHEMAS[kind] ? resolveSchema(HOST_SCHEMAS[kind]) : null;
 }
 
-/**
- * The schema one record is edited against. A trainer is either fixed or an open template (`open: true`), and each has its own
- * fields; a fixed trainer's form leaves out the `open` marker, which the Convert actions own.
- */
-export function schemaForRecord(kind, record) {
-    const schema = schemaForKind(kind);
-    if (kind !== 'trainers' || !schema?.oneOf) return schema;
-    const open = record?.open === true;
-    const variant = schema.oneOf.find(part => part.defName === (open ? 'openTrainer' : 'fixedTrainer'));
-    if (!variant || open) return variant ?? schema;
-    const { open: _marker, ...properties } = variant.properties;
-    return { ...variant, properties };
+export function schemaForRecord(kind) {
+    return schemaForKind(kind);
 }
 
 export function referenceTarget(kind, path, record) {
@@ -191,18 +172,11 @@ export function referenceTarget(kind, path, record) {
     const last = segs[segs.length - 1];
     const prev = segs[segs.length - 2];
 
-    if (kind === 'classes') {
-        if (last === 'parent') return 'classes';
-        if (prev === 'skills' && /^\d+$/.test(last)) return 'skills';
-    }
-    if (kind === 'skills' && last === 'replaces') return 'skills';
-
     if (kind === 'presets') {
         if (last === 'race') return 'races';
         if (prev === 'talents' && /^\d+$/.test(last)) return 'talents';
         if (prev === 'skills' && /^\d+$/.test(last)) return 'legacySkills';
     }
-    if (kind === 'itemRules' && last === 'def') return 'items';
     if (kind === 'recipes') {
         if (last === 'makes') return 'items';
         if (last === 'item' && (prev === 'materials' || segs.includes('materials'))) return 'items';
@@ -215,17 +189,8 @@ export function referenceTarget(kind, path, record) {
         if (prev === 'skills' && /^\d+$/.test(last)) return 'skills';
         if (last === 'def' && (prev === 'loot' || segs.includes('loot'))) return 'items';
     }
-    if (kind === 'trainers') {
-        if (last === 'place') return 'places';
-        if (prev === 'skills' && /^\d+$/.test(last)) return 'skills';
-        if (prev === 'eventTemplates' && /^\d+$/.test(last)) return 'events';
-    }
     if (kind === 'events' && last === 'after') return 'events';
     if (kind === 'routes' && (last === 'from' || last === 'to')) return 'places';
-    if (kind === 'branches') {
-        if (last === 'skill') return 'skills';
-        if (last === 'fromForm') return 'forms';
-    }
     if (kind === 'quests') {
         if (last === 'turnInPlace') return 'places';
         if (last === 'giver') return 'npcs';
@@ -234,13 +199,11 @@ export function referenceTarget(kind, path, record) {
         if (last === 'place') return 'places';
         if (last === 'template') return 'quests';
         if (last === 'previous' || last === 'next') return 'quests';
-        if (prev === 'classes' && /^\d+$/.test(last)) return 'classes';
         if (last === 'def' || last === 'item') return 'items';
     }
     if (last === 'def' || last === 'makes') return 'items';
     if (last === 'place' || last === 'from' || last === 'to') return 'places';
     if (last === 'foe') return 'creatures';
-    if (last === 'class' || (prev === 'classes' && /^\d+$/.test(last))) return 'classes';
     return null;
 }
 

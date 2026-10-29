@@ -3,7 +3,7 @@ import { safeLabel, el, button, field } from './dom.js';
 import { setSchemaField as setField, renameId } from './edits.js';
 import { records, identity, localId } from './records.js';
 import { referenceTarget, resolveSchema, validateField, validateChange, matchesVariant, VARIANT_LABELS } from './form-schema.js';
-import { validateRulesPack, RULES_V2_LIMITS, RULES_V2_PROGRESSION } from '../vendor/story-block/src/v2/packs/rules-v2.js';
+import { LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 
 export function parseNumberInput(raw) {
     if (typeof raw !== 'string' || !raw.trim() || !Number.isFinite(Number(raw))) return { ok: false, error: 'Enter a finite number' };
@@ -16,7 +16,7 @@ export function parseIntegerInput(raw) {
 }
 export function parseJsonInput(raw) {
     try {
-        if (new TextEncoder().encode(raw).length > RULES_V2_LIMITS.packBytes) throw new Error('JSON exceeds the pack size limit');
+        if (new TextEncoder().encode(raw).length > LIMITS.packBytes) throw new Error('JSON exceeds the pack size limit');
         return { ok: true, value: JSON.parse(raw) };
     } catch (err) { return { ok: false, error: err.message }; }
 }
@@ -37,7 +37,7 @@ export function createDefault(input, options = {}) {
     }
     if (schema.type === 'null') return accepts(null) ? null : undefined;
     if (target && model && schema.type !== 'array' && schema.type !== 'object') {
-        const entries = target === 'forms' ? formOptions(model) : records(model, target).map(record => identity(record, target));
+        const entries = records(model, target).map(record => identity(record, target));
         return entries.map(id => referenceId(model, schema, id)).find(accepts);
     }
     const candidates = [];
@@ -52,24 +52,6 @@ export function createDefault(input, options = {}) {
         if (partial || accepts(value)) return value;
     } else if (schema.type === 'object') {
         const value = Object.fromEntries((schema.required || []).map(key => [key, createDefault(schema.properties?.[key], { ...options, path: [...path, key], used: [] })]));
-        if (kind === 'branches' && model && schema.properties?.fromForm && schema.properties?.choice) {
-            const advanced = records(model, 'classes').filter(record => record?.tier === Math.max(...RULES_V2_PROGRESSION.tiers))
-                .flatMap(record => Array.isArray(record.skills) ? record.skills.map(id => localId(model, id)) : []);
-            const taken = new Set(records(model, 'branches').map(record => localId(model, identity(record, 'branches'))));
-            const owner = id => advanced.filter(skill => id === `${skill}-base` || id.startsWith(`${skill}-base-`)).sort((a, b) => b.length - a.length)[0];
-            const parent = formOptions(model).find(id => {
-                const skill = owner(id);
-                return skill && id.slice(`${skill}-base`.length).split('-').filter(Boolean).length < RULES_V2_PROGRESSION.pathwaySteps
-                    && RULES_V2_PROGRESSION.writtenChoices.some(choice => !taken.has(`${id}-${choice}`));
-            });
-            if (parent) {
-                value.skill = owner(parent);
-                value.fromForm = parent;
-                value.choice = RULES_V2_PROGRESSION.writtenChoices.find(choice => !taken.has(`${parent}-${choice}`));
-                value.step = parent === `${value.skill}-base` ? 1 : 2;
-                value.slug = `${parent}-${value.choice}`;
-            } else if (!partial) return undefined;
-        }
         if (partial || accepts(value)) return value;
     } else if (schema.type === 'boolean') candidates.push(false, true);
     else if (schema.type === 'number' || schema.type === 'integer') {
@@ -163,26 +145,6 @@ function withDefault(ctx, container, schema, path, options, commit, used = []) {
     return false;
 }
 
-export function formOptions(model) {
-    const checked = validateRulesPack(model.document);
-    if (checked.ok) return Object.keys(checked.resolved.forms).map(id => localId(model, id));
-    const ids = [];
-    for (const skill of records(model, 'skills')) {
-        if (typeof skill?.slug !== 'string') continue;
-        const slug = localId(model, skill.slug);
-        const base = `${slug}-base`;
-        ids.push(base);
-        const owner = records(model, 'classes').find(c => Array.isArray(c?.skills) && c.skills.some(s => localId(model, s) === slug));
-        if (owner?.tier !== Math.max(...RULES_V2_PROGRESSION.tiers)) continue;
-        let parents = [base];
-        for (let step = 0; step < RULES_V2_PROGRESSION.pathwaySteps; step++) {
-            parents = parents.flatMap(parent => [...RULES_V2_PROGRESSION.writtenChoices, RULES_V2_PROGRESSION.generatedChoice].map(choice => `${parent}-${choice}`));
-            ids.push(...parents);
-        }
-    }
-    return ids;
-}
-
 export function renderForm(ctx, container, input, value, path, passed = {}) {
     const schema = resolveSchema(input) || {};
     const options = { ...passed, rootPath: passed.rootPath || path, rootSchema: passed.rootSchema || schema, rootValue: passed.rootPath ? passed.rootValue : value, schema };
@@ -193,11 +155,10 @@ export function renderForm(ctx, container, input, value, path, passed = {}) {
     const commit = next => mutate(ctx, path, next, options);
     const leaf = schema.type !== 'array' && schema.type !== 'object' && !Array.isArray(value) && !(value && typeof value === 'object');
     const idField = path.length === options.rootPath.length + 1 && ['slug', 'id', 'def'].includes(path.at(-1));
-    if (schema.const !== undefined || (idField && path.at(-1) === 'def' && options.kind === 'itemRules' && !options.isNew)) {
+    if (schema.const !== undefined) {
         const control = append(el(doc, 'input', '', { ...attrs, readonly: '', value: display(value) }));
         control.readOnly = true;
-        if (schema.const === undefined) container.append(el(doc, 'p', 'Rename the item to change this reference.', { class: 'muted' }));
-        if (schema.const !== undefined && !Object.is(value, schema.const)) container.append(button(doc, `Reset ${title}`, () => commit(schema.const)));
+        if (!Object.is(value, schema.const)) container.append(button(doc, `Reset ${title}`, () => commit(schema.const)));
         return;
     }
     const target = leaf ? referenceTarget(options.kind, path, options.record) : null;
@@ -341,7 +302,7 @@ let referenceSequence = 0;
 function renderReference(ctx, container, target, schema, value, path, options, title) {
     const doc = ctx.doc;
     const current = display(value);
-    const entries = target === 'forms' ? formOptions(ctx.model).map(id => ({ slug: id })) : records(ctx.model, target);
+    const entries = records(ctx.model, target);
     const choices = entries.filter(r => typeof identity(r, target) === 'string').map(r => {
         const key = identity(r, target);
         const same = localId(ctx.model, key) === localId(ctx.model, current);

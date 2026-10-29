@@ -1,96 +1,28 @@
-// Pack edit operations: add, renameId, remove, moveClass, and setField (pure).
-
-import { LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
+// Pure edits to ordinary pack records. Story Block validates each resulting snapshot.
+import { LIMITS, SLUG } from '../vendor/story-block/src/v2/packs/limits.js';
 import { openPack } from './model.js';
 import { identity } from './identity.js';
-import { schemaForKind, schemaForRecord, validateChange } from './form-schema.js';
-import { RULES_V2_LIMITS, RULES_V2_PROGRESSION, rulesV2Schema } from '../vendor/story-block/src/v2/packs/rules-v2.js';
+import { schemaForKind, validateChange } from './form-schema.js';
+import { CASCADE_KINDS } from './records.js';
+import { slugify } from '../vendor/story-block/src/v2/packs/validate.js';
 
-const RULES_KINDS = new Set(['classes', 'skills', 'branches', 'itemRules', 'trainers']);
-const SHARED_RULES_KINDS = new Set(['classes', 'skills', 'branches', 'trainers']);
-const SB_KINDS = new Set([
-    'items', 'creatures', 'quests', 'shops', 'recipes',
-    'places', 'events', 'routes', 'races', 'talents',
-    'presets', 'legacySkills',
-]);
-const ALL_KINDS = new Set([...RULES_KINDS, ...SB_KINDS]);
+const SB_KINDS = new Set(CASCADE_KINDS.filter(k => k !== 'legacySkills'));
+const ALL_KINDS = new Set(CASCADE_KINDS);
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-const SLUG_REGEX = new RegExp(rulesV2Schema.$defs.slug.pattern);
-const ID_REGEX = new RegExp(rulesV2Schema.$defs.id.pattern);
-const MAX_SLUG = RULES_V2_LIMITS.slug;
-const MAX_TIER = Math.max(...RULES_V2_PROGRESSION.tiers);
-const WRITTEN_CHOICES = RULES_V2_PROGRESSION.writtenChoices;
-const GENERATED_CHOICE = RULES_V2_PROGRESSION.generatedChoice;
-const PATHWAY_STEPS = RULES_V2_PROGRESSION.pathwaySteps;
-const MAX_SKILL_SLUG = RULES_V2_LIMITS.skillSlug;
+const MAX_DEPTH = LIMITS.depth;
+const MAX_ARRAY = LIMITS.array;
+const MAX_KEYS = LIMITS.keys;
+const MAX_STRING = LIMITS.string;
+const MAX_BYTES = LIMITS.packBytes;
 
-const MAX_DEPTH = RULES_V2_LIMITS.depth;
-const MAX_ARRAY = RULES_V2_LIMITS.array;
-const MAX_KEYS = RULES_V2_LIMITS.keys;
-const MAX_STRING = RULES_V2_LIMITS.string;
-const MAX_BYTES = RULES_V2_LIMITS.packBytes;
-
-/** Helper to extract the pack identifier from a document. */
-function getPackId(document) {
-    return typeof document?.id === 'string' && document.id ? document.id : 'pack';
-}
-
-/** Strips the pack.<id>/ prefix if present, returning the local slug or id. */
+function getPackId(document) { return typeof document?.id === 'string' ? document.id : 'pack'; }
 function normalizeId(id, packId) {
     if (typeof id !== 'string' || !id) return null;
     const prefix = `pack.${packId}/`;
-    if (id.startsWith(prefix)) {
-        return id.slice(prefix.length);
-    }
-    return id;
+    return id.startsWith(prefix) ? id.slice(prefix.length) : id;
 }
+function isForeignId(id, packId) { return typeof id === 'string' && id.startsWith('pack.') && !id.startsWith(`pack.${packId}/`); }
 
-/** Checks whether an ID belongs to a foreign pack. */
-function isForeignId(id, packId) {
-    if (typeof id !== 'string') return false;
-    return id.startsWith('pack.') && !id.startsWith(`pack.${packId}/`);
-}
-
-/** Validates raw slug format (1..max chars, lowercase alphanumeric with single hyphens). */
-function isValidRawSlug(slug) {
-    return typeof slug === 'string' && SLUG_REGEX.test(slug) && slug.length >= 1 && slug.length <= MAX_SLUG;
-}
-
-/** Validates identifier format (slug, record id, or def id). */
-function isValidIdentifier(id) {
-    if (typeof id !== 'string' || !id) return false;
-    return isValidRawSlug(id) || ID_REGEX.test(id);
-}
-
-/** Returns all identities across shared rules collections (classes, skills, branches, trainers, and rule sets). */
-function getSharedRulesIdentities(document, packId, excludeKind = null, excludeNormId = null) {
-    const ids = new Set();
-    const rulesList = Array.isArray(document?.content?.rules) ? document.content.rules : [];
-    for (const r of rulesList) {
-        if (!r || typeof r !== 'object') continue;
-        const rSlug = normalizeId(r.slug || r.id, packId);
-        if (rSlug) ids.add(rSlug);
-        for (const rk of SHARED_RULES_KINDS) {
-            const list = r[rk];
-            if (!Array.isArray(list)) continue;
-            for (const item of list) {
-                if (!item || typeof item !== 'object') continue;
-                const itemId = normalizeId(getRecordIdentity(rk, item), packId);
-                if (itemId) {
-                    if (excludeKind === rk && itemId === excludeNormId) continue;
-                    ids.add(itemId);
-                }
-            }
-        }
-    }
-    return ids;
-}
-
-/**
- * Safely validates and clones plain JSON values without invoking getters or prototype accessors.
- * Bounds traversal by depth 16, array length 1000, keys 200, string length 4000, and exact JSON bytes.
- * Returns { ok: true, value } on success, or { ok: false, error } on unsafe or non-JSON input.
- */
 function validateAndCloneValue(val, seen = new Set(), depth = 0, key = '') {
     try {
         if (val === null) return { ok: true, value: null };
@@ -182,7 +114,6 @@ function cloneDoc(doc) {
 
 /** Returns the property name used as the identity for a record of the given kind. */
 function getIdentityKey(kind, record) {
-    if (kind === 'itemRules') return 'def';
     if (kind === 'events' || kind === 'races' || kind === 'talents' || kind === 'presets') {
         if (record && 'id' in record && record.id !== undefined) return 'id';
         if (record && 'slug' in record && record.slug !== undefined) return 'slug';
@@ -200,176 +131,7 @@ function getRecordIdentity(kind, record) {
     return key === '' ? null : key;
 }
 
-/** Returns read-only access to a kind's array in a document. */
-function readKindList(doc, kind) {
-    if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return null;
-    if (!doc.content || typeof doc.content !== 'object' || Array.isArray(doc.content)) return null;
 
-    if (RULES_KINDS.has(kind)) {
-        const rules = doc.content.rules;
-        if (!Array.isArray(rules) || rules.length === 0 || !rules[0] || typeof rules[0] !== 'object' || Array.isArray(rules[0])) return null;
-        return Array.isArray(rules[0][kind]) ? rules[0][kind] : null;
-    }
-    if (kind === 'legacySkills') {
-        return Array.isArray(doc.content.skills) ? doc.content.skills : null;
-    }
-    if (SB_KINDS.has(kind)) {
-        return Array.isArray(doc.content[kind]) ? doc.content[kind] : null;
-    }
-    return null;
-}
-
-/** Returns or creates the mutable target array for a kind in a cloned document. */
-function ensureKindList(doc, kind) {
-    if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return null;
-    if (!doc.content || typeof doc.content !== 'object' || Array.isArray(doc.content)) return null;
-
-    if (RULES_KINDS.has(kind)) {
-        if (!Array.isArray(doc.content.rules) || doc.content.rules.length === 0) {
-            doc.content.rules = [{ slug: 'rules', name: 'Rules', schema: 2 }];
-        }
-        if (!doc.content.rules[0] || typeof doc.content.rules[0] !== 'object' || Array.isArray(doc.content.rules[0])) {
-            return null;
-        }
-        if (!Array.isArray(doc.content.rules[0][kind])) {
-            doc.content.rules[0][kind] = [];
-        }
-        return doc.content.rules[0][kind];
-    }
-    if (kind === 'legacySkills') {
-        if (!Array.isArray(doc.content.skills)) {
-            doc.content.skills = [];
-        }
-        return doc.content.skills;
-    }
-    if (SB_KINDS.has(kind)) {
-        if (!Array.isArray(doc.content[kind])) {
-            doc.content[kind] = [];
-        }
-        return doc.content[kind];
-    }
-    return null;
-}
-
-/** Maps a document collection kind to its indexed targetKind in model.references. */
-function getTargetKind(kind) {
-    switch (kind) {
-        case 'classes': return 'classes';
-        case 'skills': return 'skills';
-        case 'legacySkills': return 'legacySkills';
-        case 'branches': return 'branches';
-        case 'itemRules': return 'itemRules';
-        case 'items': return 'items';
-        case 'places': return 'places';
-        case 'creatures': return 'creatures';
-        case 'quests': return 'quests';
-        case 'shops': return 'shops';
-        case 'recipes': return 'recipes';
-        case 'routes': return 'routes';
-        case 'events': return 'events';
-        case 'races': return 'races';
-        case 'talents': return 'talents';
-        case 'presets': return 'presets';
-        default: return kind;
-    }
-}
-
-/** Sets a value at a structured path in a cloned document. */
-function setValueAtPath(doc, path, value) {
-    if (!Array.isArray(path) || path.length === 0) return false;
-    let curr = doc;
-    for (let i = 0; i < path.length - 1; i++) {
-        const seg = path[i];
-        if (curr === null || typeof curr !== 'object' || !(seg in curr)) return false;
-        curr = curr[seg];
-    }
-    const last = path[path.length - 1];
-    if (curr === null || typeof curr !== 'object') return false;
-    curr[last] = value;
-    return true;
-}
-
-/** Computes base and pathway form slugs using the shared progression structure. */
-function getSkillDerivedFormSlugs(skillSlug, isAdvanced = true) {
-    const base = `${skillSlug}-base`;
-    const slugs = new Set([base]);
-    const choices = [GENERATED_CHOICE, ...WRITTEN_CHOICES];
-    let parents = [base];
-    for (let step = 0; isAdvanced && step < PATHWAY_STEPS; step++) {
-        const children = [];
-        for (const parent of parents) {
-            for (const choice of choices) {
-                const slug = `${parent}-${choice}`;
-                slugs.add(slug);
-                children.push(slug);
-            }
-        }
-        parents = children;
-    }
-    return slugs;
-}
-
-/** Gathers all existing record identities across all document collections. */
-function getAllExistingIdentities(doc, packId) {
-    const identities = new Set();
-    for (const k of ALL_KINDS) {
-        const list = readKindList(doc, k);
-        if (Array.isArray(list)) {
-            for (const item of list) {
-                if (!item || typeof item !== 'object') continue;
-                const id = getRecordIdentity(k, item);
-                if (typeof id === 'string' && id) {
-                    const norm = normalizeId(id, packId);
-                    if (norm) {
-                        identities.add(norm);
-                        identities.add(`pack.${packId}/${norm}`);
-                    }
-                }
-            }
-        }
-    }
-    return identities;
-}
-
-/** Gathers all reserved form IDs for all skills currently in the document, optionally excluding a skill. */
-function getAllReservedFormSlugs(doc, packId, excludeSkill = null) {
-    const reserved = new Set();
-    const skills = Array.isArray(doc?.content?.rules?.[0]?.skills) ? doc.content.rules[0].skills : [];
-    const classes = Array.isArray(doc?.content?.rules?.[0]?.classes) ? doc.content.rules[0].classes : [];
-
-    for (const skl of skills) {
-        if (!skl || typeof skl !== 'object' || !skl.slug) continue;
-        const normSkill = normalizeId(skl.slug, packId);
-        if (!normSkill || (excludeSkill && normSkill === excludeSkill)) continue;
-        let isAdv = true;
-        const owningClass = classes.find(c => c && typeof c === 'object' && Array.isArray(c.skills) && c.skills.some(s => typeof s === 'string' && normalizeId(s, packId) === normSkill));
-        if (owningClass && owningClass.tier < MAX_TIER) {
-            isAdv = false;
-        }
-        for (const s of getSkillDerivedFormSlugs(normSkill, isAdv)) {
-            reserved.add(s);
-            reserved.add(`pack.${packId}/${s}`);
-        }
-    }
-
-    const branches = Array.isArray(doc?.content?.rules?.[0]?.branches) ? doc.content.rules[0].branches : [];
-    for (const br of branches) {
-        if (br && typeof br === 'object' && br.slug) {
-            if (excludeSkill && normalizeId(br.skill, packId) === excludeSkill) continue;
-            const normB = normalizeId(br.slug, packId);
-            if (normB) {
-                reserved.add(normB);
-                reserved.add(`pack.${packId}/${normB}`);
-            }
-        }
-    }
-    return reserved;
-}
-
-/**
- * Commits a mutated document snapshot through openPack.
- * Reuses openPack's null-document safety outcome to refuse unsafe edits and keep original model.
- */
 function commitSnapshot(newDoc, originalModel) {
     const snapshot = openPack(newDoc);
     if (!snapshot || snapshot.document === null) {
@@ -390,1028 +152,120 @@ function commitSnapshot(newDoc, originalModel) {
     };
 }
 
-/**
- * Appends a cloned record to the supported collection kind.
- * Rejects duplicate IDs, foreign pack IDs, derived collisions, and unsupported kinds.
- * Exempts missing exact written branch derived from its fromForm/choice for the skill.
- */
+
+function readKindList(doc, kind) {
+    const key = kind === 'legacySkills' ? 'skills' : kind;
+    const list = doc?.content?.[key];
+    return Array.isArray(list) ? list : null;
+}
+function ensureKindList(doc, kind) {
+    if (!doc?.content || typeof doc.content !== 'object' || Array.isArray(doc.content)) return null;
+    const key = kind === 'legacySkills' ? 'skills' : kind;
+    if (doc.content[key] === undefined) doc.content[key] = [];
+    return Array.isArray(doc.content[key]) ? doc.content[key] : null;
+}
+function setValueAtPath(doc, path, value) {
+    let node = doc;
+    for (const key of path.slice(0, -1)) {
+        if (!node || typeof node !== 'object' || !Object.hasOwn(node, key)) return false;
+        node = node[key];
+    }
+    if (!node || typeof node !== 'object') return false;
+    node[path.at(-1)] = value;
+    return true;
+}
+function refuse(model, code, path, message, extra = {}) { return { ok: false, model, errors: [{ code, path, message }], ...extra }; }
+function findRecord(model, kind, id) {
+    const packId = getPackId(model.document);
+    const local = normalizeId(id, packId);
+    const list = readKindList(model.document, kind);
+    return { list, local, index: list?.findIndex(item => normalizeId(getRecordIdentity(kind, item), packId) === local) ?? -1 };
+}
+
 export function add(model, kind, record) {
-    if (!model || !model.document || typeof model.document !== 'object' || Array.isArray(model.document)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'bad-model', path: '', message: 'Model document is missing or invalid' }],
-        };
-    }
-
-    if (!ALL_KINDS.has(kind)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'unsupported-kind', path: '', message: `Unsupported collection kind: ${kind}` }],
-        };
-    }
-
-    if (!model.document.content || typeof model.document.content !== 'object' || Array.isArray(model.document.content)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'bad-container', path: 'content', message: 'Document content must be an object' }],
-        };
-    }
-
-    if (RULES_KINDS.has(kind)) {
-        const r = model.document.content.rules;
-        if (!Array.isArray(r) || r.length === 0 || !r[0] || typeof r[0] !== 'object' || Array.isArray(r[0])) {
-            return {
-                ok: false,
-                model,
-                errors: [{ code: 'bad-container', path: 'content.rules.0', message: 'Rules container is missing or invalid' }],
-            };
-        }
-        if (r[0][kind] !== undefined && !Array.isArray(r[0][kind])) {
-            return {
-                ok: false,
-                model,
-                errors: [{ code: 'bad-container', path: `content.rules.0.${kind}`, message: `Collection ${kind} container is invalid` }],
-            };
-        }
-    } else if (kind === 'legacySkills') {
-        if (model.document.content.skills !== undefined && !Array.isArray(model.document.content.skills)) {
-            return {
-                ok: false,
-                model,
-                errors: [{ code: 'bad-container', path: 'content.skills', message: 'Collection skills container is invalid' }],
-            };
-        }
-    } else if (SB_KINDS.has(kind)) {
-        if (model.document.content[kind] !== undefined && !Array.isArray(model.document.content[kind])) {
-            return {
-                ok: false,
-                model,
-                errors: [{ code: 'bad-container', path: `content.${kind}`, message: `Collection ${kind} container is invalid` }],
-            };
-        }
-    }
-
-    const validated = validateAndCloneValue(record);
-    if (!validated.ok) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'bad-value', path: kind, message: validated.error }],
-        };
-    }
-    const clonedRecord = validated.value;
-    if (!clonedRecord || typeof clonedRecord !== 'object' || Array.isArray(clonedRecord)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'bad-value', path: kind, message: 'Record must be a plain object' }],
-        };
-    }
-
+    if (!model?.document || typeof model.document !== 'object') return refuse(model, 'bad-model', '', 'Open a pack first.');
+    if (!ALL_KINDS.has(kind)) return refuse(model, 'unsupported-kind', kind, 'This kind cannot be edited here.');
+    const safe = validateAndCloneValue(record);
+    if (!safe.ok || !safe.value || typeof safe.value !== 'object' || Array.isArray(safe.value)) return refuse(model, 'bad-value', kind, safe.error || 'The record must be an object.');
     const packId = getPackId(model.document);
-    // A new record states its own key (the add form always does); the keys already in the pack are compared by Story Block's rule.
-    const rawId = clonedRecord[getIdentityKey(kind, clonedRecord)] ?? null;
-    if (typeof rawId !== 'string' || !rawId.trim()) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'missing-id', path: kind, message: `Record missing required identity for kind ${kind}` }],
-        };
-    }
-
-    if (isForeignId(rawId, packId)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'bad-ref', path: kind, message: `Record identity cannot belong to foreign pack: ${rawId}` }],
-        };
-    }
-
-    const normId = normalizeId(rawId, packId);
-    if (SHARED_RULES_KINDS.has(kind)) {
-        const sharedRulesIds = getSharedRulesIdentities(model.document, packId);
-        if (sharedRulesIds.has(normId)) {
-            return {
-                ok: false,
-                model,
-                errors: [{ code: 'dup-id', path: kind, message: `Duplicate ${kind} id: ${rawId}` }],
-            };
-        }
-    } else {
-        const existingList = readKindList(model.document, kind) || [];
-        const isDup = existingList.some(item => item && typeof item === 'object' && normalizeId(getRecordIdentity(kind, item), packId) === normId);
-        if (isDup) {
-            return {
-                ok: false,
-                model,
-                errors: [{ code: 'dup-id', path: kind, message: `Duplicate ${kind} id: ${rawId}` }],
-            };
-        }
-    }
-
-    let isLegitWrittenBranch = false;
-    if (kind === 'branches') {
-        const fromFormSlug = normalizeId(clonedRecord.fromForm, packId);
-        const choice = clonedRecord.choice;
-        const normSkill = normalizeId(clonedRecord.skill, packId);
-        const expectedSlug = fromFormSlug && clonedRecord.choice ? `${fromFormSlug}-${clonedRecord.choice}` : null;
-        if (!expectedSlug || normId !== expectedSlug) {
-            return {
-                ok: false,
-                model,
-                errors: [{
-                    code: 'bad-branch-id',
-                    path: 'content.rules.0.branches',
-                    message: `Branch slug must match derived fromForm-choice: ${expectedSlug}`,
-                }],
-            };
-        }
-        if (normSkill && fromFormSlug && (fromFormSlug === `${normSkill}-base` || fromFormSlug.startsWith(`${normSkill}-base-`)) && WRITTEN_CHOICES.includes(choice) && !normId.endsWith(`-${GENERATED_CHOICE}`) && !normId.endsWith('-base')) {
-            isLegitWrittenBranch = true;
-        }
-    }
-
-    if (isLegitWrittenBranch) {
-        const normSkill = normalizeId(clonedRecord.skill, packId);
-        const existingIdentities = getAllExistingIdentities(model.document, packId);
-        if (existingIdentities.has(normId)) {
-            return {
-                ok: false,
-                model,
-                errors: [{ code: 'dup-id', path: kind, message: `Duplicate id collision: ${rawId}` }],
-            };
-        }
-        const otherReservedForms = getAllReservedFormSlugs(model.document, packId, normSkill);
-        if (otherReservedForms.has(normId)) {
-            return {
-                ok: false,
-                model,
-                errors: [{ code: 'dup-id', path: kind, message: `Identity ${rawId} collides with reserved form ID of another skill` }],
-            };
-        }
-    } else {
-        const reservedForms = getAllReservedFormSlugs(model.document, packId);
-        if (reservedForms.has(normId)) {
-            return {
-                ok: false,
-                model,
-                errors: [{ code: 'dup-id', path: kind, message: `Identity ${rawId} collides with reserved form ID` }],
-            };
-        }
-    }
-
-    if (kind === 'skills') {
-        const nextDerived = getSkillDerivedFormSlugs(normId, true);
-        const existingIdentities = getAllExistingIdentities(model.document, packId);
-        const reservedForms = getAllReservedFormSlugs(model.document, packId);
-        for (const dSlug of nextDerived) {
-            if (existingIdentities.has(dSlug) || reservedForms.has(dSlug)) {
-                return {
-                    ok: false,
-                    model,
-                    errors: [{ code: 'dup-id', path: kind, message: `Derived skill form ${dSlug} collides with existing definition` }],
-                };
-            }
-        }
-    }
-
-    const newDoc = cloneDoc(model.document);
-    const targetList = ensureKindList(newDoc, kind);
-    if (!targetList) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'bad-container', path: kind, message: `Could not access container for ${kind}` }],
-        };
-    }
-    targetList.push(clonedRecord);
-
-    return commitSnapshot(newDoc, model);
+    const raw = safe.value[getIdentityKey(kind, safe.value)];
+    if (typeof raw !== 'string' || !raw.trim()) return refuse(model, 'missing-id', kind, 'The record needs an ID.');
+    if (isForeignId(raw, packId)) return refuse(model, 'bad-ref', kind, 'The record ID must belong to this pack.');
+    const { list, local } = findRecord(model, kind, raw);
+    if (list?.some(item => normalizeId(getRecordIdentity(kind, item), packId) === local)) return refuse(model, 'dup-id', kind, `Duplicate ID: ${raw}`);
+    const doc = cloneDoc(model.document);
+    const target = ensureKindList(doc, kind);
+    if (!target) return refuse(model, 'bad-container', kind, 'The record list is not an array.');
+    target.push(safe.value);
+    return commitSnapshot(doc, model);
 }
 
-/** Resets a damaged skills container so skills can be added one at a time. */
-export function resetClassSkills(model, classId) {
-    const refuse = (code, message) => ({ ok: false, model, errors: [{ code, path: 'content.rules.0.classes', message }] });
-    if (!model?.document) return refuse('bad-model', 'Open a pack first');
-    if (typeof classId !== 'string' || !classId) return refuse('bad-id', 'Choose a class ID');
-    const packId = getPackId(model.document);
-    const classes = readKindList(model.document, 'classes');
-    const index = Array.isArray(classes) ? classes.findIndex(cls => cls && normalizeId(cls.slug, packId) === normalizeId(classId, packId)) : -1;
-    if (index < 0) return refuse('not-found', 'Class not found');
-    if (Array.isArray(classes[index].skills)) return refuse('bad-value', 'The skills list is already an array');
-    return setField(model, ['content', 'rules', 0, 'classes', index, 'skills'], []);
-}
-
-/** Creates one owned skill and its authored pathways as a single undoable edit. */
-export function addClassSkill(model, classId) {
-    const refuse = (code, message) => ({ ok: false, model, errors: [{ code, path: 'content.rules.0.classes', message }] });
-    if (!model?.document) return refuse('bad-model', 'Open a pack first');
-    if (typeof classId !== 'string' || !classId) return refuse('bad-id', 'Choose a class ID');
-    const packId = getPackId(model.document);
-    const classes = readKindList(model.document, 'classes');
-    const index = Array.isArray(classes) ? classes.findIndex(cls => cls && normalizeId(cls.slug, packId) === normalizeId(classId, packId)) : -1;
-    if (index < 0) return refuse('not-found', 'Class not found');
-    const cls = classes[index];
-    if (!RULES_V2_PROGRESSION.tiers.includes(cls.tier) || !Array.isArray(cls.skills)) return refuse('bad-value', 'Repair the class tier and skills list first');
-    if (cls.skills.length >= RULES_V2_PROGRESSION.skillsPerClass) return refuse('class-skills', 'The class already has all its skills');
-    const skill = {
-        slug: 'new-skill',
-        name: '[YOUR SKILL NAME]',
-        base: {
-            type: 'physical', stat: 'STR', unit: null,
-            cost: { mp: 0, sp: 0, cooldown: 0 },
-            effects: [{ op: 'damage', target: 'one', power: 1, element: 'none', damageType: 'physical' }],
-        },
-    };
-    // Addition owns all namespace and derived-form collision checks.
-    const attempts = getAllExistingIdentities(model.document, packId).size + getAllReservedFormSlugs(model.document, packId).size + 1;
-    let result;
-    for (let n = 0; n <= attempts; n++) {
-        skill.slug = n ? `new-skill-${n}` : 'new-skill';
-        result = add(model, 'skills', skill);
-        if (result.ok || !result.errors.every(error => error.code === 'dup-id')) break;
-    }
-    if (!result.ok) return { ...result, model };
-    let next = result.model;
-    if (cls.tier === MAX_TIER) {
-        let parents = [`${skill.slug}-base`];
-        for (let step = 1; step <= PATHWAY_STEPS; step++) {
-            const children = [];
-            for (const parent of parents) {
-                for (const choice of WRITTEN_CHOICES) {
-                    const slug = `${parent}-${choice}`;
-                    result = add(next, 'branches', {
-                        slug, skill: skill.slug, fromForm: parent, step, choice,
-                        name: '[YOUR FORM NAME]',
-                        transforms: step === 1
-                            ? [{ op: 'set-element', at: 0, value: choice === WRITTEN_CHOICES[0] ? 'fire' : 'ice' }]
-                            : [choice === WRITTEN_CHOICES[0] ? { op: 'set-target', at: 0, value: 'all' } : { op: 'set-element', at: 0, value: 'lightning' }],
-                    });
-                    if (!result.ok) return { ...result, model };
-                    next = result.model;
-                    children.push(slug);
-                }
-                children.push(`${parent}-${GENERATED_CHOICE}`);
-            }
-            parents = children;
-        }
-    }
-    result = setField(next, ['content', 'rules', 0, 'classes', index, 'skills'], [...cls.skills, skill.slug]);
-    return result.ok ? { ...result, undo: () => model } : { ...result, model };
-}
-
-/**
- * Renames a record and all inbound typed references atomically.
- * Preserves literal note and name strings and rebases derived skill graphs.
- * Refuses length > 52 for skills and collisions with derived or existing IDs BEFORE mutating.
- */
 export function renameId(model, kind, id, nextId) {
-    if (!model || !model.document || typeof model.document !== 'object' || Array.isArray(model.document)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'bad-model', path: '', message: 'Model document is missing or invalid' }],
-        };
-    }
-
-    if (!ALL_KINDS.has(kind)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'unsupported-kind', path: '', message: `Unsupported collection kind: ${kind}` }],
-        };
-    }
-
-    if (kind === 'itemRules') {
-        return {
-            ok: false,
-            model,
-            errors: [{
-                code: 'identity-field',
-                path: 'content.rules.0.itemRules',
-                message: 'Cannot rename itemRule identity directly; rename the item instead',
-            }],
-        };
-    }
-
+    if (!model?.document || !ALL_KINDS.has(kind)) return refuse(model, 'bad-model', kind, 'Open a supported record first.');
     const packId = getPackId(model.document);
-    if (typeof id !== 'string' || !id.trim()) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'bad-id', path: kind, message: 'Current id must be a non-empty string' }],
-        };
+    if (isForeignId(id, packId) || isForeignId(nextId, packId)) return refuse(model, 'bad-ref', kind, 'The ID must belong to this pack.');
+    const { list, local, index } = findRecord(model, kind, id);
+    const next = normalizeId(nextId, packId);
+    if (index < 0) return refuse(model, 'not-found', kind, `Record ${id} was not found.`);
+    if (!next || !SLUG.test(next)) return refuse(model, 'bad-id', kind, 'Use a lowercase ID with hyphens.');
+    if (list.some((item, at) => at !== index && normalizeId(getRecordIdentity(kind, item), packId) === next)) return refuse(model, 'dup-id', kind, `Duplicate ID: ${next}`);
+    if (local === next) return { ok: true, model, undo: () => model };
+    const doc = cloneDoc(model.document);
+    const record = ensureKindList(doc, kind)[index];
+    record[getIdentityKey(kind, record)] = next;
+    for (const ref of model.references ?? []) {
+        if (ref.targetKind !== kind || normalizeId(ref.targetId, packId) !== local) continue;
+        const replacement = kind === 'places' && ref.kind !== 'routes' ? `pack.${packId}/${next}` : next;
+        setValueAtPath(doc, ref.path, replacement);
     }
-    if (typeof nextId !== 'string' || !nextId.trim()) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'bad-id', path: kind, message: 'New id must be a non-empty string' }],
-        };
-    }
-
-    if (isForeignId(id, packId)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'bad-ref', path: kind, message: `Target id belongs to foreign pack: ${id}` }],
-        };
-    }
-    if (isForeignId(nextId, packId)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'bad-ref', path: kind, message: `Renamed id must stay in same pack: ${nextId}` }],
-        };
-    }
-
-    const normId = normalizeId(id, packId);
-    const normNextId = normalizeId(nextId, packId);
-
-    if (kind === 'skills' && [...normNextId].length > MAX_SKILL_SLUG) {
-        return {
-            ok: false,
-            model,
-            errors: [{
-                code: 'numeric-range',
-                path: 'content.rules.0.skills',
-                message: `Skill slug "${normNextId}" exceeds maximum length ${MAX_SKILL_SLUG}`,
-            }],
-        };
-    }
-
-    const isEvents = kind === 'events';
-    const isPresetOrTrait = kind === 'races' || kind === 'talents' || kind === 'presets';
-    const validSyntax = (isEvents || isPresetOrTrait) ? isValidIdentifier(normNextId) : isValidRawSlug(normNextId);
-    if (!validSyntax) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'bad-id', path: kind, message: `Invalid identifier syntax: ${nextId}` }],
-        };
-    }
-
-    const currentList = readKindList(model.document, kind);
-    if (!Array.isArray(currentList)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'not-found', path: kind, message: `No collection found for kind: ${kind}` }],
-        };
-    }
-
-    const targetIdx = currentList.findIndex(item => item && typeof item === 'object' && normalizeId(getRecordIdentity(kind, item), packId) === normId);
-    if (targetIdx < 0) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'not-found', path: kind, message: `Record ${id} not found in ${kind}` }],
-        };
-    }
-
-    if (kind === 'branches') {
-        const br = currentList[targetIdx];
-        const fromFormSlug = normalizeId(br?.fromForm, packId);
-        const expectedSlug = fromFormSlug && br?.choice ? `${fromFormSlug}-${br.choice}` : null;
-        if (!expectedSlug || normNextId !== expectedSlug) {
-            return {
-                ok: false,
-                model,
-                errors: [{
-                    code: 'bad-branch-id',
-                    path: 'content.rules.0.branches',
-                    message: `Branch slug must match derived fromForm-choice: ${expectedSlug}`,
-                }],
-            };
-        }
-    }
-
-    if (normId !== normNextId) {
-        if (SHARED_RULES_KINDS.has(kind)) {
-            const sharedRulesIds = getSharedRulesIdentities(model.document, packId, kind, normId);
-            if (sharedRulesIds.has(normNextId)) {
-                return {
-                    ok: false,
-                    model,
-                    errors: [{ code: 'dup-id', path: kind, message: `Duplicate id collision: ${nextId}` }],
-                };
-            }
-        } else {
-            const isDup = currentList.some(item => item && typeof item === 'object' && normalizeId(getRecordIdentity(kind, item), packId) === normNextId);
-            if (isDup) {
-                return {
-                    ok: false,
-                    model,
-                    errors: [{ code: 'dup-id', path: kind, message: `Duplicate id collision: ${nextId}` }],
-                };
-            }
-        }
-
-        const otherReservedForms = getAllReservedFormSlugs(model.document, packId, kind === 'skills' ? normId : null);
-        if (otherReservedForms.has(normNextId) || otherReservedForms.has(`pack.${packId}/${normNextId}`)) {
-            return {
-                ok: false,
-                model,
-                errors: [{ code: 'dup-id', path: kind, message: `Collision against derived node: ${nextId}` }],
-            };
-        }
-
-        if (kind === 'skills') {
-            const existingIdentities = getAllExistingIdentities(model.document, packId);
-            const nextDerived = getSkillDerivedFormSlugs(normNextId, true);
-            for (const dSlug of nextDerived) {
-                if (existingIdentities.has(dSlug) || existingIdentities.has(`pack.${packId}/${dSlug}`) || otherReservedForms.has(dSlug) || otherReservedForms.has(`pack.${packId}/${dSlug}`)) {
-                    return {
-                        ok: false,
-                        model,
-                        errors: [{ code: 'dup-id', path: kind, message: `Derived skill form ${dSlug} collides with existing definition` }],
-                    };
-                }
-            }
-        }
-    }
-
-    if (normId === normNextId) {
-        return {
-            ok: true,
-            model,
-            undo: () => model,
-        };
-    }
-
-    const newDoc = cloneDoc(model.document);
-    const mutableList = ensureKindList(newDoc, kind);
-    const record = mutableList[targetIdx];
-    const idKey = getIdentityKey(kind, record);
-    record[idKey] = normNextId;
-
-    const fullOldId = `pack.${packId}/${normId}`;
-    const fullNewId = `pack.${packId}/${normNextId}`;
-    const targetKind = getTargetKind(kind);
-
-    if (kind === 'skills') {
-        const oldBase = `${normId}-base`;
-        const newBase = `${normNextId}-base`;
-
-        const branches = newDoc.content?.rules?.[0]?.branches;
-        if (Array.isArray(branches)) {
-            for (const br of branches) {
-                if (!br || typeof br !== 'object') continue;
-                if (normalizeId(br.skill, packId) === normId) {
-                    br.skill = normNextId;
-                }
-                const fSlug = normalizeId(br.fromForm, packId);
-                if (typeof fSlug === 'string' && (fSlug === oldBase || fSlug.startsWith(`${oldBase}-`))) {
-                    const suffix = fSlug.slice(oldBase.length);
-                    br.fromForm = `${newBase}${suffix}`;
-                }
-                const bSlug = normalizeId(br.slug, packId);
-                if (typeof bSlug === 'string' && (bSlug === oldBase || bSlug.startsWith(`${oldBase}-`))) {
-                    const suffix = bSlug.slice(oldBase.length);
-                    br.slug = `${newBase}${suffix}`;
-                }
-            }
-        }
-
-        const refs = Array.isArray(model.references) ? model.references : [];
-        for (const ref of refs) {
-            if (ref.targetKind === 'skills' && (ref.targetId === fullOldId || ref.targetId === normId)) {
-                setValueAtPath(newDoc, ref.path, normNextId);
-            } else if (ref.targetKind === 'forms') {
-                const targetSlug = normalizeId(ref.targetId, packId);
-                if (typeof targetSlug === 'string' && (targetSlug === oldBase || targetSlug.startsWith(`${oldBase}-`))) {
-                    const suffix = targetSlug.slice(oldBase.length);
-                    setValueAtPath(newDoc, ref.path, `${newBase}${suffix}`);
-                }
-            }
-        }
-    } else if (kind === 'places') {
-        const refs = Array.isArray(model.references) ? model.references : [];
-        for (const ref of refs) {
-            if (ref.targetKind === 'places' && (ref.targetId === fullOldId || ref.targetId === normId)) {
-                if (ref.kind === 'routes') {
-                    setValueAtPath(newDoc, ref.path, normNextId);
-                } else {
-                    setValueAtPath(newDoc, ref.path, fullNewId);
-                }
-            }
-        }
-    } else {
-        const refs = Array.isArray(model.references) ? model.references : [];
-        for (const ref of refs) {
-            if (ref.targetKind === targetKind && (ref.targetId === fullOldId || ref.targetId === normId)) {
-                setValueAtPath(newDoc, ref.path, normNextId);
-            }
-        }
-    }
-
-    return commitSnapshot(newDoc, model);
+    return commitSnapshot(doc, model);
 }
 
-/**
- * Removes a record.
- * When inbound references exist without cascade, refuses with the full reference list.
- * With cascade: true, transitively removes dependent closure without leaving dangling refs.
- */
 export function remove(model, kind, id, { cascade = false } = {}) {
-    if (!model || !model.document || typeof model.document !== 'object' || Array.isArray(model.document)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'bad-model', path: '', message: 'Model document is missing or invalid' }],
-        };
-    }
-
-    if (!ALL_KINDS.has(kind)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'unsupported-kind', path: '', message: `Unsupported collection kind: ${kind}` }],
-        };
-    }
-
+    if (!model?.document || !ALL_KINDS.has(kind)) return refuse(model, 'bad-model', kind, 'Open a supported record first.');
     const packId = getPackId(model.document);
-    if (typeof id !== 'string' || !id.trim() || isForeignId(id, packId)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'not-found', path: kind, message: `Record not found or foreign: ${id}` }],
-        };
-    }
-
-    const normId = normalizeId(id, packId);
-    const currentList = readKindList(model.document, kind);
-    if (!Array.isArray(currentList)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'not-found', path: kind, message: `No collection found for kind: ${kind}` }],
-        };
-    }
-
-    const targetIdx = currentList.findIndex(item => item && typeof item === 'object' && normalizeId(getRecordIdentity(kind, item), packId) === normId);
-    if (targetIdx < 0) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'not-found', path: kind, message: `Record ${id} not found in ${kind}` }],
-        };
-    }
-
-    const fullTargetId = `pack.${packId}/${normId}`;
-    const targetKind = getTargetKind(kind);
-    const allRefs = Array.isArray(model.references) ? model.references : [];
-
-    const inboundRefs = allRefs.filter(ref => {
-        if (ref.kind === kind && (ref.id === fullTargetId || ref.id === normId)) {
-            return false;
-        }
-
-        if (kind === 'skills') {
-            const oldBase = `${normId}-base`;
-            if (ref.targetKind === 'skills' && (ref.targetId === fullTargetId || ref.targetId === normId)) {
-                return true;
-            }
-            if (ref.targetKind === 'forms') {
-                const fSlug = normalizeId(ref.targetId, packId);
-                return typeof fSlug === 'string' && (fSlug === oldBase || fSlug.startsWith(`${oldBase}-`));
-            }
-            return false;
-        }
-
-        if (kind === 'branches') {
-            if (ref.targetKind === 'branches' && (ref.targetId === fullTargetId || ref.targetId === normId)) {
-                return true;
-            }
-            if (ref.targetKind === 'forms' && (ref.targetId === fullTargetId || ref.targetId === normId)) {
-                return true;
-            }
-            return false;
-        }
-
-        if (kind === 'itemRules') {
-            return false;
-        }
-
-        return ref.targetKind === targetKind && (ref.targetId === fullTargetId || ref.targetId === normId);
-    });
-
-    if (!cascade) {
-        if (inboundRefs.length > 0) {
-            return {
-                ok: false,
-                model,
-                errors: [{
-                    code: 'referenced',
-                    path: kind,
-                    message: `Cannot remove ${id}: referenced by ${inboundRefs.length} other record(s)`,
-                }],
-                references: inboundRefs,
-            };
-        }
-
-        const newDoc = cloneDoc(model.document);
-        const targetList = ensureKindList(newDoc, kind);
-        targetList.splice(targetIdx, 1);
-
-        return commitSnapshot(newDoc, model);
-    }
-
-    // Generic transitive dependent closure
+    const { local, index } = findRecord(model, kind, id);
+    if (index < 0 || isForeignId(id, packId)) return refuse(model, 'not-found', kind, `Record ${id} was not found.`);
+    const refs = model.references ?? [];
+    const inbound = refs.filter(ref => ref.targetKind === kind && normalizeId(ref.targetId, packId) === local && !(ref.kind === kind && normalizeId(ref.id, packId) === local));
+    if (!cascade && inbound.length) return refuse(model, 'referenced', kind, `Other records refer to ${id}.`, { references: inbound });
+    const queue = [{ kind, id: local }];
     const visited = new Set();
-    const toDeleteQueue = [{ kind, id: normId }];
-
-    const classesList = Array.isArray(readKindList(model.document, 'classes')) ? readKindList(model.document, 'classes') : [];
-    const skillsList = Array.isArray(readKindList(model.document, 'skills')) ? readKindList(model.document, 'skills') : [];
-    const branchesList = Array.isArray(readKindList(model.document, 'branches')) ? readKindList(model.document, 'branches') : [];
-    const itemRulesList = Array.isArray(readKindList(model.document, 'itemRules')) ? readKindList(model.document, 'itemRules') : [];
-
-    while (toDeleteQueue.length > 0) {
-        const item = toDeleteQueue.shift();
+    while (queue.length) {
+        const item = queue.shift();
         const key = `${item.kind}:${item.id}`;
         if (visited.has(key)) continue;
         visited.add(key);
-
-        const itemFullId = `pack.${packId}/${item.id}`;
-        const itemTargetKind = getTargetKind(item.kind);
-
-        // 1. Structural ownership edges
-        if (item.kind === 'classes') {
-            const cls = classesList.find(c => c && typeof c === 'object' && normalizeId(c.slug, packId) === item.id);
-            if (cls && Array.isArray(cls.skills)) {
-                for (const s of cls.skills) {
-                    const normS = normalizeId(s, packId);
-                    if (normS) toDeleteQueue.push({ kind: 'skills', id: normS });
-                }
-            }
-            for (const otherCls of classesList) {
-                if (!otherCls || typeof otherCls !== 'object') continue;
-                if (normalizeId(otherCls.parent, packId) === item.id) {
-                    const normOther = normalizeId(otherCls.slug, packId);
-                    if (normOther) toDeleteQueue.push({ kind: 'classes', id: normOther });
-                }
-            }
-        } else if (item.kind === 'skills') {
-            const baseForm = `${item.id}-base`;
-            for (const br of branchesList) {
-                if (!br || typeof br !== 'object') continue;
-                const bSkill = normalizeId(br.skill, packId);
-                const bFrom = normalizeId(br.fromForm, packId);
-                if (bSkill === item.id || (typeof bFrom === 'string' && (bFrom === baseForm || bFrom.startsWith(`${baseForm}-`)))) {
-                    const normB = normalizeId(br.slug, packId);
-                    if (normB) toDeleteQueue.push({ kind: 'branches', id: normB });
-                }
-            }
-            for (const cls of classesList) {
-                if (!cls || typeof cls !== 'object') continue;
-                if (Array.isArray(cls.skills) && cls.skills.some(s => normalizeId(s, packId) === item.id)) {
-                    const normCls = normalizeId(cls.slug, packId);
-                    if (normCls) toDeleteQueue.push({ kind: 'classes', id: normCls });
-                }
-            }
-        } else if (item.kind === 'branches') {
-            for (const br of branchesList) {
-                if (!br || typeof br !== 'object') continue;
-                const bFrom = normalizeId(br.fromForm, packId);
-                if (typeof bFrom === 'string' && bFrom === item.id) {
-                    const normB = normalizeId(br.slug, packId);
-                    if (normB) toDeleteQueue.push({ kind: 'branches', id: normB });
-                }
-            }
-        } else if (item.kind === 'items') {
-            for (const ir of itemRulesList) {
-                if (!ir || typeof ir !== 'object') continue;
-                if (normalizeId(ir.def, packId) === item.id) {
-                    const normIR = normalizeId(ir.def, packId);
-                    if (normIR) toDeleteQueue.push({ kind: 'itemRules', id: normIR });
-                }
-            }
-        }
-
-        // 2. Inbound references from model.references (owning records dependent on deleted target)
-        if (item.kind !== 'itemRules') {
-            for (const ref of allRefs) {
-                let matches = false;
-                if (item.kind === 'skills') {
-                    if (ref.targetKind === 'skills' && (ref.targetId === itemFullId || ref.targetId === item.id)) {
-                        matches = true;
-                    } else if (ref.targetKind === 'forms') {
-                        const fSlug = normalizeId(ref.targetId, packId);
-                        const baseForm = `${item.id}-base`;
-                        if (typeof fSlug === 'string' && (fSlug === baseForm || fSlug.startsWith(`${baseForm}-`))) {
-                            matches = true;
-                        }
-                    }
-                } else if (item.kind === 'branches') {
-                    if ((ref.targetKind === 'branches' || ref.targetKind === 'forms') && (ref.targetId === itemFullId || ref.targetId === item.id)) {
-                        matches = true;
-                    }
-                } else {
-                    if (ref.targetKind === itemTargetKind && (ref.targetId === itemFullId || ref.targetId === item.id)) {
-                        matches = true;
-                    }
-                }
-
-                if (matches && ref.kind !== 'start') {
-                    const ownerSlug = normalizeId(ref.id, packId);
-                    if (ownerSlug && ALL_KINDS.has(ref.kind)) {
-                        toDeleteQueue.push({ kind: ref.kind, id: ownerSlug });
-                    }
-                }
-            }
+        if (!cascade) continue;
+        for (const ref of refs) {
+            if (ref.targetKind !== item.kind || normalizeId(ref.targetId, packId) !== item.id || !ALL_KINDS.has(ref.kind)) continue;
+            const owner = normalizeId(ref.id, packId);
+            if (owner) queue.push({ kind: ref.kind, id: owner });
         }
     }
-
-    const toDeleteByKind = new Map();
-    for (const vKey of visited) {
-        const [k, vId] = vKey.split(':');
-        if (!toDeleteByKind.has(k)) toDeleteByKind.set(k, new Set());
-        toDeleteByKind.get(k).add(vId);
+    const doc = cloneDoc(model.document);
+    // Start inventory entries have no record owner and must be removed individually.
+    if (Array.isArray(doc.start?.inventory?.items)) {
+        const indices = new Set(refs.filter(ref => ref.kind === 'start' && ref.targetKind === 'items' && visited.has(`items:${normalizeId(ref.targetId, packId)}`)).map(ref => ref.path[3]));
+        doc.start.inventory.items = doc.start.inventory.items.filter((_, i) => !indices.has(i));
     }
-
-    const newDoc = cloneDoc(model.document);
-
-    // Prune primary collections
-    function filterCollection(list, kindName) {
-        if (!Array.isArray(list)) return list;
-        const set = toDeleteByKind.get(kindName);
-        if (!set || set.size === 0) return list;
-        return list.filter(item => {
-            if (!item || typeof item !== 'object') return true;
-            const id = getRecordIdentity(kindName, item);
-            const norm = normalizeId(id, packId);
-            return !set.has(norm);
-        });
+    for (const name of ALL_KINDS) {
+        const list = readKindList(doc, name);
+        if (!list) continue;
+        const key = name === 'legacySkills' ? 'skills' : name;
+        doc.content[key] = list.filter(item => !visited.has(`${name}:${normalizeId(getRecordIdentity(name, item), packId)}`));
     }
-
-    if (newDoc.content?.rules?.[0]) {
-        const r = newDoc.content.rules[0];
-        if (Array.isArray(r.classes)) r.classes = filterCollection(r.classes, 'classes');
-        if (Array.isArray(r.skills)) r.skills = filterCollection(r.skills, 'skills');
-        if (Array.isArray(r.branches)) r.branches = filterCollection(r.branches, 'branches');
-        if (Array.isArray(r.itemRules)) r.itemRules = filterCollection(r.itemRules, 'itemRules');
-        if (Array.isArray(r.trainers)) r.trainers = filterCollection(r.trainers, 'trainers');
-    }
-
-    if (Array.isArray(newDoc.content?.items)) newDoc.content.items = filterCollection(newDoc.content.items, 'items');
-    if (Array.isArray(newDoc.content?.places)) newDoc.content.places = filterCollection(newDoc.content.places, 'places');
-    if (Array.isArray(newDoc.content?.creatures)) newDoc.content.creatures = filterCollection(newDoc.content.creatures, 'creatures');
-    if (Array.isArray(newDoc.content?.quests)) newDoc.content.quests = filterCollection(newDoc.content.quests, 'quests');
-    if (Array.isArray(newDoc.content?.shops)) newDoc.content.shops = filterCollection(newDoc.content.shops, 'shops');
-    if (Array.isArray(newDoc.content?.recipes)) newDoc.content.recipes = filterCollection(newDoc.content.recipes, 'recipes');
-    if (Array.isArray(newDoc.content?.routes)) newDoc.content.routes = filterCollection(newDoc.content.routes, 'routes');
-    if (Array.isArray(newDoc.content?.events)) newDoc.content.events = filterCollection(newDoc.content.events, 'events');
-    if (Array.isArray(newDoc.content?.races)) newDoc.content.races = filterCollection(newDoc.content.races, 'races');
-    if (Array.isArray(newDoc.content?.talents)) newDoc.content.talents = filterCollection(newDoc.content.talents, 'talents');
-    if (Array.isArray(newDoc.content?.presets)) newDoc.content.presets = filterCollection(newDoc.content.presets, 'presets');
-    if (Array.isArray(newDoc.content?.skills)) newDoc.content.skills = filterCollection(newDoc.content.skills, 'legacySkills');
-
-    // Start inventory references: prune affected item entries directly
-    const visitedItems = toDeleteByKind.get('items');
-    if (visitedItems && visitedItems.size > 0 && Array.isArray(newDoc.start?.inventory?.items)) {
-        const itemLookup = new Map();
-        for (const it of model.document.content?.items || []) {
-            if (!it || typeof it !== 'object') continue;
-            const target = normalizeId(identity(it, 'items'), packId);
-            if (it.id) itemLookup.set(it.id, target);
-            if (it.slug) itemLookup.set(it.slug, target);
-            if (it.name) {
-                itemLookup.set(it.name, target);
-                itemLookup.set(it.name.trim().toLowerCase(), target);
-            }
-            if (Array.isArray(it.aliases)) {
-                for (const a of it.aliases) {
-                    if (typeof a === 'string') {
-                        itemLookup.set(a, target);
-                        itemLookup.set(a.trim().toLowerCase(), target);
-                    }
-                }
-            }
-        }
-
-        newDoc.start.inventory.items = newDoc.start.inventory.items.filter(entry => {
-            const rawRef = typeof entry === 'string' ? entry : entry?.item;
-            if (typeof rawRef !== 'string') return true;
-            const norm = normalizeId(rawRef, packId);
-            const resolved = itemLookup.get(rawRef) || itemLookup.get(rawRef.trim().toLowerCase()) || norm;
-            return !visitedItems.has(resolved) && !visitedItems.has(norm);
-        });
-    }
-
-    return commitSnapshot(newDoc, model);
+    return commitSnapshot(doc, model);
 }
 
-/**
- * Moves a class to a new parent in the progression tree.
- * Guards against pre-existing cycles in parent walk and descendant BFS.
- * Computes tiers by actual descendant depth from new parent, rejects noninteger parent tier and >3.
- */
-export function moveClass(model, id, parentId) {
-    if (!model || !model.document || typeof model.document !== 'object' || Array.isArray(model.document)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'bad-model', path: '', message: 'Model document is missing or invalid' }],
-        };
-    }
-
-    const packId = getPackId(model.document);
-    if (typeof id !== 'string' || !id.trim() || isForeignId(id, packId)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'not-found', path: 'content.rules.0.classes', message: `Class not found: ${id}` }],
-        };
-    }
-
-    const classSlug = normalizeId(id, packId);
-    const classes = model.document.content?.rules?.[0]?.classes;
-    if (!Array.isArray(classes)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'not-found', path: 'content.rules.0.classes', message: 'No classes collection found' }],
-        };
-    }
-
-    const cls = classes.find(c => c && typeof c === 'object' && normalizeId(c.slug, packId) === classSlug);
-    if (!cls) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'not-found', path: 'content.rules.0.classes', message: `Class ${id} not found` }],
-        };
-    }
-
-    let newTier = 0;
-    let normParent = null;
-
-    if (parentId !== null && parentId !== undefined) {
-        if (typeof parentId !== 'string' || !parentId.trim() || isForeignId(parentId, packId)) {
-            return {
-                ok: false,
-                model,
-                errors: [{ code: 'bad-ref', path: 'content.rules.0.classes', message: `Parent class not found: ${parentId}` }],
-            };
-        }
-
-        normParent = normalizeId(parentId, packId);
-        if (classSlug === normParent) {
-            return {
-                ok: false,
-                model,
-                errors: [{ code: 'tier-chain', path: 'content.rules.0.classes', message: 'Class cannot be its own parent' }],
-            };
-        }
-
-        const parentCls = classes.find(c => c && typeof c === 'object' && normalizeId(c.slug, packId) === normParent);
-        if (!parentCls) {
-            return {
-                ok: false,
-                model,
-                errors: [{ code: 'bad-ref', path: 'content.rules.0.classes', message: `Parent class ${parentId} not found` }],
-            };
-        }
-
-        if (typeof parentCls.tier !== 'number' || !Number.isInteger(parentCls.tier) || parentCls.tier < 0 || parentCls.tier >= MAX_TIER) {
-            return {
-                ok: false,
-                model,
-                errors: [{ code: 'tier-chain', path: 'content.rules.0.classes', message: `Invalid parent class tier: ${parentCls.tier}` }],
-            };
-        }
-
-        // Guard parent walk with visited set against existing cycles
-        const walkVisited = new Set([classSlug]);
-        let curr = parentCls;
-        while (curr && curr.parent !== null && curr.parent !== undefined) {
-            const pSlug = normalizeId(curr.parent, packId);
-            if (pSlug === classSlug || walkVisited.has(pSlug)) {
-                return {
-                    ok: false,
-                    model,
-                    errors: [{ code: 'tier-chain', path: 'content.rules.0.classes', message: 'Cyclic class hierarchy detected' }],
-                };
-            }
-            walkVisited.add(pSlug);
-            curr = classes.find(c => c && typeof c === 'object' && normalizeId(c.slug, packId) === pSlug);
-        }
-
-        newTier = parentCls.tier + 1;
-        if (newTier > MAX_TIER) {
-            return {
-                ok: false,
-                model,
-                errors: [{ code: 'tier-chain', path: 'content.rules.0.classes', message: `Class tier ${newTier} exceeds tier ${MAX_TIER} limit` }],
-            };
-        }
-    }
-
-    // Guard descendant BFS with visited set and compute tiers by actual depth from new parent
-    const descendantTiers = new Map();
-    const queue = [{ slug: classSlug, tier: newTier }];
-    const visitedDesc = new Set([classSlug]);
-
-    while (queue.length > 0) {
-        const { slug: curSlug, tier: curTier } = queue.shift();
-        for (const c of classes) {
-            if (!c || typeof c !== 'object') continue;
-            const cSlug = normalizeId(c.slug, packId);
-            const cParent = normalizeId(c.parent, packId);
-            if (cParent === curSlug) {
-                if (visitedDesc.has(cSlug)) {
-                    return {
-                        ok: false,
-                        model,
-                        errors: [{ code: 'tier-chain', path: 'content.rules.0.classes', message: 'Cyclic class hierarchy detected among descendants' }],
-                    };
-                }
-                visitedDesc.add(cSlug);
-                const childTier = curTier + 1;
-                if (childTier > MAX_TIER) {
-                    return {
-                        ok: false,
-                        model,
-                        errors: [{
-                            code: 'tier-chain',
-                            path: 'content.rules.0.classes',
-                            message: `Descendant class ${cSlug} tier ${childTier} exceeds tier ${MAX_TIER} limit`,
-                        }],
-                    };
-                }
-                descendantTiers.set(cSlug, childTier);
-                queue.push({ slug: cSlug, tier: childTier });
-            }
-        }
-    }
-
-    const newDoc = cloneDoc(model.document);
-    const targetClasses = newDoc.content?.rules?.[0]?.classes;
-    if (!Array.isArray(targetClasses)) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'bad-model', path: 'content.rules.0.classes', message: 'No target classes collection found' }],
-        };
-    }
-    const targetCls = targetClasses.find(c => c && typeof c === 'object' && normalizeId(c.slug, packId) === classSlug);
-    if (!targetCls) {
-        return {
-            ok: false,
-            model,
-            errors: [{ code: 'not-found', path: 'content.rules.0.classes', message: `Class ${id} not found in cloned document` }],
-        };
-    }
-    targetCls.parent = normParent;
-    targetCls.tier = newTier;
-
-    for (const [dSlug, dTier] of descendantTiers) {
-        const mutD = targetClasses.find(c => c && typeof c === 'object' && normalizeId(c.slug, packId) === dSlug);
-        if (mutD) {
-            mutD.tier = dTier;
-        }
-    }
-
-    return commitSnapshot(newDoc, model);
-}
-
-/** Checks whether a path directly targets a definition collection container. */
 function isDefinitionCollectionPath(path) {
-    if (path.length === 1 && path[0] === 'content') return true;
-    if (path.length === 2 && path[0] === 'content' && (path[1] === 'rules' || path[1] === 'skills' || SB_KINDS.has(path[1]))) return true;
-    if (path.length === 4 && path[0] === 'content' && path[1] === 'rules' && typeof path[2] === 'number' && RULES_KINDS.has(path[3])) return true;
-    return false;
+    return path[0] === 'content' && (path.length === 1 || (path.length === 2 && (path[1] === 'skills' || SB_KINDS.has(path[1]))));
 }
 
 /** Recursively verifies that existing definition identities are not altered or removed when replacing an ancestor. */
 function checkAncestorIdentitiesPreserved(oldContainer, newContainer, packId) {
     if (!oldContainer || typeof oldContainer !== 'object' || !newContainer || typeof newContainer !== 'object') {
         return false;
-    }
-    for (const kind of RULES_KINDS) {
-        const oldList = oldContainer[kind];
-        if (Array.isArray(oldList)) {
-            const newList = newContainer[kind];
-            if (!Array.isArray(newList)) return false;
-            for (const oldItem of oldList) {
-                if (!oldItem || typeof oldItem !== 'object') continue;
-                const oldId = normalizeId(getRecordIdentity(kind, oldItem), packId);
-                if (!oldId) continue;
-                const found = newList.some(newItem => newItem && typeof newItem === 'object' && normalizeId(getRecordIdentity(kind, newItem), packId) === oldId);
-                if (!found) return false;
-            }
-        }
-    }
-    if (Array.isArray(oldContainer.rules)) {
-        if (!Array.isArray(newContainer.rules)) return false;
-        for (let rIdx = 0; rIdx < oldContainer.rules.length; rIdx++) {
-            const oldR = oldContainer.rules[rIdx];
-            const newR = newContainer.rules[rIdx];
-            if (!checkAncestorIdentitiesPreserved(oldR, newR, packId)) return false;
-        }
     }
     for (const kind of SB_KINDS) {
         const oldList = oldContainer[kind];
@@ -1535,7 +389,7 @@ export function setField(model, path, value) {
             errors: [{ code: 'identity-field', path: 'id', message: 'Cannot modify pack id directly; use renameId instead' }],
         };
     }
-    if (last === 'slug' || last === 'id' || (last === 'def' && safePath.includes('itemRules'))) {
+    if (last === 'slug' || last === 'id') {
         return {
             ok: false,
             model,
@@ -1571,8 +425,7 @@ export function setField(model, path, value) {
     const packId = getPackId(model.document);
 
     // Guard direct replacement of identity-bearing definition records
-    const isRecordPath = (safePath.length === 5 && safePath[0] === 'content' && safePath[1] === 'rules' && typeof safePath[2] === 'number' && RULES_KINDS.has(safePath[3]) && typeof safePath[4] === 'number')
-        || (safePath.length === 3 && safePath[0] === 'content' && (SB_KINDS.has(safePath[1]) || safePath[1] === 'skills') && typeof safePath[2] === 'number');
+    const isRecordPath = safePath.length === 3 && safePath[0] === 'content' && (SB_KINDS.has(safePath[1]) || safePath[1] === 'skills') && typeof safePath[2] === 'number';
 
     if (isRecordPath) {
         if (validated.value === null || typeof validated.value !== 'object' || Array.isArray(validated.value)) {
@@ -1582,10 +435,8 @@ export function setField(model, path, value) {
                 errors: [{ code: 'identity-field', path: pathStr, message: 'Cannot replace identity-bearing record with null, non-object, or array' }],
             };
         }
-        const recordKind = safePath.length === 5 ? safePath[3] : (safePath[1] === 'skills' ? 'legacySkills' : safePath[1]);
-        const existingRecord = safePath.length === 5
-            ? model.document.content?.rules?.[safePath[2]]?.[safePath[3]]?.[safePath[4]]
-            : (safePath[1] === 'skills' ? model.document.content?.skills?.[safePath[2]] : model.document.content?.[safePath[1]]?.[safePath[2]]);
+        const recordKind = safePath[1] === 'skills' ? 'legacySkills' : safePath[1];
+        const existingRecord = model.document.content?.[safePath[1]]?.[safePath[2]];
 
         if (existingRecord && typeof existingRecord === 'object') {
             const oldId = normalizeId(getRecordIdentity(recordKind, existingRecord), packId);
@@ -1601,9 +452,7 @@ export function setField(model, path, value) {
     }
 
     // Guard ancestor containers against removal or alteration of existing identities
-    const isAncestorPath = (safePath.length === 3 && safePath[0] === 'content' && safePath[1] === 'rules' && typeof safePath[2] === 'number')
-        || (safePath.length === 2 && safePath[0] === 'content' && safePath[1] === 'rules')
-        || (safePath.length === 1 && safePath[0] === 'content');
+    const isAncestorPath = safePath.length === 1 && safePath[0] === 'content';
 
     if (isAncestorPath) {
         let oldContainer = model.document;
@@ -1766,16 +615,29 @@ export function setSchemaField(model, path, value, scope) {
     let schema = scope?.rootSchema;
     let kind;
     if (!rootPath) {
-        const rules = path[0] === 'content' && path[1] === 'rules' && RULES_KINDS.has(path[3]);
-        kind = rules ? path[3] : path[1] === 'skills' ? 'legacySkills' : path[1];
-        rootPath = path[0] === 'content' && schemaForKind(kind) ? path.slice(0, rules ? 5 : 3) : [];
+        kind = path[1] === 'skills' ? 'legacySkills' : path[1];
+        rootPath = path[0] === 'content' && schemaForKind(kind) ? path.slice(0, 3) : [];
         schema = rootPath.length ? schemaForKind(kind) : { type: 'object', properties: { name: { type: 'string', minLength: 1, maxLength: LIMITS.name } } };
     }
     let current = model?.document;
     for (const key of rootPath) current = current?.[key];
-    // A trainer is checked against its own variant, so one written without the optional fields still edits.
-    if (!scope?.rootSchema && rootPath.length && kind === 'trainers') schema = schemaForRecord(kind, current);
     const checked = validateChange(schema, current, path.slice(rootPath.length), safeValue.value);
     if (!checked.ok) return { ok: false, model, errors: [{ ...checked, path: path.join('.') }] };
+    // A record without an explicit ID is keyed by its name. Move its references
+    // in the same edit when the name changes, so the world remains connected.
+    if (path.length === 4 && path[0] === 'content' && typeof path[2] === 'number' && path[3] === 'name') {
+        const recordKind = path[1] === 'skills' ? 'legacySkills' : path[1];
+        const record = model?.document?.content?.[path[1]]?.[path[2]];
+        if (ALL_KINDS.has(recordKind) && record && !Object.hasOwn(record, 'slug') && !Object.hasOwn(record, 'id')) {
+            const before = identity(record, recordKind);
+            const after = slugify(safeValue.value);
+            if (before && after && before !== after) {
+                const moved = renameId(model, recordKind, before, after);
+                if (!moved.ok) return moved;
+                const named = setField(moved.model, path, safeValue.value);
+                return named.ok ? { ...named, undo: () => model } : named;
+            }
+        }
+    }
     return setField(model, path, safeValue.value);
 }

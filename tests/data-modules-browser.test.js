@@ -381,7 +381,7 @@ test('refusals: an unknown key stays in a safe invalid draft beside Story Block\
         assert.match(await page.locator('.notice').innerText(), /DM_SCHEMA/);
         assert.equal((await exportedPack(page)).toString('utf8'), text, 'a refused Apply changes nothing');
         // Leaving the screen and coming back keeps the invalid draft: nothing the author typed is lost.
-        await page.locator('.rail').getByRole('button', { name: /^Classes/ }).click();
+        await page.locator('.rail').getByRole('button', { name: /^Places/ }).click();
         await openDataModules(page);
         await page.getByRole('button', { name: /^1\./ }).click();
         await section(page, 'Record JSON');

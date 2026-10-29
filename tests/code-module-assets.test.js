@@ -16,9 +16,9 @@ const vendorDir = join(root, 'vendor', 'story-block');
 const committed = readFileSync(join(root, 'src', 'code-module', 'assets.js'), 'utf8');
 const copied = new Map(VENDOR_FILES.map(([path, base64]) => [path, Buffer.from(base64, 'base64')]));
 
-// The baseline these counts describe: Story Block 2.5.0 (899a3ee), re-synced with the generative offers fields. The closure is
-// still 125 files, so the copied set is still 128 entries (the closure, plus LICENSE, package.json and the generated VERSION text).
-const BASELINE = { version: '2.5.0', commit: '899a3eeaa0df0c1e68c67be4cc6d22a5aae474ca', files: 125 };
+// The baseline these counts describe: Story Block 2.6.0. The closure contains
+// 122 files, so the copied set has 125 entries (the closure, plus LICENSE, package.json and the generated VERSION text).
+const BASELINE = { version: '2.6.0', commit: 'd3413fe14939562c6ab79f6dc41fd4f607b424c5', files: 122 };
 
 test('the committed assets.js is exactly what the generator writes now', () => {
     assert.equal(committed, codeModuleAssets(root));
@@ -35,7 +35,7 @@ test('the stamp names the vendored Story Block version and commit, and the closu
     assert.equal(head[1], `commit ${BASELINE.commit}`);
 });
 
-test('the copied set is the closure, plus VERSION, package.json and the licence: 128 entries', () => {
+test('the copied set is the closure, plus VERSION, package.json and the licence: 125 entries', () => {
     const list = testkitFiles(vendorDir);
     assert.equal(VENDOR_FILES.length, BASELINE.files + 3);
     const paths = VENDOR_FILES.map(([path]) => path);
@@ -53,7 +53,7 @@ test('every copied file decodes to the bytes of the vendored copy', () => {
 
 test('the VERSION file is the four-line text of section 3.8, and the licence is the root LICENSE', () => {
     assert.equal(copied.get('tests/vendor/story-block/VERSION').toString('utf8'), versionText(vendorDir, BASELINE.files));
-    assert.equal(copied.get('tests/vendor/story-block/VERSION').toString('utf8'), `Story Block 2.5.0\ncommit ${BASELINE.commit}\nfiles 125\nmatrix none\n`);
+    assert.equal(copied.get('tests/vendor/story-block/VERSION').toString('utf8'), `Story Block 2.6.0\ncommit ${BASELINE.commit}\nfiles 122\nmatrix none\n`);
     assert.ok(copied.get('tests/vendor/LICENSE-story-block').equals(readFileSync(join(root, 'LICENSE'))));
 });
 

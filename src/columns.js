@@ -1,4 +1,4 @@
-// Adjustable columns: the two dividers between the pack parts rail, the list and the inspector (docs/mockups/records-ux).
+// Adjustable columns: the two dividers between the pack parts rail, the list and the inspector.
 // The widths are the creator's own and live on this device only (localStorage); with no storage the defaults are used.
 import { el } from './dom.js';
 
@@ -93,11 +93,8 @@ function makeDivider(doc, name) {
  * Builds the two dividers and keeps the workspace's --rail-w and --insp-w, the dividers' aria values and the stored
  * widths in step. `inspectorShown()` says whether the inspector column exists on this screen.
  */
-export function createColumns({ doc, win, workspace, inspectorShown, inspectorDefault }) {
+export function createColumns({ doc, win, workspace, inspectorShown }) {
     let stored = readWidths(win);
-    // The creator's own inspector width always wins. `inspectorDefault()` may name a wider starting width for a screen that needs room
-    // (a trainer template); it applies only while the creator has not set one (a stored width other than the default counts as set).
-    let inspectorSet = stored.inspector !== COLUMNS.inspector.def;
     let drag = null;
     const wide = win?.matchMedia?.(WIDE_QUERY);
     const stack = win?.matchMedia?.(STACK_QUERY);
@@ -106,8 +103,7 @@ export function createColumns({ doc, win, workspace, inspectorShown, inspectorDe
     const measure = () => {
         const mode = layoutMode(win, wide, stack);
         const withInspector = mode === 'wide' && inspectorShown();
-        const wanted = !inspectorSet && inspectorShown() && inspectorDefault?.();
-        return { mode, ...fit(workspace.clientWidth || 0, wanted ? { ...stored, inspector: wanted } : stored, withInspector) };
+        return { mode, ...fit(workspace.clientWidth || 0, stored, withInspector) };
     };
 
     const label = (name, now, max) => {
@@ -139,7 +135,6 @@ export function createColumns({ doc, win, workspace, inspectorShown, inspectorDe
         const now = measure();
         const max = name === 'rail' ? now.railMax : now.inspectorMax;
         stored = { ...stored, [name]: Math.min(max, Math.max(COLUMNS[name].min, Math.round(value))) };
-        if (name === 'inspector') inspectorSet = value !== COLUMNS.inspector.def;
         refresh();
         if (save) writeWidths(win, stored);
     }

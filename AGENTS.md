@@ -1,7 +1,7 @@
 # Working in Story Studio
 
 Story Studio is the pack editor and creator kit of the Story Suite (SillyTavern extensions: Story Block, the hub;
-RPG Battle; Story Director; NPC State Delta). It edits and checks packs and exports pack files the modules load unchanged.
+Story Director; NPC State Delta). It edits and checks packs and exports pack files the modules load unchanged.
 
 - Plain ES modules, no build step, no dependencies, no network calls at runtime.
 - Story Block is used only through `vendor/story-block/` (`npm run sync-sb -- --from <Story Block checkout>`); never edit

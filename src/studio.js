@@ -19,7 +19,7 @@ export function mountStudio(root) {
     const win = doc.defaultView;
     let destroyed = false;
     let seq = 0;
-    const selection = { kind: 'classes', id: null, form: null };
+    const selection = { kind: 'places', id: null, form: null };
     let lastBaselineJson = null;
 
     const restored = readDraft(win);
@@ -58,7 +58,7 @@ export function mountStudio(root) {
     name.addEventListener('change', () => {
         applyEdit(ctx, setField(ctx.model, ['name'], name.value));
     });
-    const fingerprint = el(doc, 'span', 'rules v2 · —', { class: 'fingerprint muted' });
+    const fingerprint = el(doc, 'span', 'pack · —', { class: 'fingerprint muted' });
     const undo = button(doc, '', () => {
         history.undo();
         ++seq;
@@ -98,10 +98,7 @@ export function mountStudio(root) {
     const notice = el(doc, 'div', '', { role: 'status', 'aria-live': 'polite', class: 'notice' });
     const problemsHost = el(doc, 'div', '', { class: 'problems-drawer-host' });
     const overlays = el(doc, 'div', '', { class: 'overlays' });
-    // A trainer template's editor has long slugs and a search box: it starts wider than the other inspectors (the creator's own width still wins).
-    const templateOpen = () => selection.kind === 'trainers' && selection.id !== null
-        && records(ctx.model, 'trainers').some(record => record?.open === true && localId(ctx.model, identity(record, 'trainers')) === selection.id);
-    const columns = createColumns({ doc, win, workspace, inspectorShown: () => !inspector.hidden, inspectorDefault: () => (templateOpen() ? 480 : null) });
+    const columns = createColumns({ doc, win, workspace, inspectorShown: () => !inspector.hidden });
     workspace.append(rail, columns.railDivider, main, columns.inspectorDivider, inspector);
     app.append(header, workspace, notice, problemsHost, overlays);
     root.replaceChildren(app);
@@ -224,8 +221,7 @@ export function mountStudio(root) {
                 history = createHistory(model);
                 ctx.authoring = {};
                 ctx.filters = {};
-                ctx.trainerUi = null;
-                selection.kind = 'classes';
+                selection.kind = 'places';
                 selection.id = null;
                 selection.form = null;
                 lastBaselineJson = JSON.stringify(model.document);
@@ -287,8 +283,8 @@ export function mountStudio(root) {
             const rawName = model?.document?.name;
             name.value = safeLabel(rawName ?? '');
             name.disabled = !model?.document;
-            fingerprint.textContent = `rules v2 · ${model?.rulesHash?.slice(0, 8) ?? '—'}`;
-            fingerprint.title = model?.rulesHash ?? '';
+            fingerprint.textContent = `pack · ${model?.packHash?.slice(0, 8) ?? '—'}`;
+            fingerprint.title = model?.packHash ?? '';
             undo.disabled = !history.canUndo; redo.disabled = !history.canRedo;
             problems.textContent = `Problems (${model?.validation?.errors?.length ?? 0})`;
             exportButton.disabled = !model?.validation?.ok;

@@ -5,7 +5,7 @@ import { mountStudio } from '../src/studio.js';
 import { DRAFT_KEY } from '../src/session.js';
 import { openPack, exportPack } from '../src/model.js';
 import { setField } from '../src/edits.js';
-import { smallRulesPack } from './fixtures/smallRulesPack.js';
+const smallWorld = () => ({ id: 'fixture', version: '1.0.0', name: 'Fixture', requires: { storyBlock: '^2' }, content: { places: [{ slug: 'haven', name: 'Haven', x: 0, y: 0 }, { slug: 'mill', name: 'Mill', x: 1, y: 1 }] } });
 
 function createFakeWindow() {
     const storage = new Map();
@@ -72,7 +72,7 @@ function createMockFile(name, content, size = undefined) {
 
 test('file open via input, drop, BOM, and size/read error handling', async () => {
     const { doc, win, root, ctx } = setupStudio();
-    const pack = smallRulesPack();
+    const pack = smallWorld();
     const packJson = JSON.stringify(pack);
 
     // 1. Direct openFile
@@ -128,7 +128,7 @@ test('file open via input, drop, BOM, and size/read error handling', async () =>
 
 test('sequence tokens ensure stale reads lose to newer open, edits, and destroy', async () => {
     const { doc, win, root, ctx } = setupStudio();
-    const pack = smallRulesPack();
+    const pack = smallWorld();
     ctx.loadText(pack);
 
     // Stale read loses to newer explicit open
@@ -197,7 +197,7 @@ test('sequence tokens ensure stale reads lose to newer open, edits, and destroy'
 
 test('dirty tracking, undo/redo baseline, export baseline, and beforeunload guard', () => {
     const { doc, win, root, ctx } = setupStudio();
-    const pack = smallRulesPack();
+    const pack = smallWorld();
     ctx.loadText(pack);
 
     assert.equal(ctx.dirty, false);
@@ -242,12 +242,12 @@ test('dirty tracking, undo/redo baseline, export baseline, and beforeunload guar
 
 test('autosave invalid draft and restore with dirty flag preserved', () => {
     const { doc, win, root, ctx } = setupStudio();
-    const pack = smallRulesPack();
+    const pack = smallWorld();
     ctx.loadText(pack);
 
-    const brokenDoc = smallRulesPack();
+    const brokenDoc = smallWorld();
     brokenDoc.name = 'Broken Draft';
-    brokenDoc.content.rules[0].classes[0].skills.pop();
+    brokenDoc.content.places[0].x = 'bad coordinate';
     ctx.loadText(brokenDoc);
     ctx.apply(setField(ctx.model, ['name'], 'Broken Draft Edited'));
     assert.equal(ctx.model.validation.ok, false);
@@ -273,7 +273,7 @@ test('autosave invalid draft and restore with dirty flag preserved', () => {
 
     assert.equal(ctx2.download(), false);
     assert.equal(ctx2.dirty, true);
-    ctx2.apply(setField(ctx2.model, ['content', 'rules', 0, 'classes', 0, 'skills'], ['s00', 's01', 's02']));
+    ctx2.apply(setField(ctx2.model, ['content', 'places', 0, 'x'], 0));
     assert.equal(ctx2.model.validation.ok, true);
     assert.equal(ctx2.download(), true);
     assert.equal(ctx2.dirty, false);
@@ -319,7 +319,7 @@ test('denied, corrupt, oversize, and docnull storage are safely ignored', () => 
     const root4 = doc4.createElement('div'); doc4.body.append(root4);
     const ctx4 = mountStudio(root4);
     assert.equal(ctx4.model, null);
-    const pack = smallRulesPack();
+    const pack = smallWorld();
     ctx4.loadText(pack);
     const editOk = ctx4.apply(setField(ctx4.model, ['name'], 'Quota Works'));
     assert.equal(editOk, true);
@@ -330,7 +330,7 @@ test('denied, corrupt, oversize, and docnull storage are safely ignored', () => 
     const doc5 = new MockDocument(); doc5.defaultView = win5;
     const root5 = doc5.createElement('div'); doc5.body.append(root5);
     const ctx5 = mountStudio(root5);
-    assert.equal(ctx5.loadText(smallRulesPack()).validation.ok, true);
+    assert.equal(ctx5.loadText(smallWorld()).validation.ok, true);
     assert.equal(ctx5.apply(setField(ctx5.model, ['name'], '[PRIVATE]')), true);
     assert.equal(ctx5.dirty, true);
     ctx5.destroy();
@@ -338,7 +338,7 @@ test('denied, corrupt, oversize, and docnull storage are safely ignored', () => 
 
 test('problems drawer toggling, closeProblems focus behaviour, and Escape key', () => {
     const { doc, win, root, ctx } = setupStudio();
-    const pack = smallRulesPack();
+    const pack = smallWorld();
     ctx.loadText(pack);
 
     const allButtons = root.querySelectorAll('button');
@@ -371,7 +371,7 @@ test('problems drawer toggling, closeProblems focus behaviour, and Escape key', 
 
 test('unsafe opens preserve the current draft and its saved backup', () => {
     const { root, win, ctx } = setupStudio();
-    ctx.loadText(smallRulesPack());
+    ctx.loadText(smallWorld());
     ctx.apply(setField(ctx.model, ['name'], '[EDITED]'));
     const snapshot = ctx.model;
     const saved = win.localStorage.getItem(DRAFT_KEY);
@@ -389,7 +389,7 @@ test('a bubbling drop opens its file exactly once', async () => {
     const original = ctx.openFile;
     const reads = [];
     ctx.openFile = file => { const pending = original(file); reads.push(pending); return pending; };
-    const event = { type: 'drop', dataTransfer: { files: [createMockFile('pack.json', smallRulesPack())] }, preventDefault() {} };
+    const event = { type: 'drop', dataTransfer: { files: [createMockFile('pack.json', smallWorld())] }, preventDefault() {} };
     root.dispatchEvent(event);
     win.dispatchEvent(event);
     await Promise.all(reads);
@@ -400,19 +400,14 @@ test('a bubbling drop opens its file exactly once', async () => {
 
 test('hostile labels render safely and failed opens or renders preserve the previous draft', () => {
     const { ctx, root, win } = setupStudio();
-    const hostile = smallRulesPack();
+    const hostile = smallWorld();
     const label = { toString: null };
-    hostile.content.rules[0].classes[0].name = label;
-    hostile.content.rules[0].skills[0].name = label;
-    hostile.content.rules[0].skills[9].name = label;
-    hostile.content.rules[0].branches[0].name = label;
+    hostile.content.places[0].name = label;
     assert.doesNotThrow(() => ctx.loadText(hostile));
     assert.match(root.textContent, /\{"toString":null\}/);
-    for (const [kind, id, form] of [['classes', 'c0'], ['skills', 's00'], ['skills', 's30'], ['skills', 's30', 's30-base-a']]) {
-        assert.doesNotThrow(() => ctx.select(kind, id, form));
-        assert.doesNotMatch(root.querySelector('.notice').textContent, /render-error/);
-        assert.match(root.textContent, /\{"toString":null\}/);
-    }
+    assert.doesNotThrow(() => ctx.select('places', 'haven'));
+    assert.doesNotMatch(root.querySelector('.notice').textContent, /render-error/);
+    assert.match(root.textContent, /\{"toString":null\}/);
     const previous = ctx.model;
     const draft = win.localStorage.getItem(DRAFT_KEY);
     const render = ctx.renderContent;
@@ -421,7 +416,7 @@ test('hostile labels render safely and failed opens or renders preserve the prev
         if (ctx.model !== previous) throw new Error('Cannot render this draft');
         render();
     };
-    assert.equal(ctx.loadText(smallRulesPack()), null);
+    assert.equal(ctx.loadText(smallWorld()), null);
     assert.equal(ctx.model, previous);
     assert.equal(win.localStorage.getItem(DRAFT_KEY), draft);
     assert.match(root.querySelector('.notice').textContent, /render-error: Cannot render this draft/);
@@ -436,9 +431,7 @@ test('hostile labels render safely and failed opens or renders preserve the prev
 
 test('schema refusals preserve the model, history, redo, dirty state and autosave', async () => {
     const { ctx, win, root } = setupStudio();
-    const { makeValidExtendedPack } = await import('./fixtures/builders.js');
-    const pack = makeValidExtendedPack();
-    pack.content.rules[0].trainers[0].skills.push('s00');
+    const pack = smallWorld();
     await ctx.openFile(createMockFile('fixture.json', pack));
     ctx.apply(setField(ctx.model, ['name'], '[EDIT]'));
     ctx.history.undo(); ctx.changed();
@@ -447,31 +440,16 @@ test('schema refusals preserve the model, history, redo, dirty state and autosav
     let saves = 0;
     const save = win.localStorage.setItem;
     win.localStorage.setItem = (...args) => { saves++; save(...args); };
-    const cases = [
-        ['skills', 's00', null, '#form-effects', JSON.stringify([{ op: 'damage', target: 'one', power: 1001, element: 'none', damageType: 'physical' }])],
-        ['skills', 's00', null, '#form-effects', '[]'],
-        ['skills', 's30', 's30-base-a', '#form-transforms', JSON.stringify([{ op: 'set-power', at: 0, value: 1001 }])],
-        ['skills', 's30', 's30-base-a', '#form-transforms', JSON.stringify([{ op: 'replace-effect', at: 0, value: { op: 'damage', target: 'one', power: 1001, element: 'none', damageType: 'physical' } }])],
-        ['skills', 's30', 's30-base-a', '#form-transforms', '[]'],
-    ];
-    for (const [kind, id, form, selector, value] of cases) {
-        ctx.select(kind, id, form);
-        const control = ctx.inspector.querySelector(selector);
-        const previous = control.value;
-        control.value = value; control.dispatchEvent({ type: 'change' });
-        assert.equal(ctx.model, before);
-        assert.equal(control.value, previous);
-        assert.match(root.querySelector('.notice').textContent, /^bad-value:/);
-    }
-    ctx.select('trainers', 'weapon-master');
-    const skill = ctx.inspector.querySelectorAll('select').find(control => {
-        const path = JSON.parse(control.getAttribute('data-path'));
-        return path.at(-2) === 'skills' && path.at(-1) === 1;
+    ctx.select('places', 'haven');
+    const control = ctx.inspector.querySelectorAll('input').find(input => {
+        const raw = input.getAttribute('data-path');
+        return raw && JSON.parse(raw).at(-1) === 'x';
     });
-    assert.equal(skill.value, 's00');
-    skill.value = 's30'; skill.dispatchEvent({ type: 'change' });
-    assert.equal(skill.value, 's00');
+    assert.ok(control);
+    const previous = control.value;
+    control.value = ''; control.dispatchEvent({ type: 'change' });
     assert.equal(ctx.model, before);
+    assert.equal(control.value, previous);
     assert.match(root.querySelector('.notice').textContent, /^bad-value:/);
     assert.equal(ctx.history.canUndo, false);
     assert.equal(ctx.history.canRedo, true);
@@ -482,7 +460,7 @@ test('schema refusals preserve the model, history, redo, dirty state and autosav
 });
 
 test('draft storage retains original text only for its matching immutable document', () => {
-    const text = '\uFEFF' + JSON.stringify(smallRulesPack(), null, 4) + '\r\n';
+    const text = '\uFEFF' + JSON.stringify(smallWorld(), null, 4) + '\r\n';
     const { win, ctx } = setupStudio();
     const initial = ctx.loadText(text);
     assert.equal(exportPack(initial), text);
