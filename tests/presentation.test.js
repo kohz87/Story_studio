@@ -122,7 +122,7 @@ test('palette snippets escape author markup and include every registered standar
         assert.equal(validatePack({ ...pack(), screens: [screen({ template })] }).ok, true);
         assert.ok(template.includes('&lt;b&gt;literal&lt;/b&gt;'));
     }
-    assert.equal(Object.keys(standardWidgets).length, 18);
+    assert.equal(Object.keys(standardWidgets).length, 19);
     assert.ok(QUERIES.some(([name]) => name === 'packs.weather'));
 });
 
