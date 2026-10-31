@@ -249,22 +249,24 @@ function readLastingPayload(raw, fallbackName) {
     payload.state = typeof raw.state === 'string' ? clip(raw.state.trim().toLowerCase(), 20) : bounded(raw.state);
     if (payload.state === undefined) delete payload.state;
     optional('place', limits.place, 'The place', 'No place is fine');
-    if (raw.factions !== undefined) {
+    if (!blank(raw.factions)) {
         const list = typeof raw.factions === 'string' ? [raw.factions] : raw.factions;
         if (!Array.isArray(list)) cuts.push({ field: 'factions', ack: 'No factions is fine', text: `Lasting change: factions must be a list of at most ${limits.factions} names, not ${describe(list)}, so it was left out: add the factions in the form, or leave it blank.` });
         else if (list.length) {
-            // One note for the whole list: how many names were cut, how many were no names, and whether the list itself was cut.
+            // One note for the whole list, said of the list that is kept: the entries read (one past the limit, so a list that is too
+            // long still shows as too long), the ones that are no name (empty or not text) taken out, and the names that were cut.
+            // It can always be set aside, to keep the factions as they are shown; the check of a lasting change still has its say.
             const asked = list.slice(0, limits.factions + 1);
             const names = asked.filter(name => typeof name === 'string' && name.trim());
-            const unread = asked.filter(name => typeof name !== 'string').length;
+            const unread = asked.length - names.length;
             const tooLong = names.filter(name => size(name.trim()) > limits.faction + 1).length;
-            const cut = tooLong > 0 || list.length > limits.factions + 1;
+            const over = names.length > limits.factions || names.some(name => size(name.trim()) > limits.faction);
             const said = [];
             if (list.length > limits.factions + 1) said.push(`The list has ${list.length} factions and a lasting change allows ${limits.factions}: it was shortened to ${limits.factions + 1}.`);
             if (tooLong) said.push(`${tooLong === 1 ? 'A faction name was' : `${tooLong} faction names were`} longer than ${limits.faction} characters and ${tooLong === 1 ? 'was' : 'were'} shortened to ${limits.faction + 1}.`);
-            if (unread) said.push(`Lasting change: ${unread === 1 ? 'a faction is' : `${unread} factions are`} not text, so ${unread === 1 ? 'it was' : 'they were'} left out.`);
+            if (unread) said.push(`Lasting change: ${unread === 1 ? 'a faction is' : `${unread} factions are`} empty or not text, so ${unread === 1 ? 'it was' : 'they were'} left out.`);
             if (names.length) payload.factions = names.map(name => clip(name.trim(), limits.faction + 1));
-            if (said.length) cuts.push({ field: 'factions', ...cut ? {} : { ack: 'The other factions are fine' }, text: `${said.join(' ')} ${cut ? 'The list still needs cutting down in the form.' : 'Check the factions in the form.'}` });
+            if (said.length) cuts.push({ field: 'factions', ack: 'The factions as shown are fine', text: `${said.join(' ')} ${over ? 'The list still needs cutting down in the form.' : 'Check the factions in the form.'}` });
         }
     }
     optional('summary', limits.summary, 'The summary', 'No summary is fine');
@@ -409,17 +411,21 @@ export function readAnswer(source, model) {
         if (entry.parent && !entry.parent.once) note(entry, 'after', `${quoted(humanName(entry.parent.id))} happens again and again, so nothing can come after it: choose another earlier event in the form.`);
         // The delay: days, hours or months after the earlier event's lasting change. Every unit that is there is read, so a second one
         // that is wrong is not hidden behind the first; only one delay can be written.
-        let counted = null;
-        for (const [unit, size] of [['days', DAY], ['hours', 60], ['months', calendar.monthDays * DAY]]) {
-            const given = isRecord(when) ? when[unit] : undefined;
-            if (given === undefined) continue;
+        const units = [['days', DAY], ['hours', 60], ['months', calendar.monthDays * DAY]].map(([unit, size]) => ({ unit, size, given: isRecord(when) ? when[unit] : undefined })).filter(item => item.given !== undefined);
+        const writable = entry.parent && mode !== 'date' && entry.parent.chronicle;
+        const kept = writable ? units.find(item => { const n = wholeNumber(item.given); return n !== null && Number.isSafeInteger(n * item.size); }) : null;
+        const keptText = kept ? `${wholeNumber(kept.given)} ${kept.unit}` : null;
+        // What a wrong unit's button says follows what is saved: the delay that is kept, or none (right after).
+        const settle = keptText ? { ack: `Just the ${keptText} is fine` } : {};
+        for (const item of units) {
+            const { unit, size, given } = item;
             const n = wholeNumber(given);
             if (!entry.parent) note(entry, 'delay', `It has a delay of ${describe(given)} ${unit} but no earlier event to count from: choose the earlier event in the form, then set the delay.`);
             else if (mode === 'date') note(entry, 'delay', `A date and a delay after another event cannot both be written, so the delay of ${describe(given)} ${unit} was left out: choose one in the form.`);
-            else if (n === null || !Number.isSafeInteger(n * size)) note(entry, 'delay', `The delay of ${describe(given)} ${unit} is not a whole number of at least 1: set it in the form.`);
+            else if (n === null || !Number.isSafeInteger(n * size)) note(entry, 'delay', `The delay of ${describe(given)} ${unit} is not a whole number of at least 1: ${keptText ? `it was left out, and the ${keptText} is kept. Set it in the form` : 'set it in the form'}.`, settle);
             else if (!entry.parent.chronicle) note(entry, 'delay', `${quoted(humanName(entry.parent.id))} has no lasting change, and a delay counts from when one happens: give it one in the form, then set the delay.`);
-            else if (counted) note(entry, 'delay', `Only one delay can be written, so the delay of ${describe(given)} ${unit} was left out beside the ${counted}: choose one in the form.`, { ack: `Just the ${counted} is fine` });
-            else { spec.since = { name: entry.parent.chronicle, minutes: n * size }; counted = `${n} ${unit}`; }
+            else if (item !== kept) note(entry, 'delay', `Only one delay can be written, so the delay of ${describe(given)} ${unit} was left out beside the ${keptText}: choose one in the form.`, settle);
+            else spec.since = { name: entry.parent.chronicle, minutes: n * size };
         }
         const until = raw.until;
         if (until !== undefined) {

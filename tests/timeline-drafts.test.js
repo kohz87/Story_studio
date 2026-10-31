@@ -454,3 +454,19 @@ test('review 162-2: every note a draft is added with comes back on reload, and a
     assert.equal(full.ok, true);
     assert.equal(draftsOf(reloaded(full.model))[0].notes.length, MAX_NOTES);
 });
+
+// ------------------------------------------------------------ review 165
+
+test('review 165-3: a note about one text of the lasting change ends when the change is not there, even in a draft saved that way', () => {
+    const plain = openPack(ersveil);
+    const made = readAnswer(JSON.stringify([{ name: 'Harbor crisis', news: 'Harbor closes.', lasting: { name: 'Harbor crisis', state: 'ongoing', factions: [null, null, null, null, null, 'Harbor'] } }]), plain).items[0].draft;
+    assert.equal(made.notes.length, 1);
+    const without = { ...made, record: { ...made.record } };
+    delete without.record.then;
+    const model = reloaded(withDrafts(plain, [without]));
+    assert.deepEqual(draftProblems(model, draftsOf(model), 0), [], 'nothing left to say');
+    assert.equal(keepDraft(model, 'harbor-crisis').ok, true);
+    // With the change there, it is said (and has its button).
+    const held = withDrafts(plain, [made]);
+    assert.equal(draftIssues(held, draftsOf(held), 0).filter(issue => issue.ack === 'The factions as shown are fine').length, 1);
+});

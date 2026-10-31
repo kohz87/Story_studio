@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { openPack, exportPack, draftsOf } from '../src/model.js';
 import { readLasting } from '../src/timeline/lasting.js';
+import { readCondition } from '../src/timeline/condition.js';
 import { readEvent } from '../src/timeline/event.js';
 import { readAnswer } from '../src/timeline/ai-answer.js';
 import { setSchemaField } from '../src/edits.js';
@@ -746,4 +747,74 @@ test('review 162-5: through the controls, a name the answer did not use is not g
     const mourned = ctx.model.document.content.events.find(event => event.id === 'the-guard-is-mourned');
     assert.equal(mourned.after, 'gate-2-opens-2');
     assert.match(mourned.when, /Plain/);
+});
+
+// ------------------------------------------------------------ review 165
+
+test('review 165-1: with a good delay beside a wrong one, the button keeps the good delay, and that is what is saved', () => {
+    const ctx = open();
+    click(ctx, '✦ Write with an AI');
+    paste(ctx, [{ name: 'Parent', news: 'P', lasting: { name: 'P changed', state: 'ongoing' } }, { name: 'Child', when: { after: 'Parent', days: 2, hours: null }, news: 'C' }]);
+    click(ctx, 'Add 2 as drafts');
+    ctx.select('events', 'child', 'draft');
+    assert.match(banner(ctx), /delay of null hours is not a whole number/);
+    assert.ok(!named(ctx, 'Right after is fine'), 'the two days are kept, so right after is not what the button says');
+    click(ctx, 'Just the 2 days is fine');
+    assert.equal(banner(ctx).includes('null hours'), false);
+    click(ctx, 'Keep all 2 drafts');
+    const child = ctx.model.document.content.events.find(event => event.id === 'child');
+    assert.deepEqual(readCondition(child.when).since, { name: 'P changed', minutes: 2880 });
+    // With no good unit, the button says right after and nothing is counted.
+    const none = open();
+    click(none, '✦ Write with an AI');
+    paste(none, [{ name: 'Parent', news: 'P', lasting: { name: 'P changed', state: 'ongoing' } }, { name: 'Child', when: { after: 'Parent', days: null }, news: 'C' }]);
+    click(none, 'Add 2 as drafts');
+    none.select('events', 'child', 'draft');
+    click(none, 'Right after is fine');
+    click(none, 'Keep all 2 drafts');
+    assert.doesNotMatch(none.model.document.content.events.find(event => event.id === 'child').when, /chronicle\.passed/);
+});
+
+const crisisWith = factions => [{ name: 'Harbor crisis', news: 'Harbor closes.', lasting: { name: 'Harbor crisis', state: 'ongoing', factions } }];
+
+test('review 165-2: an empty faction is said and not Ready until the writer accepts it; the payload has the two names', () => {
+    const ctx = open();
+    click(ctx, '✦ Write with an AI');
+    paste(ctx, crisisWith(['Ironbound', '', 'Tidecallers']));
+    assert.match(ctx.inspector.querySelector('.tl-ai-draft').textContent, /^⚠ Needs a look/);
+    click(ctx, 'Add 1 as a draft');
+    assert.match(banner(ctx), /a faction is empty or not text, so it was left out/);
+    assert.ok(named(ctx, 'Keep').disabled);
+    click(ctx, 'The factions as shown are fine');
+    assert.ok(!named(ctx, 'Keep').disabled);
+    click(ctx, 'Keep');
+    assert.deepEqual(ctx.model.document.content.events.at(-1).then[0].payload.factions, ['Ironbound', 'Tidecallers']);
+});
+
+test('review 165-3: four valid factions that are kept can be accepted, and turning the lasting change off ends its notes', () => {
+    const ctx = open();
+    click(ctx, '✦ Write with an AI');
+    paste(ctx, crisisWith(['North', 'South', 'East', 'West', null, 'Harbor']));
+    click(ctx, 'Add 1 as a draft');
+    assert.doesNotMatch(banner(ctx), /needs cutting down/);
+    assert.ok(named(ctx, 'Keep').disabled);
+    click(ctx, 'The factions as shown are fine');
+    assert.ok(!named(ctx, 'Keep').disabled);
+    click(ctx, 'Keep');
+    assert.deepEqual(ctx.model.document.content.events.at(-1).then[0].payload.factions, ['North', 'South', 'East', 'West']);
+    // The review's second repro: nothing of the list is kept; the writer removes the lasting change; Keep is open.
+    const gone = mountWithStorage();
+    click(gone.ctx, '✦ Write with an AI');
+    paste(gone.ctx, crisisWith([null, null, null, null, null, 'Harbor']));
+    click(gone.ctx, 'Add 1 as a draft');
+    assert.ok(named(gone.ctx, 'Keep').disabled);
+    assert.ok(named(gone.ctx, 'The factions as shown are fine'), 'and it can be set aside');
+    tick(gone.ctx, 'Add to Story Director', false);
+    assert.ok(!/factions/.test(banner(gone.ctx)), banner(gone.ctx));
+    assert.ok(!named(gone.ctx, 'Keep').disabled);
+    // Turning it on again starts fresh: the old note does not come back, and the stored draft has none left.
+    tick(gone.ctx, 'Add to Story Director', true);
+    assert.ok(!/factions/.test(banner(gone.ctx)));
+    assert.ok(!named(gone.ctx, 'Keep').disabled);
+    assert.equal(JSON.parse(gone.store.get(DRAFT_KEY)).drafts[0].notes.some(item => item.kind === 'lasting' && item.field), false);
 });

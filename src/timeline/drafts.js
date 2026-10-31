@@ -77,6 +77,8 @@ export function makeDraft(record, notes = []) {
 // date or the end once also held how the event starts). A `seen` that cannot be compared with what is read now is not guessed at:
 // the note stays, so the warning shows and the draft cannot be kept until the field is fixed or the note is set aside.
 function noteHolds(item, record) {
+    // A note about one text of the lasting change has nothing to say once the change is taken away.
+    if (item.kind === 'lasting' && item.field && readEvent(record).lasting === null) return false;
     const now = noteSignature(item.kind, record, item.field);
     if (JSON.stringify(now) === item.seen) return true;
     let was;
@@ -258,8 +260,11 @@ export function editDrafts(model, result) {
     if (!result.ok) return result;
     const next = splitCombined(model, drafts, result.model);
     if (!next) return refuse(model, 'A draft could not be changed that way.');
-    if (JSON.stringify(next) === JSON.stringify(drafts)) return null;
-    return ok(model, withDrafts(model, next));
+    // The notes about the texts of a lasting change go with the change: turning it off ends them, and turning it on again starts fresh.
+    const settled = next.map(draft => (readEvent(draft.record).lasting === null && draft.notes.some(item => item.kind === 'lasting' && item.field)
+        ? { ...draft, notes: draft.notes.filter(item => !(item.kind === 'lasting' && item.field)) } : draft));
+    if (JSON.stringify(settled) === JSON.stringify(drafts)) return null;
+    return ok(model, withDrafts(model, settled));
 }
 
 /** The draft with this ID thrown away: one edit. */

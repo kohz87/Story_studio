@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { openPack, withDrafts } from '../src/model.js';
+import { openPack, withDrafts, draftsOf } from '../src/model.js';
 import { readAnswer, readMoment, findEvents, MAX_EVENTS, PASTE_LIMIT } from '../src/timeline/ai-answer.js';
-import { draftProblems, keepDraft, keepAll } from '../src/timeline/drafts.js';
+import { draftProblems, keepDraft, keepAll, ackNote } from '../src/timeline/drafts.js';
 import { packCalendar } from '../src/timeline/calendar.js';
 import { writeCondition, readCondition } from '../src/timeline/condition.js';
 import { readEvent } from '../src/timeline/event.js';
@@ -650,14 +650,14 @@ test('review 162-4: an optional lasting field that cannot be read is left out of
     const crowd = one({ ...base, lasting: { ...base2, factions: ['Ironbound', null, 7, '', 'Tidecallers'] } });
     assert.deepEqual(readLasting(crowd.record).factions, ['Ironbound', 'Tidecallers']);
     assert.equal(crowd.item.draft.notes.length, 1);
-    assert.match(crowd.problems[0], /2 factions are not text, so they were left out/);
-    assert.equal(crowd.item.draft.notes[0].ack, 'The other factions are fine');
+    assert.match(crowd.problems[0], /3 factions are empty or not text, so they were left out/);
+    assert.equal(crowd.item.draft.notes[0].ack, 'The factions as shown are fine');
     assert.deepEqual(one({ ...base, lasting: { ...base2, factions: [null] } }).record.then[0].payload, base2, 'a list of nothing readable has no factions');
     // The names that are too long are one note for the field, however many.
     const long = one({ ...base, lasting: { ...base2, factions: Array(3).fill('F'.repeat(100)) } });
     assert.equal(long.item.draft.notes.length, 1);
     assert.match(long.problems.find(line => /3 faction names were longer than 80 characters/.test(line)), /still needs cutting down/);
-    assert.equal(long.item.draft.notes[0].ack, undefined, 'a list still too long cannot be set aside');
+    assert.equal(long.item.draft.notes[0].ack, 'The factions as shown are fine', 'every factions note can be set aside (review 165-3; the check of the lasting change still refuses the long list)');
     // A name and a state that are there but wrong are still refused as they were.
     assert.ok(one({ ...base, lasting: { name: null, state: 'ongoing' } }).problems.some(line => /Lasting change: name /.test(line)));
 });
@@ -684,4 +684,87 @@ test('review 162-5: "after" matches the name the answer used by case and spacing
     const lost = read([gates[0], mourned('Gate 2 opens')]);
     assert.equal(lost.items[1].draft.record.after, undefined);
     assert.ok(problemsOf(lost)[1].some(line => /which is not an event in the pack or in this answer/.test(line)));
+});
+
+// ------------------------------------------------------------ review 165
+
+test('review 165-1: the button of a wrong delay unit says what is saved: the delay that is kept, or right after', () => {
+    const parent = { name: 'Parent', news: 'P', lasting: { name: 'P changed', state: 'ongoing' } };
+    const both = delay => read([parent, { name: 'Child', when: { after: 'Parent', ...delay }, news: 'C' }]).items.map(item => item.draft);
+    const since = draft => readCondition(draft.record.when)?.since ?? null;
+    const setAside = (list, count) => {
+        let held = withDrafts(model(), list);
+        for (let at = 0; at < count; at++) held = ackNote(held, 'child', 0).model;
+        return held;
+    };
+    // The review's repro, and the valid unit after the wrong one (units are read days, hours, months).
+    for (const [delay, kept, label] of [
+        [{ days: 2, hours: null }, 2 * 1440, 'Just the 2 days is fine'],
+        [{ days: null, hours: 3 }, 180, 'Just the 3 hours is fine'],
+        [{ hours: 'soon', months: 1 }, 30 * 1440, 'Just the 1 months is fine'],
+        [{ days: 4, hours: 0, months: -1 }, 4 * 1440, 'Just the 4 days is fine'],
+    ]) {
+        const list = both(delay);
+        const draft = list[1];
+        assert.deepEqual(since(draft), { name: 'P changed', minutes: kept }, JSON.stringify(delay));
+        const wrong = draft.notes.filter(item => item.kind === 'delay');
+        assert.ok(wrong.length > 0 && wrong.every(item => item.ack === label), `${JSON.stringify(delay)}: ${JSON.stringify(wrong.map(item => item.ack))}`);
+        // Setting the notes aside leaves the delay the button named, in the draft and once it is kept.
+        const held = setAside(list, wrong.length);
+        assert.deepEqual(draftProblems(held, draftsOf(held), 1), []);
+        assert.deepEqual(since(draftsOf(held)[1]), { name: 'P changed', minutes: kept });
+        const saved = keepAll(held);
+        assert.equal(saved.kept, 2);
+        assert.deepEqual(readCondition(saved.result.model.document.content.events.find(event => event.id === 'child').when).since, { name: 'P changed', minutes: kept });
+    }
+    // With no unit that can be kept, the button is the plain one and there is no delay.
+    for (const delay of [{ days: null }, { days: null, hours: 0 }, { hours: 'x', months: [] }]) {
+        const list = both(delay);
+        assert.equal(since(list[1]), null, JSON.stringify(delay));
+        assert.ok(list[1].notes.length > 0 && list[1].notes.every(item => item.ack === 'Right after is fine'), JSON.stringify(list[1].notes.map(item => item.ack)));
+        const saved = keepAll(setAside(list, list[1].notes.length));
+        assert.equal(saved.kept, 2);
+        assert.doesNotMatch(saved.result.model.document.content.events.find(event => event.id === 'child').when, /chronicle\.passed/);
+    }
+});
+
+test('review 165-2: an empty faction is an invalid entry: left out, said, and not Ready until the note is set aside', () => {
+    const crisis = factions => one({ name: 'Harbor crisis', news: 'Harbor closes.', lasting: { name: 'Harbor crisis', state: 'ongoing', factions } });
+    for (const blankName of ['', '   ', '\n\t']) {
+        const { record, problems, item } = crisis(['Ironbound', blankName, 'Tidecallers']);
+        assert.deepEqual(readLasting(record).factions, ['Ironbound', 'Tidecallers']);
+        assert.equal(problems.length, 1, JSON.stringify(problems));
+        assert.match(problems[0], /a faction is empty or not text, so it was left out/);
+        assert.equal(item.draft.notes[0].ack, 'The factions as shown are fine');
+        const accepted = ackNote(withDrafts(model(), [item.draft]), 'harbor-crisis', 0);
+        assert.deepEqual(draftProblems(accepted.model, draftsOf(accepted.model), 0), []);
+        assert.equal(keepAll(accepted.model).kept, 1);
+    }
+    // Nothing is said for no factions at all.
+    assert.deepEqual(crisis([]).problems, []);
+    assert.deepEqual(crisis('').problems, []);
+});
+
+test('review 165-3: the factions note is about the list that is kept, and can always be set aside', () => {
+    const crisis = factions => one({ name: 'Harbor crisis', news: 'Harbor closes.', lasting: { name: 'Harbor crisis', state: 'ongoing', factions } });
+    // The review's repro: four valid names are kept (the fifth entry is not a name); nothing needs cutting.
+    const four = crisis(['North', 'South', 'East', 'West', null, 'Harbor']);
+    assert.deepEqual(readLasting(four.record).factions, ['North', 'South', 'East', 'West']);
+    assert.equal(four.problems.length, 1, JSON.stringify(four.problems));
+    assert.doesNotMatch(four.problems[0], /needs cutting down/);
+    assert.equal(four.item.draft.notes[0].ack, 'The factions as shown are fine');
+    const accepted = ackNote(withDrafts(model(), [four.item.draft]), 'harbor-crisis', 0);
+    assert.deepEqual(draftProblems(accepted.model, draftsOf(accepted.model), 0), []);
+    assert.equal(keepAll(accepted.model).kept, 1);
+    // A list that is still too long once the entries that are no names are out says so, and the check still refuses it.
+    const over = crisis(['A', 'B', 'C', 'D', 'E', 'F']);
+    assert.match(over.problems.find(line => /shortened to 5/.test(line)), /still needs cutting down/);
+    assert.ok(over.problems.some(line => /factions must be a list of at most 4/.test(line)));
+    assert.equal(over.item.draft.notes[0].ack, 'The factions as shown are fine');
+    const setAside = ackNote(withDrafts(model(), [over.item.draft]), 'harbor-crisis', 0);
+    assert.equal(keepAll(setAside.model).kept, 0, 'accepting the note does not make the long list valid');
+    // Five entries that are no names and a sixth that is: nothing is kept, and the note can be set aside.
+    const none = crisis([null, null, null, null, null, 'Harbor']);
+    assert.equal(readLasting(none.record).factions, undefined);
+    assert.equal(none.item.draft.notes[0].ack, 'The factions as shown are fine');
 });
