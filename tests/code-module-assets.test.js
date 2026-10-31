@@ -16,9 +16,9 @@ const vendorDir = join(root, 'vendor', 'story-block');
 const committed = readFileSync(join(root, 'src', 'code-module', 'assets.js'), 'utf8');
 const copied = new Map(VENDOR_FILES.map(([path, base64]) => [path, Buffer.from(base64, 'base64')]));
 
-// The baseline these counts describe: Story Block 2.11.0. The closure contains
+// The baseline these counts describe: Story Block 2.11.3. The closure contains
 // 144 files, so the copied set has 147 entries (the closure, plus LICENSE, package.json and the generated VERSION text).
-const BASELINE = { version: '2.11.0', commit: '455c10442dc7505908d4fa198a45d0dec2a2bb19', files: 144 };
+const BASELINE = { version: '2.11.3', commit: '121e49a15758fc28b0c5f60920c2102ce6658e2a', files: 144 };
 
 test('the committed assets.js is exactly what the generator writes now', () => {
     assert.equal(committed, codeModuleAssets(root));
