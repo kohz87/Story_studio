@@ -212,7 +212,7 @@ main{padding:14px 16px;overflow:visible;gap:12px}
 .tl-inline{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .tl-inline input[type=number]{width:80px}
 .tl-inline select{width:auto}
-.tl-inline input[type=checkbox]{width:44px}
+.tl-inline input[type=checkbox]{width:44px;flex:0 0 44px}
 .tl-check{flex-wrap:nowrap}
 .tl-results{display:flex;flex-direction:column;gap:4px}
 .tl-result{text-align:left;font-size:13px}
