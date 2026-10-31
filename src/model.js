@@ -1,6 +1,7 @@
 // Pack model: openPack, exportPack, and indexReferences (pure).
 
 import { validatePack } from './data-modules/sb-adapter.js';
+import { lastingProblems } from './timeline/lasting.js';
 import { LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 import { foldKey } from '../vendor/story-block/src/text.js';
 import { identity } from './identity.js';
@@ -576,9 +577,11 @@ export function openPack(json) {
         }
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) document = safeClone(parsed);
     }
+    // Story Block does not know the commands of other modules; Story Director refuses a lasting change outside its limits, so it is flagged here.
+    const lasting = document ? lastingProblems(document) : [];
     const model = deepFreeze({
         document,
-        validation: { ok: checked.ok, errors: checked.errors ?? [], warnings: checked.warnings ?? [] },
+        validation: { ok: checked.ok && !lasting.length, errors: [...checked.errors ?? [], ...lasting], warnings: checked.warnings ?? [] },
         references: document ? indexReferences(document) : [],
         packHash: checked.ok ? checked.packHash ?? null : null,
     });

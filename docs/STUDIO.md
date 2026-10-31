@@ -20,6 +20,54 @@ Use Node 24 and run `npm run check` and `npm test`. Browser tests need Chromium.
 authoring kit with `npm run sync-sb -- --from <Story Block checkout>`; do not hand-edit those synchronized copies.
 See [the application guide](STUDIO_PART2.md) and [the authoring kit](../authoring-kit/README.md).
 
+## Timeline: events and lasting changes
+
+The Events section is the Timeline (`src/screens/timeline.js`, form in `timeline-form.js`; the pure parts are under
+`src/timeline/`). A pack event has an `id`, a `when` condition, the `cue` the AI is told once, and optionally `once`,
+`after` and `then`; it has no name, so the form's name is the ID in words and renaming saves a new ID and moves
+every `after` that points at it.
+
+### The Timeline and the List
+
+The Timeline groups events by the story year of their date on the pack's calendar (the year's era and number, and
+"the story starts …" on the year the calendar starts in), sorted by date. An event that follows another (`after`)
+sits indented under it, labelled "N days later" or "right after" (or with its own date when it has one). Events
+without a date are listed last, under "Any date · by place only". Rows show the date, the name and chips (places and
+regions, "once" or "every visit", "after: …"). The List switch shows today's plain list; both open the same form.
+Packs and events load, show and export unchanged unless an event is edited.
+
+### The condition
+
+The form writes `when` in the one shape the pack's own events use, and reads it back (`src/timeline/condition.js`):
+
+```
+time() != null && time() >= <from> && time() < <until>        (a date, until optional)
+query('chronicle.passed', { name: '<world event>', minutes: <N> })   (at least N story minutes after it)
+query('scene.place') != null && (query('scene.place').region == 'A' || query('scene.place').name == 'B')
+```
+
+joined with `&&`; no clause at all is `true`. A condition is read back only when writing what was read gives the
+same text again, so anything else (another call, another order, other spacing) opens as "Written by hand: edit it
+under Advanced" and is never rewritten by the form unless the author chooses "Use the form instead". A condition is
+at most 500 characters (a pack's limit); the form says so when places make it longer.
+
+Dates are story minutes on the pack's calendar (`src/timeline/calendar.js`): year 0, the first month, day 1, 00:00 is
+minute 0; a pack calendar has no leap years, a pack without one runs on the Gregorian calendar with leap days.
+Dawn, noon, dusk and midnight are 6:00, 12:00, 19:00 and 0:00, the Director's own. An "until" with no time of day
+runs to the end of that day. A delay is days x 1440, hours x 60, months x the calendar's days per month x 1440 (the
+common month length, else the rounded average; 30 without a calendar); it reads back in days, or in hours when that
+is not whole days.
+
+### Lasting change
+
+Ticking **Add to Story Director's chronicle** puts `{ "command": "chronicle.lasting", "payload": { name, state,
+place?, factions?, summary?, keep? } }` in `then`, beside any other steps. Limits (Story Director refuses more, so
+the pack checker flags them in Problems): name 80, state looming, ongoing or resolved, summary 240, place 80, at
+most 4 factions of 80, keep true or false. Story Director records which event wrote the entry; the story's own
+`world` lines can add to its summary but not change its name or state. Without Story Director the news is still told
+once. "N days after" is offered only when the earlier event has a lasting change, because the days count from when
+that entry went into the chronicle; renaming the world event moves the events that count from it in the same edit.
+
 ## Part 3: character cards and lorebooks
 
 Open `dist/story-studio.html` directly from disk and open the pack you are editing. The three authoring screens

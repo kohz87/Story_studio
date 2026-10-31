@@ -82,7 +82,8 @@ test('world records and pack settings render with the ordinary pack', () => {
     ctx.onRender = renderScreen;
     for (const kind of ['places', 'routes', 'events', 'items']) {
         ctx.select(kind);
-        assert.ok(ctx.main.textContent.includes(kind[0].toUpperCase() + kind.slice(1)));
+        // The Events section is the Timeline now: its heading changed with its name.
+        assert.ok(ctx.main.textContent.includes(kind === 'events' ? 'Timeline' : kind[0].toUpperCase() + kind.slice(1)));
     }
     ctx.select('settings');
     const paths = ctx.main.querySelectorAll('textarea').map(node => JSON.parse(node.getAttribute('data-path')).join('.'));

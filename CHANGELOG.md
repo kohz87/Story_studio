@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- The Events section is now the **Timeline**: events grouped by story year on the pack's calendar, with the events that follow one nested under it ("14 days later", "right after") and those with no date under "Any date · by place only". A Timeline/List switch keeps the plain list.
+- The event form is built for authors: a name (the ID is saved from it), **On a date** / **After another event** / **Any time**, **Anywhere** / **Only in…** (searchable places and regions), the news the AI is told, **Lasting change: add to the chronicle**, a plain-words "When this fires" line, and an Advanced fold with the raw `when`, `after` and `then`. A condition Studio wrote reopens in the form; one written by hand is shown as such and kept byte for byte.
+- **Lasting change** writes a `chronicle.lasting` step (Story Director) with the world event's name, state, place, factions, summary and Keep in mind. "At least N days after" another event counts from when that event's lasting change entered the chronicle, through Story Director's `chronicle.passed` query; it is offered only when the earlier event has one. The pack checker flags a lasting change outside Story Director's limits.
+
 ## 0.2.0
 
 - RPG Battle is no longer supported. Its rules packs cannot be imported; existing RPG Battle chats should stay on the previous versions.

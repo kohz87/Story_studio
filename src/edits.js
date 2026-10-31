@@ -200,6 +200,20 @@ export function add(model, kind, record) {
     return commitSnapshot(doc, model);
 }
 
+/** Replaces the records of a kind that already exist with `list` (same identities, same order) as one edit: several events changed together. */
+export function setRecords(model, kind, list) {
+    if (!model?.document || !ALL_KINDS.has(kind)) return refuse(model, 'bad-model', kind, 'Open a supported record first.');
+    const safe = validateAndCloneValue(list);
+    const current = readKindList(model.document, kind);
+    if (!safe.ok || !Array.isArray(safe.value) || !current) return refuse(model, 'bad-value', kind, safe.error || 'The records must be a list.');
+    const packId = getPackId(model.document);
+    const keys = items => items.map(item => normalizeId(getRecordIdentity(kind, item), packId));
+    if (JSON.stringify(keys(safe.value)) !== JSON.stringify(keys(current))) return refuse(model, 'identity-field', kind, 'Records cannot be added, removed or renamed here.');
+    const doc = cloneDoc(model.document);
+    doc.content[kind === 'legacySkills' ? 'skills' : kind] = safe.value;
+    return commitSnapshot(doc, model);
+}
+
 export function renameId(model, kind, id, nextId) {
     if (!model?.document || !ALL_KINDS.has(kind)) return refuse(model, 'bad-model', kind, 'Open a supported record first.');
     const packId = getPackId(model.document);
