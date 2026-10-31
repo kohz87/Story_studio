@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { openPack, exportPack, draftsOf } from '../src/model.js';
+import { readLasting } from '../src/timeline/lasting.js';
+import { readEvent } from '../src/timeline/event.js';
+import { readAnswer } from '../src/timeline/ai-answer.js';
 import { setSchemaField } from '../src/edits.js';
 import { renderScreen } from '../src/screens/index.js';
 import { createTestContext } from './helpers/dom.js';
@@ -11,7 +14,7 @@ import { makeDraft } from '../src/timeline/drafts.js';
 import { writeCondition } from '../src/timeline/condition.js';
 import { mountStudio } from '../src/studio.js';
 import { MockDocument } from './helpers/dom.js';
-import { DRAFT_KEY } from '../src/session.js';
+import { DRAFT_KEY, readDraft, writeDraft } from '../src/session.js';
 
 const ersveil = readFileSync(new URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8');
 const idea = 'The Emperor of Highmark dies in early winter CY 612. The news reaches the north about two weeks later.';
@@ -614,3 +617,133 @@ test('review 161-3: Undo and Redo of a draft change whose save fails say so and 
     assert.equal(toolbar('Redo').disabled, true, 'and no redo step was made for it');
 });
 const setName = (model, name) => setSchemaField(model, ['name'], name);
+
+// ------------------------------------------------------------ review 162
+
+// What the browser would load after a reload: the project as saved in `store`, opened in a fresh context.
+const reopen = store => {
+    const win = { localStorage: { getItem: key => (store.has(key) ? store.get(key) : null), setItem() {} } };
+    const saved = readDraft(win);
+    assert.ok(saved, 'the saved project reads back');
+    const ctx = createTestContext(saved.model);
+    ctx.onRender = renderScreen;
+    ctx.select('events', null);
+    return ctx;
+};
+
+test('review 162-1: a draft saved before notes were tied to one field keeps its end-date warning after the update, and Keep stays off', () => {
+    const plain = openPack(ersveil);
+    const made = readAnswer(JSON.stringify([{ name: 'Weather report', when: { on: 'Icewane 4, CY 612, dawn' }, until: 123, news: 'The storm arrives.' }]), plain).items[0].draft;
+    const info = readEvent(made.record);
+    const older = { ...made, notes: made.notes.map(item => ({ ...item, seen: JSON.stringify([info.mode, info.until]) })) };
+    assert.equal(older.notes[0].seen, '["date",null]');
+    const store = new Map();
+    assert.ok(writeDraft({ localStorage: { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) } }, withDrafts(plain, [older]), true));
+    const ctx = reopen(store);
+    ctx.select('events', 'weather-report', 'draft');
+    assert.match(banner(ctx), /The end date should be words/);
+    assert.ok(named(ctx, 'Keep').disabled);
+    assert.ok(named(ctx, 'No end date is fine'));
+    click(ctx, 'After another event');
+    assert.match(banner(ctx), /The end date should be words/, 'a change of how it starts does not answer it');
+    assert.ok(named(ctx, 'Keep').disabled);
+    click(ctx, 'No end date is fine');
+    assert.ok(!/end date/.test(banner(ctx)));
+});
+
+const harbor = [{
+    name: 'Harbor closes', once: null, when: { on: null }, until: null, where: null, news: 'x'.repeat(600),
+    lasting: { name: 'N'.repeat(100), state: 'ongoing', place: 'P'.repeat(100), summary: 'S'.repeat(300), factions: Array(6).fill('F'.repeat(100)) },
+}];
+
+test('review 162-2: every warning of a draft comes back after a reload, and Keep still waits for each', () => {
+    const { ctx, store } = mountWithStorage();
+    click(ctx, '✦ Write with an AI');
+    paste(ctx, harbor);
+    click(ctx, 'Add 1 as a draft');
+    const before = banner(ctx);
+    assert.match(before, /“where” should be/);
+    assert.match(before, /only the first 500 were kept/);
+    const saved = drafts(ctx)[0].notes.length;
+    const back = reopen(store);
+    assert.equal(drafts(back)[0].notes.length, saved, 'no note was dropped on the way to the store and back');
+    back.select('events', 'harbor-closes', 'draft');
+    assert.equal(banner(back), before, 'the same things are said');
+    // Turn off the invalid lasting change and set aside the start, end, repeat and place: the cut news still stops Keep.
+    tick(back, 'Add to Story Director', false);
+    for (const label of ['Once is fine', 'Not dated is fine', 'No end date is fine', 'Anywhere is fine']) click(back, label);
+    assert.match(banner(back), /only the first 500 were kept/);
+    assert.ok(named(back, 'Keep').disabled, 'the shortened news has not been accepted');
+    click(back, 'The cut news is fine');
+    assert.ok(!named(back, 'Keep').disabled);
+});
+
+test('review 162-3: a delay field that is null beside a good one is not Ready, and Keep all keeps only the parent', () => {
+    const ctx = open();
+    click(ctx, '✦ Write with an AI');
+    paste(ctx, [{ name: 'Parent', news: 'P', lasting: { name: 'P changed', state: 'ongoing' } }, { name: 'Child', when: { after: 'Parent', days: 2, hours: null }, news: 'C' }]);
+    const cards = ctx.inspector.querySelectorAll('.tl-ai-draft').map(card => card.textContent);
+    assert.match(cards[0], /^✓ Ready/);
+    assert.match(cards[1], /^⚠ Needs a look/);
+    assert.match(cards[1], /delay of null hours is not a whole number/);
+    click(ctx, 'Add 2 as drafts');
+    click(ctx, 'Keep the 1 that is ready');
+    assert.deepEqual(drafts(ctx).map(draft => draft.record.id), ['child']);
+});
+
+test('review 162-4: two invalid lasting fields are filled one at a time in the form, each saved, and each warning clears as its field is filled', () => {
+    const { ctx, store } = mountWithStorage();
+    click(ctx, '✦ Write with an AI');
+    paste(ctx, [{ name: 'Harbor crisis', news: 'Harbor closes.', lasting: { name: 'Harbor crisis', state: 'ongoing', place: null, summary: null } }]);
+    click(ctx, 'Add 1 as a draft');
+    assert.match(banner(ctx), /place must be text, not null/);
+    assert.match(banner(ctx), /summary must be text, not null/);
+    assert.ok(named(ctx, 'Keep').disabled);
+    change(aria(ctx, 'Place'), 'Auvoth');
+    assert.equal(aria(ctx, 'Place').value, 'Auvoth', 'the place is taken');
+    assert.ok(!/place must be text/.test(banner(ctx)), 'its warning is gone');
+    assert.match(banner(ctx), /summary must be text, not null/);
+    assert.equal(readLasting(drafts(ctx)[0].record).place, 'Auvoth');
+    assert.equal(readLasting(readDraftRecord(store)).place, 'Auvoth', 'and saved');
+    assert.ok(named(ctx, 'Keep').disabled);
+    change(aria(ctx, 'Summary'), 'The harbor is closed.');
+    assert.equal(aria(ctx, 'Summary').value, 'The harbor is closed.');
+    assert.ok(!/summary must be text/.test(banner(ctx)));
+    assert.deepEqual(readLasting(readDraftRecord(store)), { name: 'Harbor crisis', state: 'ongoing', place: 'Auvoth', summary: 'The harbor is closed.' });
+    assert.ok(!named(ctx, 'Keep').disabled);
+    click(ctx, 'Keep');
+    assert.equal(ctx.model.document.content.events.at(-1).id, 'harbor-crisis');
+});
+const readDraftRecord = store => JSON.parse(store.get(DRAFT_KEY)).drafts[0].record;
+
+test('review 162-4: a warning about a lasting field the writer would rather leave blank can be set aside', () => {
+    const ctx = open();
+    click(ctx, '✦ Write with an AI');
+    paste(ctx, [{ name: 'Harbor crisis', news: 'Harbor closes.', lasting: { name: 'Harbor crisis', state: 'ongoing', place: null, summary: null } }]);
+    click(ctx, 'Add 1 as a draft');
+    click(ctx, 'No place is fine');
+    assert.ok(named(ctx, 'Keep').disabled, 'the summary is still open');
+    click(ctx, 'No summary is fine');
+    assert.ok(!named(ctx, 'Keep').disabled);
+});
+
+test('review 162-5: through the controls, a name the answer did not use is not guessed from its slug, and the superscript is its own name', () => {
+    const cards = ctx => ctx.inspector.querySelectorAll('.tl-ai-draft').map(card => card.textContent);
+    let ctx = open();
+    click(ctx, '✦ Write with an AI');
+    paste(ctx, [{ name: 'Dawn-Watch Falls', news: 'The fort falls.', lasting: { name: 'Fort falls', state: 'ongoing' } }, { name: 'The guard is mourned', when: { after: 'Dawn Watch Falls', days: 2 }, news: 'The guard is mourned.' }]);
+    assert.match(cards(ctx)[0], /^✓ Ready/);
+    assert.match(cards(ctx)[1], /^⚠ Needs a look/);
+    click(ctx, 'Add 2 as drafts');
+    click(ctx, 'Keep the 1 that is ready');
+    assert.deepEqual(ctx.model.document.content.events.slice(7).map(event => event.id), ['dawn-watch-falls']);
+    ctx = open();
+    click(ctx, '✦ Write with an AI');
+    paste(ctx, [{ name: 'Gate ² opens', news: 'Opens.', lasting: { name: 'Superscript', state: 'ongoing' } }, { name: 'Gate 2 opens', news: 'Opens.', lasting: { name: 'Plain', state: 'ongoing' } }, { name: 'The guard is mourned', when: { after: 'Gate 2 opens', days: 2 }, news: 'Mourned.' }]);
+    assert.ok(cards(ctx).every(card => /^✓ Ready/.test(card)), JSON.stringify(cards(ctx)));
+    click(ctx, 'Add 3 as drafts');
+    click(ctx, 'Keep all 3 drafts');
+    const mourned = ctx.model.document.content.events.find(event => event.id === 'the-guard-is-mourned');
+    assert.equal(mourned.after, 'gate-2-opens-2');
+    assert.match(mourned.when, /Plain/);
+});

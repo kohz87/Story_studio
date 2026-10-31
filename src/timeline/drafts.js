@@ -22,7 +22,11 @@ export const NEWS_PLACEHOLDER = '[WHAT THE AI IS TOLD]';
 export const MAX_DRAFTS = 60;
 /** The most the drafts of a project may weigh once written out: the project is saved with them, and a save that is too big is lost. */
 export const MAX_DRAFT_BYTES = 1024 * 1024;
-const MAX_NOTES = 12;
+/**
+ * The most notes a draft keeps. An answer gives an event at most about twenty (one per field, and the lasting change's texts are
+ * grouped); a draft with more than this is refused when it is added, never trimmed, so no warning is lost on a reload.
+ */
+export const MAX_NOTES = 32;
 
 /** What the writer is told when the browser would not keep the project with its drafts; `result` says what that meant ("they were not added"). */
 export const saveFailed = result => `The browser would not save the project with these drafts, so ${result}. Export your pack to a file first, or make room (clear other site data) and try again.`;
@@ -69,12 +73,28 @@ export function makeDraft(record, notes = []) {
     };
 }
 
+// Whether a saved note still holds: the field it is about is as it was. The form of `seen` has changed over time (a note about the
+// date or the end once also held how the event starts). A `seen` that cannot be compared with what is read now is not guessed at:
+// the note stays, so the warning shows and the draft cannot be kept until the field is fixed or the note is set aside.
+function noteHolds(item, record) {
+    const now = noteSignature(item.kind, record, item.field);
+    if (JSON.stringify(now) === item.seen) return true;
+    let was;
+    try { was = JSON.parse(item.seen); } catch { return true; }
+    if (!Array.isArray(was)) return true;
+    // The older form of a date or end note: `[how it starts, the date]`. Only the date is what the note is about.
+    if ((item.kind === 'when' || item.kind === 'until') && was.length === 2 && typeof was[0] === 'string') return JSON.stringify(was[1]) === JSON.stringify(now[0]);
+    const one = ['when', 'until', 'after', 'delay', 'once', 'news', 'lasting'].includes(item.kind);
+    if (one ? was.length !== 1 : item.kind === 'where' && !was.every(place => typeof place === 'string')) return true;
+    return false;
+}
+
 // The notes of a draft that still hold, each with its place in `draft.notes`.
 function activeNotes(draft) {
     const out = [];
     draft.notes.forEach((item, index) => {
         if (typeof item === 'string') { if (draftSignature(draft.record) === draft.seen) out.push({ index, text: item }); }
-        else if (JSON.stringify(noteSignature(item.kind, draft.record, item.field)) === item.seen) out.push({ index, text: item.text, ...item.ack ? { ack: item.ack } : {} });
+        else if (noteHolds(item, draft.record)) out.push({ index, text: item.text, ...item.ack ? { ack: item.ack } : {} });
     });
     return out;
 }
@@ -225,6 +245,7 @@ const sameError = (a, b) => a.code === b.code && a.path === b.path && a.message 
 export function addDrafts(model, items) {
     const drafts = draftsOf(model);
     if (drafts.length + items.length > MAX_DRAFTS) return refuse(model, `A project holds at most ${MAX_DRAFTS} drafts: keep or discard some first.`);
+    if (items.some(item => Array.isArray(item.notes) && item.notes.length > MAX_NOTES)) return refuse(model, `A draft can carry at most ${MAX_NOTES} notes about what could not be written, and one here has more. Add fewer events at a time, or ask the AI for a simpler answer.`);
     const next = [...drafts, ...items];
     // The project is saved with its drafts, and a save that is too big is lost on reload: say so now instead.
     if (JSON.stringify(next).length > MAX_DRAFT_BYTES) return refuse(model, 'These drafts are too big to be saved with the project. Keep or discard some drafts first, or add fewer events.');

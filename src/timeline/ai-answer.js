@@ -32,6 +32,8 @@ const NESTING = 4;
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = value => (typeof value === 'string' ? value.trim() : '');
 const fold = value => String(value ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+// The name of an event as the answer used it: case and spacing only (a superscript two is not a two, a hyphen is not a space).
+const nameKey = value => String(value ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
 const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const quoted = value => `“${value}”`;
 // The length of a text in characters, and the text cut to `max` characters (never in the middle of a character).
@@ -218,10 +220,12 @@ function readWhere(raw, find) {
 
 // ---------------------------------------------------------------- a lasting change
 
-// The payload for the lasting change `raw` asks for, and `cuts`: the texts that were cut, each `{ field, text }` in words. A text
-// is cut one character past its limit, so one that is too long still shows as too long (the check of a lasting change refuses it)
-// and the draft stays small; a text at its limit, or one past it that was not cut, is kept whole. A field that is there but of the
-// wrong kind (null too) is kept as it came, for that check to refuse; only a field that is left out is left at its default.
+// The payload for the lasting change `raw` asks for, and `cuts`: what was changed on the way, one `{ field, text, ack? }` for each
+// field of the lasting change (a field with several texts cut says so once). A text is cut one character past its limit, so one that
+// is too long still shows as too long (the check of a lasting change refuses it) and the draft stays small; a text at its limit, or
+// one past it that was not cut, is kept whole. An optional field that is there but cannot be read (null, or the wrong kind) is left
+// out of the payload and said, so the form can repair the fields one at a time; `name` and `state`, which a lasting change needs,
+// are kept as they came for the check to refuse. Only a field that is left out is left at its default.
 function readLastingPayload(raw, fallbackName) {
     const limits = LASTING_LIMITS;
     const cuts = [];
@@ -232,22 +236,42 @@ function readLastingPayload(raw, fallbackName) {
         return clip(trimmed, max + 1);
     };
     const blank = value => value === undefined || (typeof value === 'string' && !value.trim());
+    // An optional text that is there: read when it is text, else left out and said.
+    const optional = (field, max, what, ack) => {
+        const value = raw[field];
+        if (blank(value)) return;
+        if (typeof value === 'string') payload[field] = words(value, max, field, what);
+        else cuts.push({ field, ack, text: `Lasting change: ${field} must be text, not ${describe(value)}, so it was left out: fill it in the form, or leave it blank.` });
+    };
     const payload = { name: blank(raw.name) ? clip(fallbackName, limits.name) : words(raw.name, limits.name, 'name', 'The name') };
     // With no name of its own the lasting change takes the event's, which is cut to fit; that is said too, and the writer may accept it.
     if (blank(raw.name) && size(fallbackName) > limits.name) cuts.push({ field: 'name', ack: 'The cut name is fine', text: `The lasting change has no name of its own, so it takes the event’s, which is ${size(fallbackName)} characters: only the first ${limits.name} were kept.` });
     payload.state = typeof raw.state === 'string' ? clip(raw.state.trim().toLowerCase(), 20) : bounded(raw.state);
     if (payload.state === undefined) delete payload.state;
-    if (!blank(raw.place)) payload.place = words(raw.place, limits.place, 'place', 'The place');
+    optional('place', limits.place, 'The place', 'No place is fine');
     if (raw.factions !== undefined) {
         const list = typeof raw.factions === 'string' ? [raw.factions] : raw.factions;
-        if (!Array.isArray(list)) payload.factions = bounded(list);
+        if (!Array.isArray(list)) cuts.push({ field: 'factions', ack: 'No factions is fine', text: `Lasting change: factions must be a list of at most ${limits.factions} names, not ${describe(list)}, so it was left out: add the factions in the form, or leave it blank.` });
         else if (list.length) {
-            if (list.length > limits.factions + 1) cuts.push({ field: 'factions', text: `The list has ${list.length} factions and a lasting change allows ${limits.factions}: it was shortened to ${limits.factions + 1}, and still needs cutting down in the form.` });
-            payload.factions = list.slice(0, limits.factions + 1).map(name => words(name, limits.faction, 'factions', 'A faction name'));
+            // One note for the whole list: how many names were cut, how many were no names, and whether the list itself was cut.
+            const asked = list.slice(0, limits.factions + 1);
+            const names = asked.filter(name => typeof name === 'string' && name.trim());
+            const unread = asked.filter(name => typeof name !== 'string').length;
+            const tooLong = names.filter(name => size(name.trim()) > limits.faction + 1).length;
+            const cut = tooLong > 0 || list.length > limits.factions + 1;
+            const said = [];
+            if (list.length > limits.factions + 1) said.push(`The list has ${list.length} factions and a lasting change allows ${limits.factions}: it was shortened to ${limits.factions + 1}.`);
+            if (tooLong) said.push(`${tooLong === 1 ? 'A faction name was' : `${tooLong} faction names were`} longer than ${limits.faction} characters and ${tooLong === 1 ? 'was' : 'were'} shortened to ${limits.faction + 1}.`);
+            if (unread) said.push(`Lasting change: ${unread === 1 ? 'a faction is' : `${unread} factions are`} not text, so ${unread === 1 ? 'it was' : 'they were'} left out.`);
+            if (names.length) payload.factions = names.map(name => clip(name.trim(), limits.faction + 1));
+            if (said.length) cuts.push({ field: 'factions', ...cut ? {} : { ack: 'The other factions are fine' }, text: `${said.join(' ')} ${cut ? 'The list still needs cutting down in the form.' : 'Check the factions in the form.'}` });
         }
     }
-    if (!blank(raw.summary)) payload.summary = words(raw.summary, limits.summary, 'summary', 'The summary');
-    if (raw.keep !== undefined && raw.keep !== false) payload.keep = bounded(raw.keep);
+    optional('summary', limits.summary, 'The summary', 'No summary is fine');
+    if (raw.keep !== undefined && raw.keep !== false) {
+        if (typeof raw.keep === 'boolean') payload.keep = raw.keep;
+        else cuts.push({ field: 'keep', ack: 'Not kept in mind is fine', text: `Lasting change: keep must be true or false, not ${describe(raw.keep)}, so it was left out: set it in the form.` });
+    }
     return { payload, cuts };
 }
 
@@ -313,16 +337,15 @@ export function readAnswer(source, model) {
 
     // 2. The earlier event of each "after", by the name the answer used for it, normalised by case and spacing only (never by the ID
     // two names would make: "Dawn-Watch Falls" and "Dawn Watch Falls" are two events). An event of that name in the answer wins
-    // (the writer asked for it in this very answer, and its ID only differs because the pack's took the name), then the pack's.
-    // Only when neither has that name is the ID its name makes looked for in the answer, and two events that make it are not guessed
-    // between: the child is left with a note instead.
+    // (the writer asked for it in this very answer, and its ID only differs because the pack's took the name), then the pack's (the pack
+    // has IDs, not names, so its event is the one whose ID the name makes). Two events of the answer whose names are the same are not
+    // guessed between, and a name that matches neither is not guessed from the ID it would make: the child is left with a note instead.
     const group = key => {
         const map = new Map();
         for (const entry of entries) map.set(key(entry), [...map.get(key(entry)) ?? [], entry]);
         return map;
     };
-    const byName = group(entry => fold(entry.name));
-    const byBase = group(entry => entry.base);
+    const byName = group(entry => nameKey(entry.name));
     const packParent = name => {
         const slug = slugify(name);
         const record = packEvents.find(event => localId(model, identity(event, 'events')) === slug);
@@ -336,7 +359,7 @@ export function readAnswer(source, model) {
         if (given === undefined) continue;
         const asked = typeof given === 'string' ? clip(text(given), NAME_READ) : '';
         if (!asked) { note(entry, 'after', typeof given === 'string' ? '“after” is empty: choose the earlier event in the form.' : `“after” should be the name of an event, not ${describe(given)}: choose the earlier event in the form.`); continue; }
-        const named = byName.get(fold(asked)) ?? [];
+        const named = byName.get(nameKey(asked)) ?? [];
         const pack = packParent(asked);
         if (named.length > 1) { ambiguous(entry, asked, named); continue; }
         if (named.length && named[0] !== entry) {
@@ -344,12 +367,7 @@ export function readAnswer(source, model) {
             if (pack) entry.info.push(`There is an event called ${quoted(asked)} in the pack and another in this answer. This one comes after the one in this answer (${named[0].id}), not the pack's (${pack.id}).`);
         } else if (pack) entry.parent = pack;
         else if (named.length) note(entry, 'after', 'It cannot come after itself: choose the earlier event in the form.');
-        else {
-            const likes = byBase.get(slugify(asked)) ?? [];
-            if (likes.length > 1) ambiguous(entry, asked, likes);
-            else if (likes.length && likes[0] !== entry) entry.parent = answerParent(likes[0]);
-            else note(entry, 'after', likes.length ? 'It cannot come after itself: choose the earlier event in the form.' : `It comes after ${quoted(asked)}, which is not an event in the pack or in this answer: choose the earlier event in the form.`);
-        }
+        else note(entry, 'after', `It comes after ${quoted(asked)}, which is not an event in the pack or in this answer: choose the earlier event in the form.`);
     }
     // An "after" that leads back to the event itself is no order at all.
     for (const entry of entries) {
@@ -389,7 +407,9 @@ export function readAnswer(source, model) {
             }
         }
         if (entry.parent && !entry.parent.once) note(entry, 'after', `${quoted(humanName(entry.parent.id))} happens again and again, so nothing can come after it: choose another earlier event in the form.`);
-        // The delay: days, hours or months after the earlier event's lasting change.
+        // The delay: days, hours or months after the earlier event's lasting change. Every unit that is there is read, so a second one
+        // that is wrong is not hidden behind the first; only one delay can be written.
+        let counted = null;
         for (const [unit, size] of [['days', DAY], ['hours', 60], ['months', calendar.monthDays * DAY]]) {
             const given = isRecord(when) ? when[unit] : undefined;
             if (given === undefined) continue;
@@ -398,8 +418,8 @@ export function readAnswer(source, model) {
             else if (mode === 'date') note(entry, 'delay', `A date and a delay after another event cannot both be written, so the delay of ${describe(given)} ${unit} was left out: choose one in the form.`);
             else if (n === null || !Number.isSafeInteger(n * size)) note(entry, 'delay', `The delay of ${describe(given)} ${unit} is not a whole number of at least 1: set it in the form.`);
             else if (!entry.parent.chronicle) note(entry, 'delay', `${quoted(humanName(entry.parent.id))} has no lasting change, and a delay counts from when one happens: give it one in the form, then set the delay.`);
-            else spec.since = { name: entry.parent.chronicle, minutes: n * size };
-            break;
+            else if (counted) note(entry, 'delay', `Only one delay can be written, so the delay of ${describe(given)} ${unit} was left out beside the ${counted}: choose one in the form.`, { ack: `Just the ${counted} is fine` });
+            else { spec.since = { name: entry.parent.chronicle, minutes: n * size }; counted = `${n} ${unit}`; }
         }
         const until = raw.until;
         if (until !== undefined) {

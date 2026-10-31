@@ -7,7 +7,7 @@ import { draftProblems, keepDraft, keepAll } from '../src/timeline/drafts.js';
 import { packCalendar } from '../src/timeline/calendar.js';
 import { writeCondition, readCondition } from '../src/timeline/condition.js';
 import { readEvent } from '../src/timeline/event.js';
-import { readLasting, LASTING_CAPABILITY } from '../src/timeline/lasting.js';
+import { readLasting, checkLasting, LASTING_CAPABILITY } from '../src/timeline/lasting.js';
 import { parse } from '../vendor/story-block/src/v2/events/condition.js';
 
 const ersveil = readFileSync(new URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8');
@@ -507,9 +507,15 @@ test('review 161-4: "after" resolves by the exact name the answer used, and two 
     const issues = problemsOf(unsure)[2];
     assert.ok(issues.some(line => /could mean any of 2 events in this answer \(dawn-watch-falls, dawn-watch-falls-2\)/.test(line)), JSON.stringify(issues));
     assert.equal(keepAll(withDrafts(model(), unsure.items.map(item => item.draft))).kept, 2, 'the two are kept, the child is not');
-    // No name matches exactly but two events make the same ID: not guessed either. One that makes it alone is followed.
-    assert.ok(problemsOf(read([fort, guard, mourned('dawn_watch falls')]))[2].some(line => /could mean any of 2 events/.test(line)));
-    assert.equal(read([fort, mourned('Dawn Watch Falls')]).items[1].draft.record.after, 'dawn-watch-falls');
+    // No name matches exactly: the ID the name would make is not guessed from (review 162-5; this pinned the guess before), whether one
+    // event or two make it.
+    for (const [label, events] of [['two', [fort, guard]], ['one', [fort]]]) {
+        const lost = problemsOf(read([...events, mourned('dawn_watch falls')]))[events.length];
+        assert.ok(lost.some(line => /which is not an event in the pack or in this answer/.test(line)), `${label}: ${JSON.stringify(lost)}`);
+    }
+    const guessed = read([fort, mourned('Dawn Watch Falls')]);
+    assert.equal(guessed.items[1].draft.record.after, undefined, 'a name the answer did not use is not matched by its slug');
+    assert.ok(problemsOf(guessed)[1].some(line => /“Dawn Watch Falls”, which is not an event in the pack or in this answer/.test(line)), JSON.stringify(problemsOf(guessed)[1]));
     // The pack's event of that ID is followed over an event that only makes the same ID (the pack has no names).
     const lasting = { command: 'chronicle.lasting', payload: { name: 'Old fall', state: 'ongoing' } };
     const m = model([{ id: 'dawn-watch-falls', when: 'true', cue: 'Old.', then: [lasting] }]);
@@ -577,4 +583,105 @@ test('review 161-5: text bounds count characters, never split one, and say when 
     assert.ok(!date.problems.some(line => /longer than 200/.test(line)), 'spaces around a date are no part of it');
     const longDate = one({ ...base, when: { on: `Rainmoot 4, CY 613, dawn ${dragons(300)}` } });
     assert.ok(longDate.problems.some(line => /could not be read: it is longer than 200 characters/.test(line)), JSON.stringify(longDate.problems));
+});
+
+// ------------------------------------------------------------ review 162
+
+test('review 162-3: every delay field that is there is checked, each alone and beside another', () => {
+    const parent = { name: 'Parent', news: 'P', lasting: { name: 'P changed', state: 'ongoing' } };
+    const child = delay => read([parent, { name: 'Child', when: { after: 'Parent', ...delay }, news: 'C' }]);
+    // The review's repro: two days, and hours that are null.
+    const repro = child({ days: 2, hours: null });
+    assert.match(repro.items[1].draft.notes.map(item => item.text).join(' '), /delay of null hours is not a whole number of at least 1/);
+    assert.ok(problemsOf(repro)[1].length > 0, 'Child is not ready');
+    assert.equal(keepAll(withDrafts(model(), repro.items.map(item => item.draft))).kept, 1, 'only the parent is kept');
+    const wrong = [null, 0, -1, 1.5, '1.5', 'soon', [3], {}, true, false];
+    const units = ['days', 'hours', 'months'];
+    for (const first of units) for (const second of units) {
+        if (first === second) continue;
+        for (const bad of wrong) {
+            // One unit is fine, the other is wrong: whichever order they are written in, the wrong one is said.
+            const result = child({ [first]: 2, [second]: bad });
+            assert.ok(problemsOf(result)[1].some(line => new RegExp(`${second} is not a whole number of at least 1`).test(line)), `${first}: 2, ${second}: ${JSON.stringify(bad)}`);
+            const flipped = child({ [second]: bad, [first]: 2 });
+            assert.ok(problemsOf(flipped)[1].some(line => new RegExp(`${second} is not a whole number of at least 1`).test(line)), `flipped ${second}: ${JSON.stringify(bad)}, ${first}: 2`);
+        }
+    }
+    // All three, one wrong; and each alone.
+    assert.ok(problemsOf(child({ days: 1, hours: 2, months: null }))[1].some(line => /months is not a whole number/.test(line)));
+    for (const unit of units) for (const bad of wrong) assert.ok(problemsOf(child({ [unit]: bad }))[1].some(line => new RegExp(`${unit} is not a whole number`).test(line)), `${unit} alone: ${JSON.stringify(bad)}`);
+    // Two units that are both fine cannot both be written: the first counts, the other is said, and the writer may set it aside.
+    const both = child({ days: 2, hours: 3 });
+    const [, kid] = both.items.map(item => item.draft);
+    assert.deepEqual(readCondition(kid.record.when).since, { name: 'P changed', minutes: 2 * 1440 });
+    const said = problemsOf(both)[1];
+    assert.equal(said.length, 1, JSON.stringify(said));
+    assert.match(said[0], /Only one delay can be written, so the delay of 3 hours was left out beside the 2 days/);
+    assert.equal(kid.notes[0].ack, 'Just the 2 days is fine');
+    // One unit alone is quiet.
+    assert.deepEqual(problemsOf(child({ hours: 5 }))[1], []);
+});
+
+test('review 162-4: an optional lasting field that cannot be read is left out of the payload and said, so the fields can be fixed one at a time', () => {
+    // The review's repro: a place and a summary that are null.
+    const crisis = one({ name: 'Harbor crisis', news: 'Harbor closes.', lasting: { name: 'Harbor crisis', state: 'ongoing', place: null, summary: null } });
+    assert.deepEqual(readLasting(crisis.record), { name: 'Harbor crisis', state: 'ongoing' }, 'nothing invalid is kept in the payload');
+    assert.equal(crisis.problems.length, 2, JSON.stringify(crisis.problems));
+    assert.match(crisis.problems[0], /place must be text, not null/);
+    assert.match(crisis.problems[1], /summary must be text, not null/);
+    assert.deepEqual(crisis.item.draft.notes.map(item => [item.field, item.ack]), [['place', 'No place is fine'], ['summary', 'No summary is fine']]);
+    // The rest of the payload is valid, so each field can be filled alone: checkLasting sees no other problem.
+    assert.deepEqual(checkLasting({ ...readLasting(crisis.record), place: 'Auvoth' }), []);
+    assert.deepEqual(checkLasting({ ...readLasting(crisis.record), summary: 'The harbor is closed.' }), []);
+    // Each kind of optional field: left out, said once, and nothing else is wrong with the payload.
+    const base2 = { name: 'N', state: 'ongoing' };
+    for (const [field, value, pattern] of [
+        ['place', 5, /place must be text, not 5/], ['place', {}, /place must be text, not an object/], ['summary', [], /summary must be text, not a list/],
+        ['factions', 9, /factions must be a list of at most 4 names, not 9/], ['factions', null, /factions must be a list .*not null/],
+        ['keep', null, /keep must be true or false, not null/], ['keep', 'yes', /keep must be true or false, not “yes”/],
+    ]) {
+        const result = one({ ...base, lasting: { ...base2, [field]: value } });
+        assert.deepEqual(readLasting(result.record), base2, `${field}: ${JSON.stringify(value)}`);
+        assert.equal(result.problems.length, 1, `${field}: ${JSON.stringify(result.problems)}`);
+        assert.match(result.problems[0], pattern);
+        assert.equal(result.item.draft.notes[0].field, field);
+    }
+    // A faction that is no text is left out of the list, the others stay: one note for the list.
+    const crowd = one({ ...base, lasting: { ...base2, factions: ['Ironbound', null, 7, '', 'Tidecallers'] } });
+    assert.deepEqual(readLasting(crowd.record).factions, ['Ironbound', 'Tidecallers']);
+    assert.equal(crowd.item.draft.notes.length, 1);
+    assert.match(crowd.problems[0], /2 factions are not text, so they were left out/);
+    assert.equal(crowd.item.draft.notes[0].ack, 'The other factions are fine');
+    assert.deepEqual(one({ ...base, lasting: { ...base2, factions: [null] } }).record.then[0].payload, base2, 'a list of nothing readable has no factions');
+    // The names that are too long are one note for the field, however many.
+    const long = one({ ...base, lasting: { ...base2, factions: Array(3).fill('F'.repeat(100)) } });
+    assert.equal(long.item.draft.notes.length, 1);
+    assert.match(long.problems.find(line => /3 faction names were longer than 80 characters/.test(line)), /still needs cutting down/);
+    assert.equal(long.item.draft.notes[0].ack, undefined, 'a list still too long cannot be set aside');
+    // A name and a state that are there but wrong are still refused as they were.
+    assert.ok(one({ ...base, lasting: { name: null, state: 'ongoing' } }).problems.some(line => /Lasting change: name /.test(line)));
+});
+
+test('review 162-5: "after" matches the name the answer used by case and spacing only, never by its slug or by Unicode folding', () => {
+    const fort = { name: 'Dawn-Watch Falls', news: 'The fort falls.', lasting: { name: 'Fort falls', state: 'ongoing' } };
+    const mourned = after => ({ name: 'The guard is mourned', when: { after, days: 2 }, news: 'The guard is mourned.' });
+    // The review's repro: nothing in the pack, no event called "Dawn Watch Falls": the child has no earlier event.
+    const result = read([fort, mourned('Dawn Watch Falls')]);
+    assert.equal(result.items[1].draft.record.after, undefined);
+    assert.ok(problemsOf(result)[1].some(line => /“Dawn Watch Falls”, which is not an event in the pack or in this answer/.test(line)), JSON.stringify(problemsOf(result)[1]));
+    assert.equal(keepAll(withDrafts(model(), result.items.map(item => item.draft))).kept, 1);
+    assert.equal(read([fort, mourned('  DAWN-watch   falls ')]).items[1].draft.record.after, 'dawn-watch-falls', 'case and spacing are the only things that do not matter');
+    // The superscript: "Gate ² opens" and "Gate 2 opens" are two names; the child names the second.
+    const gate = (name, change) => ({ name, news: `${name}.`, lasting: { name: change, state: 'ongoing' } });
+    const gates = [gate('Gate ² opens', 'Superscript'), gate('Gate 2 opens', 'Plain')];
+    const plain = read([...gates, mourned('Gate 2 opens')]);
+    assert.equal(plain.items[2].draft.record.after, plain.items[1].id, 'the name used, not the other that folds to it');
+    assert.deepEqual(readCondition(plain.items[2].draft.record.when).since, { name: 'Plain', minutes: 2 * 1440 });
+    assert.deepEqual(problemsOf(plain), [[], [], []]);
+    const super2 = read([...gates, mourned('Gate ² opens')]);
+    assert.equal(super2.items[2].draft.record.after, super2.items[0].id);
+    // A name that is only like a name by Unicode folding is not that name.
+    const lost = read([gates[0], mourned('Gate 2 opens')]);
+    assert.equal(lost.items[1].draft.record.after, undefined);
+    assert.ok(problemsOf(lost)[1].some(line => /which is not an event in the pack or in this answer/.test(line)));
 });

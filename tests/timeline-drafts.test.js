@@ -6,10 +6,11 @@ import { setField } from '../src/edits.js';
 import { createHistory } from '../src/history.js';
 import { readDraft, writeDraft, DRAFT_KEY } from '../src/session.js';
 import { readAnswer } from '../src/timeline/ai-answer.js';
-import { makeDraft, addDrafts, discardDraft, keepDraft, keepAll, keepableCount, draftProblems, draftIssues, ackNote, renameDraft, waitingFor, sanitizeDrafts, MAX_DRAFTS, NEWS_PLACEHOLDER } from '../src/timeline/drafts.js';
+import { makeDraft, addDrafts, discardDraft, keepDraft, keepAll, keepableCount, draftProblems, draftIssues, ackNote, renameDraft, waitingFor, sanitizeDrafts, MAX_DRAFTS, MAX_NOTES, NEWS_PLACEHOLDER } from '../src/timeline/drafts.js';
 import { renderProblemGroups } from '../src/screens/problems.js';
 import { createTestContext } from './helpers/dom.js';
 import { writeCondition } from '../src/timeline/condition.js';
+import { readEvent } from '../src/timeline/event.js';
 
 const ersveil = readFileSync(new URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8');
 const answer = [
@@ -355,4 +356,101 @@ test('review 161-1: a note belongs to its own field only: changing another field
             else assert.ok(said(record), `${kind}: still said after a change of ${touches.join(', ')}`);
         }
     }
+});
+
+// ------------------------------------------------------------ review 162
+
+const storage = () => {
+    const store = new Map();
+    return { localStorage: { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) } };
+};
+const reloaded = model => {
+    const win = storage();
+    assert.ok(writeDraft(win, model, true));
+    return readDraft(win).model;
+};
+// The notes of a draft written as the project saved them before the notes were tied to one field: `[how it starts, the date]`.
+const olderShape = draft => ({
+    ...draft,
+    notes: draft.notes.map(item => {
+        if (typeof item === 'string' || (item.kind !== 'when' && item.kind !== 'until')) return item;
+        const info = readEvent(draft.record);
+        return { ...item, seen: JSON.stringify([info.mode, item.kind === 'when' ? info.from : info.until]) };
+    }),
+});
+
+test('review 162-1: a note saved in an older form stays until its field is fixed or set aside; it is not dropped by an update', () => {
+    const plain = openPack(ersveil);
+    // The review's repro: a date and an end that is not words, saved before the notes were tied to one field.
+    const made = readAnswer(JSON.stringify([{ name: 'Weather report', when: { on: 'Icewane 4, CY 612, dawn' }, until: 123, news: 'The storm arrives.' }]), plain).items[0].draft;
+    assert.equal(made.notes[0].kind, 'until');
+    const saved = olderShape(made);
+    assert.equal(saved.notes[0].seen, '["date",null]');
+    const model = reloaded(withDrafts(plain, [saved]));
+    const draft = draftsOf(model)[0];
+    assert.equal(draft.notes[0].seen, '["date",null]', 'kept as it was saved');
+    const said = (m, d) => draftProblems(m, d, 0).filter(line => /The end date should be words/.test(line)).length;
+    assert.equal(said(model, [draft]), 1, 'still said after the update');
+    assert.equal(keepDraft(model, 'weather-report').ok, false);
+    assert.equal(keepAll(model).kept, 0);
+    // Changing how it starts does not answer it (the review's path); a valid end does; so does its own button.
+    const moved = { ...draft, record: { ...draft.record, when: 'true' } };
+    assert.equal(said(model, [moved]), 1);
+    const ended = { ...draft, record: { ...draft.record, when: writeCondition({ from: 600000, until: 700000 }).when } };
+    assert.equal(said(model, [ended]), 0, 'a valid end answers it');
+    const acked = ackNote(model, 'weather-report', 0);
+    assert.equal(acked.ok, true);
+    assert.equal(draftProblems(acked.model, draftsOf(acked.model), 0).filter(line => /end date/.test(line)).length, 0);
+    // The same for a date that could not be read.
+    const lost = readAnswer(JSON.stringify([{ name: 'Lost date', when: { on: 'Frostmonth 4, CY 612' }, news: 'x' }]), plain).items[0].draft;
+    assert.equal(lost.notes[0].kind, 'when');
+    const old = olderShape(lost);
+    assert.equal(old.notes[0].seen, '["any",null]');
+    const held = reloaded(withDrafts(plain, [old]));
+    const date = draftsOf(held)[0];
+    const sayDate = d => draftProblems(held, [d], 0).filter(line => /could not be read/.test(line)).length;
+    assert.equal(sayDate(date), 1);
+    assert.equal(sayDate({ ...date, record: { ...date.record, after: 'the-turning-611' } }), 1, 'a change of how it starts does not answer the date');
+    assert.equal(sayDate({ ...date, record: { ...date.record, when: writeCondition({ from: 600000 }).when } }), 0, 'a date that is set does');
+    assert.equal(keepDraft(held, 'lost-date').ok, false);
+    // A form this version does not know cannot be compared, so the note stays (and never silently goes).
+    for (const seen of ['not json', '"text"', '{"a":1}', '[1,2,3]', '[]']) {
+        const odd = { ...made, notes: [{ ...made.notes[0], seen }] };
+        const unknown = reloaded(withDrafts(plain, [odd]));
+        assert.equal(said(unknown, draftsOf(unknown)), 1, `unknown form ${seen}`);
+        assert.equal(keepDraft(unknown, 'weather-report').ok, false, seen);
+    }
+});
+
+test('review 162-2: every note a draft is added with comes back on reload, and a draft with too many is refused, never trimmed', () => {
+    const plain = openPack(ersveil);
+    // The review's repro: a malformed place, a long news, six long factions and the rest.
+    const harbor = JSON.stringify([{
+        name: 'Harbor closes', once: null, when: { on: null }, until: null, where: null, news: 'x'.repeat(600),
+        lasting: { name: 'N'.repeat(100), state: 'ongoing', place: 'P'.repeat(100), summary: 'S'.repeat(300), factions: Array(6).fill('F'.repeat(100)) },
+    }]);
+    const item = readAnswer(harbor, plain).items[0].draft;
+    // One note for each field, however many names were cut.
+    const lasting = item.notes.filter(entry => entry.kind === 'lasting');
+    assert.deepEqual(lasting.map(entry => entry.field).sort(), ['factions', 'name', 'place', 'summary']);
+    assert.match(lasting.find(entry => entry.field === 'factions').text, /The list has 6 factions.*5 faction names were longer than 80 characters/);
+    assert.ok(item.notes.length <= MAX_NOTES);
+    const added = addDrafts(plain, [item]);
+    assert.equal(added.ok, true);
+    const before = draftProblems(added.model, draftsOf(added.model), 0);
+    const back = reloaded(added.model);
+    assert.equal(draftsOf(back)[0].notes.length, item.notes.length, 'no note is lost on reload');
+    assert.deepEqual(draftProblems(back, draftsOf(back), 0), before, 'and the same things are said');
+    assert.ok(before.some(line => /Lasting change: place|The place was 100 characters/.test(line)));
+    assert.ok(before.some(line => /only the first 500 were kept/.test(line)));
+    assert.equal(item.notes.length, 9, 'nine notes, not fourteen');
+    // A draft with more notes than a project keeps is refused with a plain message.
+    const many = makeDraft({ id: 'many', when: 'true', cue: 'x' }, Array.from({ length: MAX_NOTES + 1 }, (_, at) => ({ kind: 'news', text: `Note ${at}` })));
+    const refused = addDrafts(plain, [many]);
+    assert.equal(refused.ok, false);
+    assert.match(refused.errors[0].message, new RegExp(`at most ${MAX_NOTES} notes`));
+    const exact = makeDraft({ id: 'exact', when: 'true', cue: 'x' }, Array.from({ length: MAX_NOTES }, (_, at) => ({ kind: 'news', text: `Note ${at}` })));
+    const full = addDrafts(plain, [exact]);
+    assert.equal(full.ok, true);
+    assert.equal(draftsOf(reloaded(full.model))[0].notes.length, MAX_NOTES);
 });
