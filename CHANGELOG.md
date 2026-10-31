@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 - **Write with an AI** on the Timeline. Studio builds a prompt from the open pack (the calendar and the story's start, regions and places, names from the lorebook, the events already there) and your idea, to copy or save and paste into any AI chat; Studio never calls an AI or the network. Paste the answer back and **Check it** reads it (a code fence or sentence around it, one event instead of a list, and names in any case are fine) and says, event by event, whether it is ready or needs a look, in plain words: a place or region the pack lacks, a date before the story starts or one that cannot be read, an unknown month, an "after" that names nothing or whose earlier event has no lasting change, news over 500 characters, a lasting change outside Story Director's limits, an ID already taken. Each event is written the way the event form writes it.
 - Events from an AI are added as **drafts**: on the Timeline with a "draft" chip and a dashed outline, kept in the project (they survive a reload and undo like other edits), and left out of the exported pack and of Problems until kept. Open a draft to change it in the usual form; **Keep**, **Discard** and **Keep all** each take one undo step, and a draft that needs a look cannot be kept until it is fixed.
