@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { openPack } from '../src/model.js';
+import { writeCondition } from '../src/timeline/condition.js';
 import { buildPrompt, wordCount, cutNote, PROMPT_LIMIT, IDEA_LIMIT } from '../src/timeline/ai-prompt.js';
 
 const ersveil = JSON.parse(readFileSync(new URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8'));
@@ -124,4 +125,71 @@ test('docs/AI_PROMPT.md holds the same answer format and rules, with blanks', ()
     assert.ok(doc.includes(text.slice(0, text.indexOf('\n')).replace('Ersveil (open world)', '[YOUR PACK NAME]')));
     assert.match(doc, /\[WRITE YOUR IDEA HERE/);
     assert.match(doc, /pasted? .*Studio|paste the answer/i);
+});
+
+// Review 159 (8): the whole prompt stays within PROMPT_LIMIT, whatever the pack holds.
+const pad = (p, i, n = 75) => `${p}${i} ${String.fromCharCode(65 + i % 26).repeat(n - p.length - String(i).length - 1)}`;
+function bigPack() {
+    const places = Array.from({ length: 80 }, (_, i) => ({ slug: `place-${i}`, name: pad('Place', i), region: pad('Region', i), x: 0, y: 0 }));
+    const creatures = Array.from({ length: 100 }, (_, i) => ({ slug: `npc-${i}`, name: pad('Lore', i) }));
+    const events = Array.from({ length: 40 }, (_, i) => ({ id: `event-${i}-${'e'.repeat(48)}`, when: writeCondition({ where: places.slice(0, 3).map(p => ({ kind: 'place', name: p.name })) }).when, cue: 'News' }));
+    const calendar = { era: 'CY', months: Array.from({ length: 60 }, (_, i) => ({ name: pad('Month', i, 38), days: 30 })), start: { year: 1, month: 1, day: 1 } };
+    return openPack({ id: 'big', version: '1.0.0', name: 'Big', requires: { storyBlock: '^2' }, calendar, content: { places, creatures, events } });
+}
+
+test('a valid pack with a big calendar, regions, names and events still gives a prompt within the limit, whatever is switched on', () => {
+    const model = bigPack();
+    assert.equal(model.validation.ok, true, JSON.stringify(model.validation.errors));
+    const full = buildPrompt(model.document, { idea: 'a'.repeat(2000) });
+    const noPlaces = buildPrompt(model.document, { idea: 'a'.repeat(2000), include: { places: false } });
+    for (const prompt of [full, noPlaces, buildPrompt(model.document, { idea: 'a'.repeat(2000), include: { calendar: false } }), buildPrompt(model.document, { idea: 'a'.repeat(2000), include: { events: false, names: false } })]) {
+        assert.ok(prompt.characters <= PROMPT_LIMIT, String(prompt.characters));
+        assert.equal(prompt.characters, prompt.text.length);
+        // The format, the rules and the idea are never cut.
+        assert.ok(prompt.text.includes('ANSWER with a JSON list only') && prompt.text.includes('- Never explain outside the JSON.'));
+        assert.ok(prompt.text.includes(`THE WRITER'S IDEA:\n${'a'.repeat(2000)}`));
+    }
+    // The place list goes first: with it gone there is room for the rest, and the events keep a count.
+    assert.ok(full.cut && full.cut.shown < full.cut.total, 'the places are what is cut first');
+    assert.match(full.text, /PLACES \(80\): /);
+    assert.match(cutNote(full.cut, full.trimmed), /place list/);
+    assert.match(full.text, /EVENTS ALREADY IN THE PACK \(40\): /);
+});
+
+test('past the place list the parts give way in order: events (with their count), then names, then regions, then months; and it says what was cut', () => {
+    const doc = bigPack().document;
+    // A calendar so long that nothing else can stay: each part is cut down, in turn, and only as far as it must.
+    const months = Array.from({ length: 400 }, (_, i) => ({ name: pad('Month', i, 78), days: 30 }));
+    const prompt = buildPrompt({ ...doc, calendar: { ...doc.calendar, months } }, { idea: 'a'.repeat(2000) });
+    assert.ok(prompt.characters <= PROMPT_LIMIT, String(prompt.characters));
+    assert.deepEqual(prompt.trimmed.map(item => item.part), ['events', 'names', 'regions', 'months']);
+    assert.deepEqual(prompt.trimmed.slice(0, 3).map(item => item.shown), [0, 0, 0], 'a part gives way completely before the next one is touched');
+    assert.ok(prompt.trimmed[3].shown >= 1 && prompt.trimmed[3].shown < 400 && prompt.trimmed[3].total === 400);
+    assert.match(prompt.text, /EVENTS ALREADY IN THE PACK \(40\): not listed/, 'the count stays');
+    assert.match(prompt.text, /REGIONS \(80\): not listed/);
+    assert.match(prompt.text, /FACTIONS AND NAMES \(100\): not listed/);
+    assert.match(prompt.text, /400 months of 30 days: Month0 .*… and \d+ more/);
+    assert.match(prompt.text, /PLACES \(80\): not listed/);
+    assert.ok(prompt.text.includes('ANSWER with a JSON list only') && prompt.text.includes(`THE WRITER'S IDEA:\n${'a'.repeat(2000)}`));
+    assert.match(cutNote(prompt.cut, prompt.trimmed), /Only \d+ of 400 months of the calendar fit/);
+    // A middle case: only the events give way, and the names, regions and calendar stay whole.
+    const some = buildPrompt({ ...doc, calendar: { ...doc.calendar, months: months.slice(0, 120) } }, { idea: 'a'.repeat(2000) });
+    assert.ok(some.characters <= PROMPT_LIMIT);
+    assert.ok(some.trimmed.length >= 1 && some.trimmed[0].part === 'events');
+    if (some.trimmed.length > 1) assert.equal(some.trimmed[0].shown, 0);
+});
+
+test('every cut shows in the note under the prompt, and an uncut prompt has none', () => {
+    assert.equal(cutNote(null, []), '');
+    assert.equal(cutNote(null), '');
+    const note = cutNote({ shown: 0, total: 80 }, [{ part: 'events', shown: 3, total: 40 }, { part: 'names', shown: 0, total: 100 }]);
+    assert.match(note, /80 places could not all fit, so the place list is left out/);
+    assert.match(note, /Only 3 of 40 events already in the pack fit/);
+    assert.match(note, /Only 0 of 100 faction and lore names fit/);
+    assert.match(note, /24,000 characters/);
+    const model = bigPack();
+    const prompt = buildPrompt(model.document, { idea: 'a'.repeat(2000) });
+    assert.notEqual(cutNote(prompt.cut, prompt.trimmed), '');
+    const small = buildPrompt(ersveil, { idea });
+    assert.deepEqual(small.trimmed, []);
 });

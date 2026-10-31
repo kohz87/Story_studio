@@ -239,6 +239,7 @@ main{padding:14px 16px;overflow:visible;gap:12px}
 .tl-ai-draft .tl-ai-warn:first-child{font-weight:700;font-size:13px}
 .tl-banner{padding:10px 12px;border-radius:12px;background:var(--warn-soft);border:1px solid var(--warn);font-size:13px;display:flex;flex-direction:column;gap:8px;min-width:0}
 .tl-banner-list{margin:0;padding-left:18px;color:var(--warn-text);overflow-wrap:anywhere}
+.tl-banner-list li{margin-bottom:6px}.tl-banner-list .tl-ack{display:block;margin-top:4px;color:var(--text)}
 .chip.tl-draft{background:var(--warn-soft);color:var(--warn-text);border:1px solid var(--warn)}
 .tl-draft-row{border-style:dashed}
 .tl-warn{color:var(--warn-text);font-size:14px;flex-shrink:0}

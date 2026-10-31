@@ -6,7 +6,7 @@ import { setField } from '../src/edits.js';
 import { createHistory } from '../src/history.js';
 import { readDraft, writeDraft, DRAFT_KEY } from '../src/session.js';
 import { readAnswer } from '../src/timeline/ai-answer.js';
-import { makeDraft, addDrafts, discardDraft, keepDraft, keepAll, keepableCount, draftProblems, waitingFor, sanitizeDrafts, MAX_DRAFTS, NEWS_PLACEHOLDER } from '../src/timeline/drafts.js';
+import { makeDraft, addDrafts, discardDraft, keepDraft, keepAll, keepableCount, draftProblems, draftIssues, ackNote, renameDraft, waitingFor, sanitizeDrafts, MAX_DRAFTS, NEWS_PLACEHOLDER } from '../src/timeline/drafts.js';
 import { renderProblemGroups } from '../src/screens/problems.js';
 import { createTestContext } from './helpers/dom.js';
 
@@ -187,4 +187,139 @@ test('a note about what could not be written lasts until the date, delay or plac
     assert.deepEqual(draftProblems(model, [changed], 0), []);
     const news = { ...draft, record: { ...draft.record, cue: 'Other news.' } };
     assert.equal(draftProblems(model, [news], 0).length, 1, 'changing the news does not answer a question about the date');
+});
+
+// ------------------------------------------------------------ review 159
+
+const lostParent = JSON.stringify([{ name: 'Lost parent', when: { after: 'Missing king', days: 3 }, where: ['Not Here'], news: 'A king dies' }]);
+
+test('review 1: a note stays with the field it is about: fixing the place does not answer a missing parent or a dropped delay', () => {
+    const plain = openPack(ersveil);
+    const draft = readAnswer(lostParent, plain).items[0].draft;
+    const text = list => list.join(' | ');
+    const before = draftProblems(plain, [draft], 0);
+    assert.match(text(before), /comes after “Missing king”, which is not an event in the pack or in this answer/);
+    assert.match(text(before), /delay of 3 days but no earlier event to count from/);
+    assert.match(text(before), /“Not Here” is not a place in this pack/);
+    // Remove only the unknown place: the other two stay.
+    const noPlace = { ...draft, record: { ...draft.record, when: 'true' } };
+    const left = draftProblems(plain, [noPlace], 0);
+    assert.equal(left.length, 2, text(left));
+    assert.match(text(left), /Missing king/);
+    assert.match(text(left), /delay of 3 days/);
+    const held = withDrafts(plain, [noPlace]);
+    const refused = keepDraft(held, 'lost-parent');
+    assert.equal(refused.ok, false, 'it cannot fire at once, because it was meant to wait');
+    assert.equal(keepAll(held).kept, 0);
+    assert.equal(keepableCount(held), 0);
+    // Changing the news, the end or the once flag changes none of it either.
+    for (const record of [{ ...noPlace.record, cue: 'Other news' }, { ...noPlace.record, once: false }]) assert.equal(draftProblems(plain, [{ ...noPlace, record }], 0).length, 2);
+    // Following an existing event answers the parent but not the delay; a delay or choosing "right after" answers that.
+    const follows = { ...noPlace, record: { ...noPlace.record, after: 'the-turning-611' } };
+    assert.deepEqual(draftIssues(plain, [follows], 0).map(issue => issue.text).filter(line => /Missing king/.test(line)), []);
+    const delay = draftIssues(plain, [follows], 0).filter(issue => /delay of 3 days/.test(issue.text));
+    assert.equal(delay.length, 1);
+    assert.equal(delay[0].ack, 'Right after is fine');
+    const set = ackNote(withDrafts(plain, [follows]), 'lost-parent', delay[0].note);
+    assert.ok(set.ok);
+    assert.deepEqual(draftProblems(set.model, draftsOf(set.model), 0), []);
+    assert.equal(keepDraft(set.model, 'lost-parent').ok, true);
+    // A delay that is set answers the delay note, by itself.
+    const lasting = { ...follows, record: { ...follows.record, after: 'bluewatch-guild-board' } };
+    const timed = openPack(JSON.stringify({ ...JSON.parse(ersveil), content: { ...JSON.parse(ersveil).content, events: JSON.parse(ersveil).content.events.map(event => (event.id === 'bluewatch-guild-board' ? { ...event, then: [{ command: 'chronicle.lasting', payload: { name: 'Guild board', state: 'ongoing' } }] } : event)) } }));
+    const counted = { ...lasting, record: { ...lasting.record, when: "query('chronicle.passed', { name: 'Guild board', minutes: 4320 })" } };
+    assert.deepEqual(draftProblems(timed, [counted], 0), []);
+});
+
+test('review 1: every kind of note is tied to its own field and is set aside only by changing that field or by saying it is fine', () => {
+    const plain = openPack(ersveil);
+    const read = event => readAnswer(JSON.stringify([{ news: 'x', ...event }]), plain).items[0].draft;
+    const other = { name: 'Other', news: 'x', lasting: { name: 'Other change', state: 'ongoing' } };
+    const noteFor = (draft, kind) => draft.notes.find(note => note.kind === kind);
+    // when / until / once / lasting / news / where: each lasts while its own field is as it was.
+    const dated = read({ name: 'A', when: { on: 'sometime' } });
+    assert.equal(noteFor(dated, 'when').ack, 'Not dated is fine');
+    assert.equal(draftProblems(plain, [{ ...dated, record: { ...dated.record, cue: 'new', once: false } }], 0).length, 1);
+    assert.equal(draftProblems(plain, [{ ...dated, record: { ...dated.record, when: 'time() != null && time() >= 317700000' } }], 0).length, 0);
+    const ended = read({ name: 'B', when: 'any time', until: 'Icewane 9, CY 612' });
+    assert.ok(noteFor(ended, 'until'));
+    assert.equal(draftProblems(plain, [{ ...ended, record: { ...ended.record, when: "query('scene.place') != null && (query('scene.place').region == 'Shornmarch')" } }], 0).length, 1, 'changing the places does not answer the end date');
+    const once = read({ name: 'C', once: 'no' });
+    assert.equal(draftProblems(plain, [once], 0).length, 1);
+    assert.equal(draftProblems(plain, [{ ...once, record: { ...once.record, once: false } }], 0).length, 0);
+    const lasting = read({ name: 'D', lasting: 'text' });
+    assert.equal(draftProblems(plain, [lasting], 0).length, 1);
+    assert.equal(draftProblems(plain, [{ ...lasting, record: { ...lasting.record, then: [{ command: 'chronicle.lasting', payload: { name: 'D', state: 'ongoing' } }] } }], 0).length, 0);
+    const cut = read({ name: 'E', news: 'n'.repeat(900) });
+    assert.equal(draftProblems(plain, [cut], 0).length, 1);
+    assert.equal(draftProblems(plain, [{ ...cut, record: { ...cut.record, cue: 'Short.' } }], 0).length, 0);
+    // "Fine": the note goes, in one edit, and the draft can be kept.
+    const held = withDrafts(plain, [dated]);
+    const fine = ackNote(held, 'a', 0);
+    assert.ok(fine.ok);
+    assert.equal(draftsOf(fine.model)[0].notes.length, 0);
+    assert.equal(draftsOf(held)[0].notes.length, 1, 'the earlier snapshot is untouched (undo)');
+    assert.equal(ackNote(fine.model, 'a', 0).ok, false);
+    assert.equal(ackNote(held, 'nobody', 0).ok, false);
+    // A note with no button (the missing earlier event) cannot be set aside.
+    const orphan = readAnswer(JSON.stringify([{ name: 'F', news: 'x', when: { after: 'Nobody' } }]), plain).items[0].draft;
+    assert.equal(noteFor(orphan, 'after').ack, undefined);
+    assert.equal(ackNote(withDrafts(plain, [orphan]), 'f', orphan.notes.findIndex(note => note.kind === 'after')).ok, false);
+    void other;
+});
+
+test('notes survive a reload as they were, older whole-draft notes are still read, and rubbish is left out', () => {
+    const store = new Map();
+    const win = { localStorage: { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) } };
+    const plain = openPack(ersveil);
+    const draft = readAnswer(lostParent, plain).items[0].draft;
+    assert.ok(writeDraft(win, withDrafts(plain, [draft]), false));
+    const back = draftsOf(readDraft(win).model)[0];
+    assert.deepEqual(back, draft);
+    assert.equal(draftProblems(plain, [back], 0).length, 3);
+    const saved = JSON.parse(store.get(DRAFT_KEY));
+    store.set(DRAFT_KEY, JSON.stringify({ ...saved, drafts: [{ ...saved.drafts[0], notes: ['old note', { kind: 'nope', text: 't', seen: 's' }, { kind: 'delay', text: 't' }, { kind: 'delay', text: 'keeps', seen: '[0]', ack: 'ok' }, 5] }] }));
+    assert.deepEqual(draftsOf(readDraft(win).model)[0].notes, ['old note', { kind: 'delay', text: 'keeps', seen: '[0]', ack: 'ok' }]);
+});
+
+test('review 7: drafts too big to save are refused when they are added, not lost on reload', () => {
+    const plain = openPack(ersveil);
+    const big = makeDraft({ id: 'big', when: 'true', cue: 'x'.repeat(3 * 1024 * 1024) });
+    const refused = addDrafts(plain, [big]);
+    assert.equal(refused.ok, false);
+    assert.match(refused.errors[0].message, /too big to be saved with the project/);
+    assert.equal(draftsOf(plain).length, 0);
+    const store = new Map();
+    const win = { localStorage: { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) } };
+    assert.equal(writeDraft(win, withDrafts(plain, [big]), false), false, 'and the save of such a project does fail, as the review found');
+    assert.equal(addDrafts(plain, [makeDraft({ id: 'small', when: 'true', cue: 'x' })]).ok, true);
+});
+
+test('review 5: a draft can be renamed on its own, whatever the pack has: it is a draft, so renaming it never touches the pack', () => {
+    const plain = openPack(ersveil);
+    const pack = JSON.parse(ersveil);
+    const clash = makeDraft({ id: 'bluewatch-guild-board', when: 'true', cue: 'x' });
+    const child = makeDraft({ id: 'child', after: 'bluewatch-guild-board', when: 'true', cue: 'y' });
+    const held = withDrafts(plain, [clash, child]);
+    assert.equal(draftProblems(held, draftsOf(held), 0).length, 1);
+    const renamed = renameDraft(held, 0, 'fresh-start');
+    assert.ok(renamed.ok);
+    assert.equal(renamed.model.document, plain.document, 'the pack is untouched');
+    assert.deepEqual(draftsOf(renamed.model).map(draft => draft.record.id), ['fresh-start', 'child']);
+    assert.equal(draftsOf(renamed.model)[1].record.after, 'bluewatch-guild-board', 'a draft that follows the pack\'s event of that name keeps following it');
+    assert.deepEqual(draftProblems(renamed.model, draftsOf(renamed.model), 0), []);
+    assert.equal(keepDraft(renamed.model, 'fresh-start').ok, true);
+    // A draft that follows a draft moves with it.
+    const parent = makeDraft({ id: 'parent', when: 'true', cue: 'x' });
+    const kid = makeDraft({ id: 'kid', after: 'parent', when: 'true', cue: 'y' });
+    const moved = renameDraft(withDrafts(plain, [parent, kid]), 0, 'elder');
+    assert.equal(draftsOf(moved.model)[1].record.after, 'elder');
+    // Refusals: taken by the pack or another draft, not a slug, gone.
+    assert.equal(renameDraft(held, 1, 'bluewatch-guild-board').ok, false);
+    assert.equal(renameDraft(held, 1, 'child').ok, true);
+    assert.equal(renameDraft(held, 0, 'child').ok, false);
+    assert.equal(renameDraft(held, 0, 'Not A Slug').ok, false);
+    assert.equal(renameDraft(held, 0, '').ok, false);
+    assert.equal(renameDraft(held, 9, 'x').ok, false);
+    void pack;
 });

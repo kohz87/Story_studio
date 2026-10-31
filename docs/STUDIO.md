@@ -89,7 +89,9 @@ Studio never calls an AI or the network. **✦ Write with an AI** (beside **+ Ad
 builds a prompt for the writer to paste into a chat of their own (`src/timeline/ai-prompt.js`, pure): the pack's
 calendar and start, regions, the names in its lorebook, its existing events, the answer format and rules, the writer's
 idea (at most 2,000 characters) and the full place list last. The same pack and idea give the same text; it is held to
-about 24,000 characters by cutting the place list (sub-places first), and the fold says so with the count.
+24,000 characters in all by cutting, in this order, the place list (sub-places first), the events already there (their
+count stays), the lore names, the regions and, last, months of the calendar, never the answer format, the rules or the
+idea; the fold says what was cut, with the counts.
 `docs/AI_PROMPT.md` is the prompt with blanks.
 
 The answer is read by `src/timeline/ai-answer.js` (pure): tolerant of a code fence or text around the JSON, of one
@@ -97,9 +99,18 @@ event instead of a list and of month, region, place and alias names in any case;
 event becomes the spec the event form uses (`writeCondition`, the lasting change's own limits through `checkLasting`,
 the date guard through `settleGuards`), so a draft is what the form would have written. What cannot be written (an
 unreadable date or month, an "after" that names no event, a delay on an earlier event with no lasting change) is left
-out and said in the draft's notes; the rest is checked live by `draftProblems` (`src/timeline/drafts.js`).
+out and said in the draft's notes; a field of the wrong kind (a date that is a number, `where` an object, `once` a
+string) is a note too, never a quiet "any time", "anywhere" or once. A pasted answer is read up to 200,000 characters,
+at most 30 places per event, news is cut at 500 characters (and says so), and nothing in it is ever turned into text
+blindly. The rest is checked live by `draftProblems` (`src/timeline/drafts.js`).
 
-A draft is `{ record, notes, seen }` held beside the open project's snapshot (`draftsOf`/`withDrafts` in `model.js`): it
+A note belongs to the one field it is about (the date, the end, the event it follows, the delay, the places, "once", the
+news, the lasting change) and lasts while that field is as it was read, so fixing one field never answers another; the
+missing earlier event stays until the draft follows an event that exists. A note about something left out can be set
+aside with its own button ("Right after is fine", "Not dated is fine", …), one undo step. An "after" that names an event
+both the pack and the answer have follows the answer's own and says so.
+
+A draft is `{ record, notes, seen }` (a note is `{ kind, text, seen, ack? }`) held beside the open project's snapshot (`draftsOf`/`withDrafts` in `model.js`): it
 is no part of the document, the pack checker, Problems or the export. Snapshots made by an edit inherit their
 predecessor's drafts (in `createHistory.commit`), so drafts follow undo and redo, are saved with the project in the
 browser's draft slot and come back after a reload. The event form edits a draft through the pack with its drafts as

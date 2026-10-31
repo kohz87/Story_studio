@@ -5,6 +5,9 @@ import { openPack, exportPack, draftsOf } from '../src/model.js';
 import { renderScreen } from '../src/screens/index.js';
 import { createTestContext } from './helpers/dom.js';
 import { buildPrompt, wordCount } from '../src/timeline/ai-prompt.js';
+import { withDrafts } from '../src/model.js';
+import { makeDraft } from '../src/timeline/drafts.js';
+import { writeCondition } from '../src/timeline/condition.js';
 
 const ersveil = readFileSync(new URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8');
 const idea = 'The Emperor of Highmark dies in early winter CY 612. The news reaches the north about two weeks later.';
@@ -308,4 +311,158 @@ test('the check screen says drafts are not in the export', () => {
     addAll(ctx);
     ctx.select('check');
     assert.match(ctx.main.textContent, /3 events written with an AI are drafts on the Timeline: not checked here and not in the export until kept\./);
+});
+
+// ------------------------------------------------------------ review 159
+
+const paste = (ctx, value) => {
+    click(ctx, 'Next: paste the answer');
+    type(field(ctx, 'Paste it here'), typeof value === 'string' ? value : JSON.stringify(value));
+    click(ctx, 'Check it');
+};
+const banner = ctx => ctx.inspector.querySelector('.tl-banner')?.textContent ?? '';
+const lostParent = [{ name: 'Lost parent', when: { after: 'Missing king', days: 3 }, where: ['Not Here'], news: 'A king dies' }];
+
+test('review 1: removing the unknown place leaves the missing parent and the dropped delay, and Keep stays off until each is answered', () => {
+    const ctx = open();
+    click(ctx, '✦ Write with an AI');
+    paste(ctx, lostParent);
+    click(ctx, 'Add 1 as a draft');
+    assert.equal(ctx.selection.id, 'lost-parent');
+    assert.match(banner(ctx), /Missing king/);
+    assert.match(banner(ctx), /delay of 3 days/);
+    assert.match(banner(ctx), /“Not Here” is not a place/);
+    assert.ok(named(ctx, 'Keep').disabled);
+    // Remove only the place chip.
+    aria(ctx, 'Remove Not Here').click();
+    assert.ok(!/Not Here/.test(banner(ctx)));
+    assert.match(banner(ctx), /Missing king/, 'the missing parent is still said');
+    assert.match(banner(ctx), /delay of 3 days/, 'and so is the dropped delay');
+    assert.ok(named(ctx, 'Keep').disabled, 'Keep stays off');
+    // Following an event answers the parent, not the delay: that needs a delay, or "Right after is fine".
+    click(ctx, 'After another event');
+    assert.ok(!/Missing king/.test(banner(ctx)), 'it follows an event of the pack now');
+    assert.match(banner(ctx), /delay of 3 days/);
+    assert.ok(named(ctx, 'Keep').disabled);
+    click(ctx, 'Right after is fine');
+    assert.equal(banner(ctx).includes('delay of 3 days'), false);
+    assert.ok(!named(ctx, 'Keep').disabled);
+    click(ctx, 'Keep');
+    assert.equal(ctx.model.document.content.events.length, 8);
+    assert.equal(ctx.model.document.content.events[7].id, 'lost-parent');
+    assert.ok(ctx.model.document.content.events[7].after, 'it follows the event it was given');
+    assert.equal(ctx.model.validation.ok, true, JSON.stringify(ctx.model.validation.errors));
+    // Keep, and "Right after is fine" before it, are one undo step each.
+    ctx.history.undo(); ctx.changed();
+    assert.equal(drafts(ctx).length, 1);
+    ctx.history.undo(); ctx.changed();
+    ctx.select('events', 'lost-parent', 'draft');
+    assert.match(banner(ctx), /delay of 3 days/);
+});
+
+test('review 2: a malformed date or place is a warning on the card, and the draft cannot be kept as it is', () => {
+    const ctx = open();
+    click(ctx, '✦ Write with an AI');
+    paste(ctx, [{ name: 'Report', when: { on: 12345 }, where: { name: 'Restricted City' }, news: 'It happened' }]);
+    const card = ctx.inspector.querySelector('.tl-ai-draft').textContent;
+    assert.match(card, /^⚠ Needs a lookReport/);
+    assert.match(card, /The date should be words like/);
+    assert.match(card, /“where” should be “anywhere” or a list of region and place names, not an object/);
+    click(ctx, 'Add 1 as a draft');
+    assert.ok(named(ctx, 'Keep').disabled);
+    assert.ok(named(ctx, 'Not dated is fine') && named(ctx, 'Anywhere is fine'));
+    click(ctx, 'Not dated is fine');
+    assert.ok(named(ctx, 'Keep').disabled, 'the place is still open');
+    click(ctx, 'Anywhere is fine');
+    assert.ok(!named(ctx, 'Keep').disabled);
+});
+
+test('review 5: a draft named like a new event does not hide it, and a draft that shares an ID with an event can still be opened, renamed, kept and discarded', () => {
+    const ctx = open();
+    click(ctx, '✦ Write with an AI');
+    paste(ctx, [{ name: 'New event', when: 'any time', news: 'A draft.' }]);
+    click(ctx, 'Add 1 as a draft');
+    assert.deepEqual(drafts(ctx).map(draft => draft.record.id), ['new-event']);
+    click(ctx, '+ Add event');
+    // The new event takes another ID, so the draft and the event are two rows.
+    const added = ctx.model.document.content.events.at(-1);
+    assert.equal(added.id, 'new-event-2');
+    assert.deepEqual(rows(ctx).filter(row => /^new-event/.test(row.getAttribute('data-id'))).map(row => row.getAttribute('data-id')).sort(), ['new-event', 'new-event-2']);
+    const draftRow = rows(ctx).find(row => row.getAttribute('data-id') === 'new-event');
+    assert.ok(draftRow.classList.contains('tl-draft-row'));
+    draftRow.click();
+    assert.ok(ctx.inspector.querySelector('.tl-banner'), 'the draft opens with its banner');
+    assert.ok(named(ctx, 'Discard'));
+    // A project that already has both (a pack changed under the draft): the draft row opens the draft, the event row the event.
+    const clash = withDrafts(ctx.model, [makeDraft({ id: 'new-event-2', when: 'true', cue: 'Draft news.' })]);
+    const both = createTestContext(clash);
+    both.onRender = renderScreen;
+    both.select('events', null);
+    const sameRows = rows(both).filter(row => row.getAttribute('data-id') === 'new-event-2');
+    assert.equal(sameRows.length, 2);
+    sameRows.find(row => row.classList.contains('tl-draft-row')).click();
+    assert.ok(both.inspector.querySelector('.tl-banner'), 'the draft opens although the pack has an event of that ID');
+    assert.equal(rows(both).filter(row => row.getAttribute('aria-pressed') === 'true').length, 1, 'one row is the chosen one');
+    assert.match(banner(both), /already has an event with the ID “new-event-2”: rename this one in the form/);
+    assert.ok(named(both, 'Keep').disabled);
+    change(aria(both, 'Event name'), 'Second draft');
+    assert.deepEqual(drafts(both).map(draft => draft.record.id), ['second-draft']);
+    assert.equal(both.model.document.content.events.at(-1).id, 'new-event-2', 'the pack\'s event kept its name');
+    assert.equal(both.selection.id, 'second-draft');
+    assert.ok(both.inspector.querySelector('.tl-banner'));
+    assert.ok(!named(both, 'Keep').disabled);
+    click(both, 'Keep');
+    assert.deepEqual(both.model.document.content.events.slice(-2).map(event => event.id), ['new-event-2', 'second-draft']);
+    // The event row opens the event, with its own Remove, even when a draft shares its ID.
+    const again = createTestContext(clash);
+    again.onRender = renderScreen;
+    again.select('events', null);
+    rows(again).filter(row => row.getAttribute('data-id') === 'new-event-2' && !row.classList.contains('tl-draft-row'))[0].click();
+    assert.ok(!again.inspector.querySelector('.tl-banner'));
+    assert.ok(again.inspector.querySelector('button.danger'));
+    // And a draft of that ID can be discarded.
+    rows(again).find(row => row.classList.contains('tl-draft-row') && row.getAttribute('data-id') === 'new-event-2').click();
+    click(again, 'Discard');
+    assert.equal(drafts(again).length, 0);
+    assert.equal(again.model.document.content.events.at(-1).id, 'new-event-2');
+});
+
+test('review 7: if the browser would not save the project with the new drafts, they are taken back out and the writer is told', () => {
+    const ctx = open();
+    let saved = true;
+    ctx.changed = () => { ctx.saved = saved; ctx.render(); };
+    click(ctx, '✦ Write with an AI');
+    pasteAndCheck(ctx);
+    saved = false;
+    click(ctx, 'Add 3 as drafts');
+    assert.equal(drafts(ctx).length, 0, 'nothing was added');
+    assert.equal(ctx.model.document.content.events.length, 7);
+    assert.match(ctx.notifications.at(-1), /The browser would not save the project with these drafts, so they were not added/);
+    assert.equal(ctx.history.canUndo, false, 'and no step is left behind to undo');
+    // The panel is still on the answer, so it can be tried again.
+    assert.equal(field(ctx, 'Paste it here').value, answer);
+    saved = true;
+    click(ctx, 'Check it');
+    click(ctx, 'Add 3 as drafts');
+    assert.equal(drafts(ctx).length, 3);
+    assert.match(ctx.notifications.at(-1), /Added 3 drafts/);
+});
+
+test('review 8: the prompt stays within the limit for a big pack, and the note under it says what was cut', () => {
+    const pad = (p, i, n = 75) => `${p}${i} ${String.fromCharCode(65 + i % 26).repeat(n - p.length - String(i).length - 1)}`;
+    const places = Array.from({ length: 80 }, (_, i) => ({ slug: `place-${i}`, name: pad('Place', i), region: pad('Region', i), x: 0, y: 0 }));
+    const creatures = Array.from({ length: 100 }, (_, i) => ({ slug: `npc-${i}`, name: pad('Lore', i) }));
+    const events = Array.from({ length: 40 }, (_, i) => ({ id: `event-${i}-${'e'.repeat(48)}`, when: writeCondition({ where: places.slice(0, 3).map(p => ({ kind: 'place', name: p.name })) }).when, cue: 'News' }));
+    const calendar = { era: 'CY', months: Array.from({ length: 60 }, (_, i) => ({ name: pad('Month', i, 38), days: 30 })), start: { year: 1, month: 1, day: 1 } };
+    const ctx = createTestContext(openPack({ id: 'big', version: '1.0.0', name: 'Big', requires: { storyBlock: '^2' }, calendar, content: { places, creatures, events } }));
+    ctx.onRender = renderScreen;
+    ctx.select('events', null);
+    click(ctx, '✦ Write with an AI');
+    type(field(ctx, 'Your idea'), 'a'.repeat(2000));
+    assert.ok(prompt(ctx).length <= 24000, String(prompt(ctx).length));
+    const note = ctx.inspector.querySelectorAll('p.tl-small').find(node => /to keep the prompt short|could not all fit/.test(node.textContent));
+    assert.ok(note && !note.hidden, 'the cut is said');
+    assert.match(note.textContent, /place list/);
+    tick(ctx, 'Regions and places', false);
+    assert.ok(prompt(ctx).length <= 24000, String(prompt(ctx).length));
 });

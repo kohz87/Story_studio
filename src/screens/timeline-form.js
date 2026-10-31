@@ -166,7 +166,7 @@ export function renderEventInspector(ctx, container, { record, idx, problems = [
         const next = idFromName(nameInput.value);
         if (!next) return refuse(ctx, 'Give the event a name.');
         if (next === id) { nameInput.value = info.name; return true; }
-        return applyEdit(ctx, renameId(ctx.model, 'events', id, next), { id: next });
+        return applyEdit(ctx, ctx.renameDraft ? ctx.renameDraft(next) : renameId(ctx.model, 'events', id, next), { id: next });
     });
     const saved = small(doc, 'Saved as ');
     saved.append(el(doc, 'code', id), '.');

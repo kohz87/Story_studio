@@ -15,6 +15,7 @@ const isRecord = value => value !== null && typeof value === 'object' && !Array.
 // Story Director trims a text before it counts it, and refuses a name with nothing left once its invisible and
 // markdown marks, apostrophes and spaces are gone.
 const long = (value, max) => typeof value !== 'string' || [...value.trim()].length > max;
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 const blank = text => !text.replace(/\p{Cf}+/gu, '').replace(/\*\*|__|[*`]/g, '').replace(/['’‘`]/g, '').trim();
 
 /** The problems of a payload, each `{ field, message }`; none when Story Director accepts it. */
@@ -24,6 +25,7 @@ export function checkLasting(payload) {
     const say = (field, message) => problems.push({ field, message });
     for (const key of Object.keys(payload)) if (!LASTING_FIELDS.includes(key)) say(/^[\w-]+$/.test(key) ? key : '', `“${key}” is not part of a lasting change (it has ${LASTING_FIELDS.join(', ')}).`);
     if (long(payload.name, LASTING_LIMITS.name) || blank(payload.name)) say('name', `name must be 1 to ${LASTING_LIMITS.name} characters.`);
+    else if (CONTROL.test(payload.name.trim())) say('name', 'name must be one line of text, with no line break, tab or other control character (a delay after this change is written with its name).');
     if (!LASTING_STATES.includes(payload.state)) say('state', 'state must be looming, ongoing or resolved.');
     if (payload.summary !== undefined && long(payload.summary, LASTING_LIMITS.summary)) say('summary', `summary must be text of at most ${LASTING_LIMITS.summary} characters.`);
     if (payload.place !== undefined && long(payload.place, LASTING_LIMITS.place)) say('place', `place must be text of at most ${LASTING_LIMITS.place} characters.`);

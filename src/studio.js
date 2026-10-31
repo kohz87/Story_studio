@@ -165,7 +165,8 @@ export function mountStudio(root) {
                     renderProblemsDrawer(ctx, problemsHost, () => ctx.closeProblems(true));
                 }
             }
-            if (history.current?.document) writeDraft(win, history.current, ctx.dirty);
+            // Whether the browser kept the project: a screen that adds work only a save holds (drafts) checks it.
+            if (history.current?.document) ctx.saved = writeDraft(win, history.current, ctx.dirty);
             return true;
         },
         notify(message) { notice.textContent = message; },

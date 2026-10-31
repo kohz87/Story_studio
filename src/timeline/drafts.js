@@ -1,12 +1,15 @@
 // Drafts: events written with an AI that are not part of the pack yet (pure).
 //
-// A draft is `{ record, notes, seen }`: the event as the form writes it, what could not be written (`notes`, in words, true
-// while the event's date, delay and places are still as they were read: `seen`), and nothing else. Drafts ride along with
-// a snapshot of the open pack (model.js `draftsOf`), so they are saved with the project, come back with undo and redo, and
-// stay out of its document: the pack checker, Problems and the exported file never see them until one is kept.
+// A draft is `{ record, notes, seen }`: the event as the form writes it, and what could not be written (`notes`, in words).
+// A note is about one field of the event (its date, its end, the event it follows, the delay, the places, "once", the news,
+// the lasting change) and lasts while that field is as it was read: changing another field never answers it. A note whose
+// field is left as it is can be set aside with the button it offers (a draft that comes right after, or has no end date,
+// on purpose). Drafts ride along with a snapshot of the open pack (model.js `draftsOf`), so they are saved with the project,
+// come back with undo and redo, and stay out of its document: the pack checker, Problems and the exported file never see
+// them until one is kept.
 //
-// The event form edits a draft through `combinedModel`, the pack with its drafts after its own events, so a draft can
-// follow another draft and uses the same code as any event; `splitCombined` takes the drafts back out of the result.
+// The event form edits a draft through `combinedModel`, the pack with its drafts after its own, so a draft can follow
+// another draft and uses the same code as any event; `splitCombined` takes the drafts back out of the result.
 import { EVENT_LIMITS } from '../../vendor/story-block/src/v2/packs/limits.js';
 import { openPack, draftsOf, withDrafts } from '../model.js';
 import { add, setRecords } from '../edits.js';
@@ -17,21 +20,59 @@ import { LASTING_STATES, checkLasting, readLasting } from './lasting.js';
 
 export const NEWS_PLACEHOLDER = '[WHAT THE AI IS TOLD]';
 export const MAX_DRAFTS = 60;
+/** The most the drafts of a project may weigh once written out: the project is saved with them, and a save that is too big is lost. */
+export const MAX_DRAFT_BYTES = 1024 * 1024;
+const MAX_NOTES = 12;
 
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
-/** What of an event the notes of a draft are about: its when, after and where, as the form reads them. */
+/** What of an event the older, whole-draft notes are about: its when, after and where, as the form reads them. */
 export function draftSignature(record) {
     const info = readEvent(record);
     return JSON.stringify([info.mode, info.from, info.until, info.gap, info.after, info.hand, info.where.map(place => `${place.kind}:${place.name}`)]);
 }
 
-/** A draft of `record`; `notes` are what could not be written into it. */
-export function makeDraft(record, notes = []) {
-    return { record, notes: [...notes], seen: draftSignature(record) };
+const NOTE_KINDS = ['when', 'until', 'after', 'delay', 'where', 'once', 'news', 'lasting'];
+/** What of an event a note of this kind is about, as the form reads it. */
+function noteSignature(kind, record) {
+    const info = readEvent(record);
+    switch (kind) {
+        case 'when': return [info.mode, info.from];
+        case 'until': return [info.mode, info.until];
+        case 'after': return [info.after];
+        case 'delay': return [info.gap];
+        case 'where': return info.where.map(place => `${place.kind}:${place.name}`);
+        case 'once': return [info.once];
+        case 'news': return [typeof record.cue === 'string' ? record.cue : null];
+        case 'lasting': return [info.lasting !== null];
+        default: return [];
+    }
 }
 
-const activeNotes = draft => (draft.notes.length && draftSignature(draft.record) === draft.seen ? draft.notes : []);
+/**
+ * A draft of `record`; `notes` are what could not be written into it: `{ kind, text, ack? }` (about the field of that kind;
+ * `ack` is the label of the button that sets it aside), or plain text, which lasts while the event's date, delay, places and
+ * the event it follows are as they were.
+ */
+export function makeDraft(record, notes = []) {
+    return {
+        record,
+        notes: notes.map(item => (typeof item === 'string' ? item : { ...item, seen: JSON.stringify(noteSignature(item.kind, record)) })),
+        seen: draftSignature(record),
+    };
+}
+
+// The notes of a draft that still hold, each with its place in `draft.notes`.
+function activeNotes(draft) {
+    const out = [];
+    draft.notes.forEach((item, index) => {
+        if (typeof item === 'string') { if (draftSignature(draft.record) === draft.seen) out.push({ index, text: item }); }
+        else if (JSON.stringify(noteSignature(item.kind, draft.record)) === item.seen) out.push({ index, text: item.text, ...item.ack ? { ack: item.ack } : {} });
+    });
+    return out;
+}
+
+const validNote = item => typeof item === 'string' || (isRecord(item) && NOTE_KINDS.includes(item.kind) && typeof item.text === 'string' && typeof item.seen === 'string' && (item.ack === undefined || typeof item.ack === 'string'));
 
 /** The drafts of a saved project, checked: a list of `{ record, notes, seen }`; anything else is left out. */
 export function sanitizeDrafts(value) {
@@ -39,7 +80,7 @@ export function sanitizeDrafts(value) {
     const out = [];
     for (const item of value.slice(0, MAX_DRAFTS)) {
         if (!isRecord(item) || !isRecord(item.record) || typeof item.record.id !== 'string' || !item.record.id) continue;
-        const notes = Array.isArray(item.notes) ? item.notes.filter(note => typeof note === 'string').slice(0, 10) : [];
+        const notes = Array.isArray(item.notes) ? item.notes.filter(validNote).slice(0, MAX_NOTES).map(note => (typeof note === 'string' ? note : { kind: note.kind, text: note.text, seen: note.seen, ...note.ack ? { ack: note.ack } : {} })) : [];
         out.push({ record: item.record, notes, seen: typeof item.seen === 'string' ? item.seen : draftSignature(item.record) });
     }
     return out;
@@ -92,41 +133,47 @@ function findEvent(model, drafts, id) {
  * event that is missing, a lasting change Story Director would refuse, anything the pack checker says). None when it is ready.
  */
 export function draftProblems(model, drafts, index) {
+    return draftIssues(model, drafts, index).map(issue => issue.text);
+}
+
+/** The same as `draftProblems`, each as `{ text }`; one that came from the answer carries `note` (its place in the draft's notes) and `ack`, the label of the button that sets it aside, if it has one. */
+export function draftIssues(model, drafts, index) {
     const draft = drafts[index];
     const record = draft.record;
-    const out = [...activeNotes(draft)];
+    const out = activeNotes(draft).map(item => ({ text: item.text, note: item.index, ...item.ack ? { ack: item.ack } : {} }));
+    const push = text => out.push({ text });
     const info = readEvent(record);
     const calendar = packCalendar(model.document);
     const cue = typeof record.cue === 'string' ? record.cue.trim() : '';
-    if (!cue || cue === NEWS_PLACEHOLDER) out.push('There is no news yet: write what the AI is told in the form.');
-    else if (cue.length > EVENT_LIMITS.cue) out.push(`The news is ${cue.length} characters and an event allows ${EVENT_LIMITS.cue}: shorten it in the form.`);
+    if (!cue || cue === NEWS_PLACEHOLDER) push('There is no news yet: write what the AI is told in the form.');
+    else if (cue.length > EVENT_LIMITS.cue) push(`The news is ${cue.length} characters and an event allows ${EVENT_LIMITS.cue}: shorten it in the form.`);
     if (records(model, 'events').some(event => isRecord(event) && localId(model, identity(event, 'events')) === localId(model, info.id))) {
-        out.push(`The pack already has an event with the ID “${info.id}”: rename this one in the form.`);
+        push(`The pack already has an event with the ID “${info.id}”: rename this one in the form.`);
     }
     if (!info.hand) {
-        if (info.from !== null && calendar.start !== null && info.from < calendar.start) out.push(`It is set before the story starts (${dateText(calendar, calendar.start)}): choose a later date in the form.`);
-        if (info.from !== null && info.until !== null && info.until <= info.from) out.push('Its end is not after its start: choose a later “until” in the form.');
+        if (info.from !== null && calendar.start !== null && info.from < calendar.start) push(`It is set before the story starts (${dateText(calendar, calendar.start)}): choose a later date in the form.`);
+        if (info.from !== null && info.until !== null && info.until <= info.from) push('Its end is not after its start: choose a later “until” in the form.');
         const places = records(model, 'places').filter(isRecord);
         const names = new Set(places.map(place => place.name));
         const regions = new Set(places.map(place => place.region));
         for (const place of info.where) {
-            if (!(place.kind === 'region' ? regions : names).has(place.name)) out.push(`“${place.name}” is not a ${place.kind} in this pack: pick one in the form.`);
+            if (!(place.kind === 'region' ? regions : names).has(place.name)) push(`“${place.name}” is not a ${place.kind} in this pack: pick one in the form.`);
         }
     }
     const parent = info.after ? findEvent(model, drafts, info.after) : null;
-    if (info.after && !parent) out.push(`It comes after “${humanName(info.after)}”, which is not an event of the pack: choose the earlier event in the form.`);
-    else if (parent && parent.record.once === false) out.push(`“${humanName(info.after)}” happens again and again, so nothing can come after it.`);
+    if (info.after && !parent) push(`It comes after “${humanName(info.after)}”, which is not an event of the pack: choose the earlier event in the form.`);
+    else if (parent && parent.record.once === false) push(`“${humanName(info.after)}” happens again and again, so nothing can come after it.`);
     if (!info.hand && info.sinceName !== null && parent && readLasting(parent.record)?.name !== info.sinceName) {
-        out.push(`The delay counts from a lasting change called “${info.sinceName}”, which “${humanName(info.after)}” does not add: fix it in the form.`);
+        push(`The delay counts from a lasting change called “${info.sinceName}”, which “${humanName(info.after)}” does not add: fix it in the form.`);
     }
     const lasting = readLasting(record);
-    if (lasting) for (const problem of checkLasting(lasting)) out.push(`Lasting change: ${problem.message}`);
+    if (lasting) for (const problem of checkLasting(lasting)) push(`Lasting change: ${problem.message}`);
     if (!out.length) {
         const checked = combinedModel(model, drafts);
         const at = records(model, 'events').length + index;
         for (const error of checked?.validation?.errors ?? []) {
             const where = pathEvent(error.path);
-            if (where === at || where === info.id) out.push(error.message);
+            if (where === at || where === info.id) push(error.message);
         }
     }
     return out;
@@ -171,7 +218,10 @@ const sameError = (a, b) => a.code === b.code && a.path === b.path && a.message 
 export function addDrafts(model, items) {
     const drafts = draftsOf(model);
     if (drafts.length + items.length > MAX_DRAFTS) return refuse(model, `A project holds at most ${MAX_DRAFTS} drafts: keep or discard some first.`);
-    return ok(model, withDrafts(model, [...drafts, ...items]));
+    const next = [...drafts, ...items];
+    // The project is saved with its drafts, and a save that is too big is lost on reload: say so now instead.
+    if (JSON.stringify(next).length > MAX_DRAFT_BYTES) return refuse(model, 'These drafts are too big to be saved with the project. Keep or discard some drafts first, or add fewer events.');
+    return ok(model, withDrafts(model, next));
 }
 
 /** The drafts after an edit the form made on the combined pack: one edit, or the pack's own refusal; null when nothing changed. */
@@ -190,6 +240,36 @@ export function discardDraft(model, id) {
     const at = drafts.findIndex(draft => identity(draft.record, 'events') === id);
     if (at < 0) return refuse(model, 'That draft is already gone.');
     return ok(model, withDrafts(model, drafts.filter((_, index) => index !== at)));
+}
+
+/** The note at this place in a draft's notes set aside, because the writer chose to leave what it is about as it is: one edit. */
+export function ackNote(model, id, note) {
+    const drafts = draftsOf(model);
+    const at = drafts.findIndex(draft => identity(draft.record, 'events') === id);
+    const item = drafts[at]?.notes[note];
+    if (!item || typeof item === 'string' || !item.ack) return refuse(model, 'That note is already gone.');
+    return ok(model, withDrafts(model, drafts.map((draft, index) => (index === at ? { ...draft, notes: draft.notes.filter((_, place) => place !== note) } : draft))));
+}
+
+/** The draft at `index` renamed (and the drafts that follow it moved with it): one edit. It works on the draft itself, so it works even when the pack has an event of that ID. */
+export function renameDraft(model, index, nextId) {
+    const drafts = draftsOf(model);
+    const draft = drafts[index];
+    if (!draft) return refuse(model, 'That draft is already gone.');
+    const next = String(nextId ?? '').trim();
+    const old = identity(draft.record, 'events');
+    if (!next || next.length > 64 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(next)) return refuse(model, 'Use a lowercase ID with hyphens.');
+    if (next === old) return ok(model, model);
+    const taken = records(model, 'events').some(event => isRecord(event) && localId(model, identity(event, 'events')) === next)
+        || drafts.some((other, at) => at !== index && identity(other.record, 'events') === next);
+    if (taken) return refuse(model, `Duplicate ID: ${next}`);
+    // What follows the old ID follows the pack's event of that name if there is one (it is found first), else this draft.
+    const packHas = records(model, 'events').some(event => isRecord(event) && localId(model, identity(event, 'events')) === localId(model, old));
+    const list = drafts.map((other, at) => {
+        if (at === index) return { ...other, record: { ...other.record, id: next } };
+        return !packHas && other.record.after === old ? { ...other, record: { ...other.record, after: next } } : other;
+    });
+    return { ...ok(model, withDrafts(model, list)), drafts: true };
 }
 
 // The pack with `record` added as an event, its guards settled, or why not. The pack checker has the last word.

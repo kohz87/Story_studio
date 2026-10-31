@@ -4,9 +4,9 @@ import { records, identity, localId } from '../records.js';
 import { add } from '../edits.js';
 import { renderRecords, getRecordProblems, openRecordRemoveDialog } from './records.js';
 import { renderEventInspector, timelineState } from './timeline-form.js';
-import { renderAiPanel, openAiPanel, aiShown, aiState, draftBanner, findDraft } from './timeline-ai.js';
+import { renderAiPanel, openAiPanel, aiShown, aiState, draftBanner, findDraft, selectedKind } from './timeline-ai.js';
 import { draftsOf } from '../model.js';
-import { combinedModel, draftProblems, editDrafts } from '../timeline/drafts.js';
+import { combinedModel, draftProblems, editDrafts, renameDraft } from '../timeline/drafts.js';
 import { packCalendar } from '../timeline/calendar.js';
 import { timelineRows } from '../timeline/event.js';
 import { missingWorldEvents } from '../timeline/notes.js';
@@ -15,7 +15,8 @@ const isRecord = value => value !== null && typeof value === 'object' && !Array.
 
 // A new event starts with a placeholder for its news (the pack needs some) and no condition: it can happen on any reply.
 function addEvent(ctx) {
-    const taken = new Set(records(ctx.model, 'events').map(event => localId(ctx.model, identity(event, 'events'))));
+    // An ID a draft has is taken too: the draft and the new event would otherwise answer to the same row.
+    const taken = new Set([...records(ctx.model, 'events').map(event => localId(ctx.model, identity(event, 'events'))), ...draftsOf(ctx.model).map(draft => localId(ctx.model, identity(draft.record, 'events')))]);
     let id = 'new-event';
     for (let n = 2; taken.has(id); n++) id = `new-event-${n}`;
     const result = add(ctx.model, 'events', { id, when: 'true', cue: '[WHAT THE AI IS TOLD]' });
@@ -30,21 +31,24 @@ function inspect(ctx, inspector, selected) {
 
 // What the form of a draft sees and does: the pack with its drafts as events after its own, and an edit comes back as a
 // change to the drafts (one undo step); the pack's own events are never touched until a draft is kept.
-function draftContext(host) {
+function draftContext(host, index) {
     timelineState(host);
     const child = Object.create(host);
     Object.defineProperty(child, 'model', { get: () => combinedModel(host.model) });
     // The form reaches this through the shared refusal helper (applyEdit), which restores its controls when it answers false.
     child.apply = result => {
+        if (result?.drafts) return host.apply(result);
         const change = editDrafts(host.model, result);
         return change === null ? true : host.apply(change);
     };
+    // Renaming works on the draft itself, so it also works when the pack has an event with the draft's ID.
+    child.renameDraft = next => renameDraft(host.model, index, next);
     return child;
 }
 
 function inspectDraft(ctx, inspector, { index, count }) {
     const draft = draftsOf(ctx.model)[index];
-    renderEventInspector(draftContext(ctx), inspector, { record: draft.record, idx: count + index, banner: draftBanner(ctx, index) });
+    renderEventInspector(draftContext(ctx, index), inspector, { record: draft.record, idx: count + index, banner: draftBanner(ctx, index) });
 }
 
 function viewSwitch(ctx, ui) {
@@ -79,6 +83,7 @@ export function renderTimeline(ctx) {
     words.append(el(doc, 'b', 'Players never see these.'), ' The AI is told an event only when it happens. Players can only find them by opening the pack file, or in Settings → Diagnostics → Events, which warns that it spoils the story.');
     screen.append(header, note);
     const list = el(doc, 'div', '', { class: 'records-list tl-list' });
+    const selected = selectedKind(ctx);
     const calendar = packCalendar(model.document);
     // The drafts follow the pack's events in the list the rows are made from, so a draft can sit under the event it follows.
     const { groups } = timelineRows([...events, ...drafts.map(draft => draft.record)], calendar);
@@ -89,7 +94,7 @@ export function renderTimeline(ctx) {
         for (const row of group.rows) {
             const id = localId(model, row.info.id);
             const isDraft = row.idx >= events.length;
-            const card = button(doc, '', () => ctx.select('events', id), { class: `record-card tl-row${row.depth ? ' tl-chain' : ''}${isDraft ? ' tl-draft-row' : ''}`, 'aria-pressed': String(ctx.selection.id === id), 'data-id': id });
+            const card = button(doc, '', () => ctx.select('events', id, isDraft ? 'draft' : null), { class: `record-card tl-row${row.depth ? ' tl-chain' : ''}${isDraft ? ' tl-draft-row' : ''}`, 'aria-pressed': String(ctx.selection.id === id && selected === (isDraft ? 'draft' : 'pack')), 'data-id': id });
             if (row.depth) card.setAttribute('style', `margin-left:${28 * row.depth}px;width:calc(100% - ${28 * row.depth}px)`);
             const problems = isDraft ? draftProblems(model, drafts, row.idx - events.length) : getRecordProblems(model, 'events', row.record, row.idx);
             if (isDraft) row.chips.unshift({ text: 'draft', draft: true });
@@ -113,13 +118,14 @@ export function renderTimeline(ctx) {
     screen.append(list);
     ctx.main.append(screen);
     const inspector = ctx.inspector || screen;
-    const selected = events.map((record, idx) => ({ record, idx })).find(({ record }) => isRecord(record) && localId(model, identity(record, 'events')) === ctx.selection.id);
-    if (!selected) {
-        const draft = findDraft(model, ctx.selection.id);
+    // A draft and an event may share an ID (a pack changed under a draft): the row that was chosen says which is meant.
+    const open = events.map((record, idx) => ({ record, idx })).find(({ record }) => isRecord(record) && localId(model, identity(record, 'events')) === ctx.selection.id);
+    if (selected !== 'pack' || !open) {
+        const draft = selected === 'draft' ? findDraft(model, ctx.selection.id) : null;
         if (draft) inspectDraft(ctx, inspector, draft);
         else if (aiShown(ctx)) renderAiPanel(ctx, inspector);
         else inspector.append(el(doc, 'p', 'Select an event from the timeline to inspect and edit.', { class: 'muted' }));
         return;
     }
-    inspect(ctx, inspector, { ...selected, id: ctx.selection.id, problems: getRecordProblems(model, 'events', selected.record, selected.idx) });
+    inspect(ctx, inspector, { ...open, id: ctx.selection.id, problems: getRecordProblems(model, 'events', open.record, open.idx) });
 }

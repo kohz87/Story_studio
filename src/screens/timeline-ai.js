@@ -9,7 +9,7 @@ import { draftsOf } from '../model.js';
 import { records, identity, localId } from '../records.js';
 import { buildPrompt, wordCount, cutNote, IDEA_LIMIT } from '../timeline/ai-prompt.js';
 import { readAnswer } from '../timeline/ai-answer.js';
-import { addDrafts, draftProblems, waitingFor, summarize, keepDraft, keepAll, keepableCount, discardDraft } from '../timeline/drafts.js';
+import { addDrafts, draftProblems, draftIssues, waitingFor, summarize, keepDraft, keepAll, keepableCount, discardDraft, ackNote } from '../timeline/drafts.js';
 import { humanName } from '../timeline/event.js';
 import { timelineState, fieldset, checkbox, small } from './timeline-form.js';
 
@@ -79,8 +79,8 @@ export function renderAiPanel(ctx, container) {
             const prompt = current();
             pre.textContent = prompt.text;
             summary.textContent = `The prompt (${wordCount(prompt.words)})`;
-            cut.textContent = cutNote(prompt.cut);
-            cut.hidden = !prompt.cut;
+            cut.textContent = cutNote(prompt.cut, prompt.trimmed);
+            cut.hidden = !cut.textContent;
             count.textContent = `${[...ui.idea].length} / ${IDEA_LIMIT}`;
             const empty = !ui.idea.trim();
             copy.disabled = empty;
@@ -161,7 +161,18 @@ export function renderAiPanel(ctx, container) {
             const again = readAnswer(ui.answer, ctx.model);
             if (!again.ok || !again.items.length) { ui.result = again; drawResults(); return; }
             const first = again.items[0].id;
-            if (applyEdit(ctx, addDrafts(ctx.model, again.items.map(item => item.draft)), { id: first })) {
+            if (applyEdit(ctx, addDrafts(ctx.model, again.items.map(item => item.draft)), { id: first, form: 'draft' })) {
+                // The project is saved with its drafts. If the browser would not keep that, take them back out and say so,
+                // rather than let a reload lose them without a word.
+                if (ctx.saved === false) {
+                    ctx.history.undo();
+                    Object.assign(ctx.selection, { id: null, form: null });
+                    ctx.changed();
+                    ui.open = true;
+                    ctx.render();
+                    ctx.notify('The browser would not save the project with these drafts, so they were not added. Export your pack to a file first, or make room (clear other site data) and try again.');
+                    return;
+                }
                 Object.assign(ui, { step: 1, answer: '', result: null });
                 ctx.notify(`Added ${plural(again.items.length, 'draft')}. They stay out of the pack until you keep them.`);
             }
@@ -190,7 +201,8 @@ export function draftBanner(ctx, index) {
     const drafts = draftsOf(model);
     const draft = drafts[index];
     const id = localId(model, identity(draft.record, 'events'));
-    const problems = draftProblems(model, drafts, index);
+    const issues = draftIssues(model, drafts, index);
+    const problems = issues.map(issue => issue.text);
     const waiting = waitingFor(model, drafts, index);
     const name = humanName(id);
     const banner = el(doc, 'div', '', { class: 'tl-banner' });
@@ -199,17 +211,22 @@ export function draftBanner(ctx, index) {
     banner.append(words);
     if (problems.length) {
         const list = el(doc, 'ul', '', { class: 'tl-banner-list', 'aria-label': 'What needs a look' });
-        for (const problem of problems) list.append(el(doc, 'li', problem));
+        for (const issue of issues) {
+            const item = el(doc, 'li', issue.text);
+            // A note about something left out of the answer can be set aside, once the writer has chosen to leave it so.
+            if (issue.ack) item.append(button(doc, issue.ack, () => { applyEdit(ctx, ackNote(ctx.model, id, issue.note), { id }); }, { class: 'tl-ack' }));
+            list.append(item);
+        }
         banner.append(list);
     }
     const row = el(doc, 'div', '', { class: 'tl-ai-row' });
     const keep = button(doc, 'Keep', () => {
-        if (applyEdit(ctx, keepDraft(ctx.model, id), { id })) ctx.notify(`Kept “${name}”: it is part of the pack now.`);
+        if (applyEdit(ctx, keepDraft(ctx.model, id), { id, form: null })) ctx.notify(`Kept “${name}”: it is part of the pack now.`);
     }, { class: 'primary' });
     const reason = problems.length ? 'Fix what needs a look first.' : waiting ? `Keep “${waiting.name}” first: this event comes after it.` : '';
     if (reason) { keep.disabled = true; keep.setAttribute('aria-describedby', 'tl-draft-reason'); }
     row.append(keep, button(doc, 'Discard', () => {
-        if (applyEdit(ctx, discardDraft(ctx.model, id), { id: null })) ctx.notify(`Discarded “${name}”.`);
+        if (applyEdit(ctx, discardDraft(ctx.model, id), { id: null, form: null })) ctx.notify(`Discarded “${name}”.`);
     }));
     if (drafts.length > 1) {
         const ready = keepableCount(model);
@@ -230,4 +247,14 @@ export function draftBanner(ctx, index) {
 export function findDraft(model, id) {
     const index = draftsOf(model).findIndex(draft => localId(model, identity(draft.record, 'events')) === id);
     return index < 0 ? null : { index, count: records(model, 'events').length };
+}
+
+/** What the selected event ID means: `'draft'` or `'pack'`, or null when it is neither. A draft row selects with the form 'draft', so a draft and an event that share an ID can each be opened. */
+export function selectedKind(ctx) {
+    const { id, form } = ctx.selection;
+    if (id === null) return null;
+    const isPack = records(ctx.model, 'events').some(event => event !== null && typeof event === 'object' && localId(ctx.model, identity(event, 'events')) === id);
+    const isDraft = findDraft(ctx.model, id) !== null;
+    if (form === 'draft') return isDraft ? 'draft' : isPack ? 'pack' : null;
+    return isPack ? 'pack' : isDraft ? 'draft' : null;
 }

@@ -113,3 +113,25 @@ test('the names a condition asks the chronicle about are found, written by the f
     assert.deepEqual(chronicleNames('true'), []);
     assert.deepEqual(chronicleNames(undefined), []);
 });
+
+// Review 159 (3): a control character in a quoted word must never give a condition Story Block cannot parse.
+test('a word with a control character is written so Story Block reads it back, or is refused: never an unparseable condition', () => {
+    const codes = [...Array(0xa0).keys(), 0x2028, 0x2029, 0xfeff];
+    for (const code of codes) {
+        const word = `before${String.fromCharCode(code)}after`;
+        for (const spec of [{ since: { name: word, minutes: 60 } }, { where: [{ kind: 'place', name: word }] }, { where: [{ kind: 'region', name: word }], from: 0 }]) {
+            const written = writeCondition(spec);
+            if (!written.ok) {
+                assert.match(written.reason, /control character|carriage return/, `U+${code.toString(16)}`);
+                continue;
+            }
+            let ast;
+            assert.doesNotThrow(() => { ast = parse(written.when); }, `U+${code.toString(16)} gave ${JSON.stringify(written.when)}`);
+            assert.ok(JSON.stringify(ast).includes(JSON.stringify(word).slice(1, -1)), `U+${code.toString(16)} did not survive`);
+        }
+    }
+    // The ones with an escape are still written, and the carriage return is the one that is refused.
+    assert.equal(writeCondition({ since: { name: 'a\nb\tc', minutes: 60 } }).ok, true);
+    assert.equal(writeCondition({ since: { name: 'a\rb', minutes: 60 } }).ok, false);
+    assert.equal(writeCondition({ where: [{ kind: 'place', name: 'a\rb' }] }).ok, false);
+});

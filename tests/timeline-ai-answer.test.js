@@ -2,12 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { openPack, withDrafts } from '../src/model.js';
-import { readAnswer, readMoment, findEvents, MAX_EVENTS } from '../src/timeline/ai-answer.js';
+import { readAnswer, readMoment, findEvents, MAX_EVENTS, PASTE_LIMIT } from '../src/timeline/ai-answer.js';
 import { draftProblems, keepDraft, keepAll } from '../src/timeline/drafts.js';
 import { packCalendar } from '../src/timeline/calendar.js';
 import { writeCondition, readCondition } from '../src/timeline/condition.js';
 import { readEvent } from '../src/timeline/event.js';
 import { readLasting, LASTING_CAPABILITY } from '../src/timeline/lasting.js';
+import { parse } from '../vendor/story-block/src/v2/events/condition.js';
 
 const ersveil = readFileSync(new URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8');
 const pack = (events = []) => ({
@@ -260,4 +261,178 @@ test('kept drafts are the pack\'s events: the guard of a pack event another coun
     assert.equal(all.kept, 2);
     assert.equal(all.result.model.validation.ok, true, JSON.stringify(all.result.model.validation.errors));
     assert.equal(all.result.model.document.content.events.length, 9);
+});
+
+// ------------------------------------------------------------ review 159
+
+test('review 2: a field of the wrong kind is a problem in words, never a quiet "any time", "anywhere" or once', () => {
+    const say = event => one({ ...base, news: 'It happened', ...event });
+    const expect = (event, pattern, label) => {
+        const { problems, record } = say(event);
+        assert.ok(problems.some(text => pattern.test(text)), `${label}: ${JSON.stringify(problems)}`);
+        return record;
+    };
+    // The review's repro: a number for the date and an object for the place.
+    const { problems, record } = say({ name: 'Report', when: { on: 12345 }, where: { name: 'Restricted City' } });
+    assert.equal(problems.length, 2, JSON.stringify(problems));
+    assert.match(problems[0], /The date should be words like .*not 12345/);
+    assert.match(problems[1], /“where” should be “anywhere” or a list of region and place names, not an object/);
+    assert.equal(record.when, 'true');
+    expect({ when: 12345 }, /“when” should be .*not 12345/, 'when a number');
+    expect({ when: ['Icewane 4, CY 612'] }, /“when” should be .*not a list/, 'when a list');
+    expect({ when: true }, /“when” should be .*not true/, 'when a boolean');
+    expect({ when: { at: 'noon' } }, /“when” should be .*not an object/, 'when with no known key');
+    expect({ when: { on: ['x'] } }, /The date should be words .*not a list/, 'on a list');
+    expect({ when: { on: '' } }, /could not be read: it is empty/, 'on empty');
+    expect({ when: { after: 12 } }, /“after” should be the name of an event, not 12/, 'after a number');
+    expect({ when: { after: '' } }, /“after” is empty/, 'after empty');
+    expect({ when: 'any time', until: 20 }, /The end date should be words .*not 20/, 'until a number');
+    expect({ when: 'any time', until: { y: 1 } }, /The end date should be words .*not an object/, 'until an object');
+    expect({ where: 3 }, /“where” should be .*not 3/, 'where a number');
+    expect({ where: ['Auvoth', 7] }, /Left out of “where”: a place that is not a name/, 'where holding a number');
+    expect({ once: 'false' }, /“once” should be true or false, not “false”/, 'once a string');
+    expect({ once: 0 }, /“once” should be true or false, not 0/, 'once a number');
+    expect({ lasting: 'Seal broken' }, /“lasting” should be an object like .*not “Seal broken”/, 'lasting a string');
+    expect({ lasting: 4 }, /“lasting” should be an object/, 'lasting a number');
+    expect({ lasting: { name: 7, state: 'ongoing' } }, /Lasting change: name must be 1 to 80/, 'lasting name a number');
+    expect({ lasting: { name: 'N', state: 'ongoing', place: 5 } }, /Lasting change: place must be text/, 'lasting place a number');
+    expect({ lasting: { name: 'N', state: 'ongoing', summary: {} } }, /Lasting change: summary/, 'lasting summary an object');
+    expect({ lasting: { name: 'N', state: 'ongoing', factions: 'x'.repeat(9) .length } }, /factions must be a list/, 'factions a number');
+    const parent = [{ name: 'Parent', news: 'P', lasting: { name: 'Parent change', state: 'ongoing' } }];
+    for (const [value, shown] of [[{}, '{}'], [null, 'null'], [-3, '-3'], [1.5, '1.5'], ['soon', '“soon”'], [[3], 'a list'], [{ n: 3 }, 'an object'], [true, 'true']]) {
+        const result = read([...parent, { name: 'Child', when: { after: 'Parent', days: value }, news: 'C' }]);
+        const issues = problemsOf(result)[1];
+        if (value === null) assert.deepEqual(issues, [], 'null means no delay');
+        else assert.ok(issues.some(text => /not a whole number of at least 1/.test(text)), `${shown}: ${JSON.stringify(issues)}`);
+    }
+    // What is plainly meant stays quiet: no when, "any time", null for a field left out, anywhere, once true or false.
+    for (const quiet of [{}, { when: 'any time' }, { when: null }, { when: {} }, { until: null }, { where: null }, { where: 'anywhere' }, { where: [] }, { once: null }, { once: true }, { once: false }, { lasting: null }, { lasting: false }]) {
+        assert.deepEqual(say(quiet).problems, [], JSON.stringify(quiet));
+    }
+    assert.equal(say({ once: 'false' }).record.once, undefined, 'a malformed once is not guessed at');
+});
+
+test('review 2: a delay with nothing to count from, or beside a date, is a problem too', () => {
+    const result = read([{ name: 'Dated', when: { on: 'Rainmoot 4, CY 613, dawn', after: 'Anchor', days: 3 }, news: 'D' }, { name: 'Anchor', news: 'A', lasting: { name: 'Anchor change', state: 'ongoing' } }, { name: 'Lone', when: { on: 'Rainmoot 9, CY 613, dawn', days: 3 }, news: 'L' }]);
+    const [dated, , lone] = problemsOf(result);
+    assert.match(dated[0], /A date and a delay after another event cannot both be written/);
+    assert.match(lone[0], /a delay of 3 days but no earlier event to count from/);
+});
+
+test('review 3: a pasted lasting name with a carriage return cannot give a condition Story Block cannot parse', () => {
+    const text = '[{"name":"Parent","when":"any time","news":"P","lasting":{"name":"Before\\rafter","state":"ongoing"}},{"name":"Child","when":{"after":"Parent","days":1},"news":"C"}]';
+    const result = read(text);
+    const [parent, child] = problemsOf(result);
+    assert.match(parent.join(' '), /Lasting change: name must be one line of text/);
+    assert.ok(child.length > 0, 'the child is not ready either');
+    assert.match(child.join(' '), /cannot hold a carriage return/);
+    for (const item of result.items) assert.doesNotThrow(() => parse(item.draft.record.when), item.draft.record.when);
+    // Not keepable, so Keep all keeps nothing and writes nothing unparseable.
+    const kept = keepAll(withDrafts(model(), result.items.map(item => item.draft)));
+    assert.equal(kept.kept, 0);
+    // Every other control character in a name is refused the same way; a clean name is not.
+    for (const code of [0, 9, 10, 11, 12, 127, 133]) {
+        const odd = read([{ name: 'P', news: 'P', lasting: { name: `A${String.fromCharCode(code)}B`, state: 'ongoing' } }, { name: 'C', when: { after: 'P', days: 1 }, news: 'C' }]);
+        assert.ok(problemsOf(odd)[0].some(line => /one line of text/.test(line)), `U+${code.toString(16)}`);
+        for (const item of odd.items) assert.doesNotThrow(() => parse(item.draft.record.when));
+    }
+});
+
+test('review 4: an "after" naming an event both the pack and the answer have follows the answer\'s own, and says so', () => {
+    const lasting = name => ({ command: 'chronicle.lasting', payload: { name, state: 'ongoing' } });
+    const m = model([{ id: 'the-king-dies', when: 'true', cue: 'Old.', then: [lasting('Old death')] }]);
+    const result = read([
+        { name: 'The king dies', when: 'any time', news: 'New.', lasting: { name: 'New death', state: 'ongoing' } },
+        { name: 'News arrives', when: { after: 'The king dies', days: 3 }, news: 'Arrives.' },
+    ], m);
+    const [parent, child] = result.items.map(item => item.draft.record);
+    assert.equal(parent.id, 'the-king-dies-2');
+    assert.equal(child.after, 'the-king-dies-2', 'the parent just proposed, not the old event');
+    assert.deepEqual(readCondition(child.when).since, { name: 'New death', minutes: 3 * 1440 });
+    assert.match(child.when, /New death/);
+    assert.ok(!/Old death/.test(child.when));
+    assert.match(result.items[1].info.join(' '), /There is an event called “The king dies” in the pack and another in this answer\. This one comes after the one in this answer \(the-king-dies-2\), not the pack's \(the-king-dies\)\./);
+    assert.deepEqual(problemsOf(result, m), [[], []]);
+    // With only the pack's event of that name, the pack's is followed, with no such note.
+    const only = read([{ name: 'News arrives', when: { after: 'The king dies', days: 3 }, news: 'Arrives.' }], m);
+    assert.equal(only.items[0].draft.record.after, 'the-king-dies');
+    assert.deepEqual(only.items[0].info, []);
+});
+
+test('review 6: a hostile value in a field is a plain problem, not an exception', () => {
+    const parent = '{"name":"Parent","news":"P","lasting":{"name":"Parent","state":"ongoing"}}';
+    const child = days => `{"name":"Child","when":{"after":"Parent","days":${days}},"news":"C"}`;
+    for (const days of ['{"toString":null}', '{"valueOf":null,"toString":null}', `${'['.repeat(5000)}${']'.repeat(5000)}`, `{"a":${'{"a":'.repeat(3000)}1${'}'.repeat(3000)}}`, '{"__proto__":{"x":1}}', '1e999', '-0']) {
+        let result;
+        assert.doesNotThrow(() => { result = readAnswer(`[${parent},${child(days)}]`, model()); }, days.slice(0, 40));
+        assert.ok(result.ok, days.slice(0, 40));
+        const issues = problemsOf(result)[1];
+        assert.ok(issues.some(line => /not a whole number of at least 1/.test(line)), `${days.slice(0, 40)}: ${JSON.stringify(issues)}`);
+        assert.ok(issues.join(' ').length < 400, 'the problem is short, whatever the value was');
+    }
+    // Every field, hostile in the same ways, still reads.
+    const hostile = [{ toString: null }, JSON.parse(`${'['.repeat(3000)}${']'.repeat(3000)}`), JSON.parse('{"__proto__":{"x":1}}')];
+    for (const value of hostile) {
+        const fields = { name: 'Odd', news: 'x' };
+        for (const key of ['when', 'until', 'where', 'once', 'lasting', 'news']) {
+            assert.doesNotThrow(() => readAnswer(JSON.stringify([{ ...fields, [key]: value }]), model()), key);
+        }
+        const deepLasting = { name: 'Odd', news: 'x', lasting: { name: value, state: value, place: value, summary: value, factions: value, keep: value } };
+        let result;
+        assert.doesNotThrow(() => { result = readAnswer(JSON.stringify([deepLasting]), model()); });
+        assert.ok(problemsOf(result)[0].some(line => /Lasting change/.test(line)));
+        assert.doesNotThrow(() => JSON.stringify(result.items[0].draft));
+    }
+    assert.equal(({}).x, undefined, 'nothing leaked onto Object.prototype');
+});
+
+test('review 7: a pasted answer, each field and each list are bounded before they are checked', () => {
+    const huge = JSON.stringify([{ ...base, news: 'x'.repeat(3 * 1024 * 1024) }]);
+    const refused = readAnswer(huge, model());
+    assert.equal(refused.ok, false);
+    assert.match(refused.error, /characters, and I read at most 200,000\. Paste only the JSON list/);
+    assert.equal(PASTE_LIMIT, 200000);
+    assert.equal(readAnswer(`[${' '.repeat(PASTE_LIMIT)}]`, model()).ok, false);
+    // Many places: only the first are read, with a Set for duplicates, so it takes no time and says what was left.
+    const names = Array.from({ length: 3000 }, (_, i) => `Unknown place ${i}`);
+    const text = JSON.stringify([{ ...base, where: names }]);
+    assert.ok(text.length < PASTE_LIMIT);
+    const started = Date.now();
+    const result = read(text);
+    assert.ok(Date.now() - started < 1500, 'reading 3,000 places is quick');
+    assert.ok(readEvent(result.items[0].draft.record).where.length <= 30);
+    assert.match(problemsOf(result)[0].join(' '), /Left out of “where”: 2970 more than the 30 that are read/);
+    const same = read(JSON.stringify([{ ...base, where: Array.from({ length: 5000 }, () => 'Auvoth') }]));
+    assert.deepEqual(readEvent(same.items[0].draft.record).where, [{ kind: 'place', name: 'Auvoth' }]);
+    // News is cut at the form's limit, and says so; so is every text of a lasting change, one past its limit.
+    const long = one({ ...base, news: 'n'.repeat(50000), lasting: { name: 'N'.repeat(30000), state: 'ongoing', summary: 's'.repeat(30000), place: 'p'.repeat(30000), factions: ['f'.repeat(30000)] } });
+    assert.equal(long.record.cue.length, 500);
+    assert.ok(long.problems.some(line => /The news is 50,000 characters and an event allows 500: only the first 500 were kept/.test(line)));
+    assert.ok(long.problems.some(line => /Lasting change: name must be 1 to 80/.test(line)));
+    assert.ok(JSON.stringify(long.record).length < 2000, String(JSON.stringify(long.record).length));
+    const name = one({ name: 'N'.repeat(5000), news: 'x' });
+    assert.ok(name.record.id.length <= 64 && name.item.name.length <= 200);
+});
+
+test('review 9: a citation or other bracket before the JSON does not hide the answer', () => {
+    const event = '[{"name":"First","when":"any time","news":"News"}]';
+    for (const text of [
+        `Here is your answer [1]: ${event}`,
+        `Here is your answer [1] and [2] and [1, 2], {note}, [] ${event} [3]`,
+        `[1]\n${event}`,
+        `See [1].\n\`\`\`json\n${event}\n\`\`\``,
+        `[1] \`\`\`\n[2]\n\`\`\` ${event}`,
+        `Refs: [${Array.from({ length: 120 }, (_, i) => i).join('], [')}] then ${event}`,
+        `Notes {"a":1} and [true] and [[1,2]] ${event}`,
+    ]) {
+        const result = readAnswer(text, model());
+        assert.ok(result.ok, text.slice(0, 60));
+        assert.deepEqual(result.items.map(item => item.name), ['First'], text.slice(0, 60));
+        assert.deepEqual(result.skipped, [], text.slice(0, 60));
+    }
+    // The first list or object that holds events wins, not the first one.
+    const two = findEvents(`[{"name":"A","news":"a"}] and [{"name":"B","news":"b"}]`);
+    assert.deepEqual(two.list.map(item => item.name), ['A']);
+    // With no event anywhere, the report is as it was.
+    assert.deepEqual(readAnswer('[1]', model()).skipped, [{ index: 0, reason: 'It is not an event (an event is an object with a name).' }]);
 });
