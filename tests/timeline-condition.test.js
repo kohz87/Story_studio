@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { writeCondition, readCondition, glanceCondition } from '../src/timeline/condition.js';
-import { parse } from '../vendor/story-block/src/v2/events/condition.js';
+import { writeCondition, readCondition, glanceCondition, chronicleNames } from '../src/timeline/condition.js';
+import { parse, evaluateCondition } from '../vendor/story-block/src/v2/events/condition.js';
 
 const ersveil = JSON.parse(readFileSync(new URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8'));
 
@@ -32,6 +32,8 @@ test('each shape the form writes parses in Story Block\'s condition language and
         { where },
         { from: 1440 },
         { from: 1440, until: 2880, where },
+        { dated: true },
+        { dated: true, where },
         { until: 5000 },
         { until: 5000, where },
         { since: { name: 'Cracks in the seventh seal', minutes: 86400 } },
@@ -85,4 +87,29 @@ test('a condition longer than a pack allows, or a moment before the story, is re
     assert.equal(writeCondition({ from: -5 }).ok, false);
     assert.equal(writeCondition({ from: 5, since: { name: 'X', minutes: 60 } }).ok, false);
     assert.equal(writeCondition({ since: { name: 'X', minutes: 0 } }).ok, false);
+});
+
+test('an event others count days from waits until the story has a date, and reads back', () => {
+    assert.equal(writeCondition({ dated: true }).when, 'time() != null');
+    assert.equal(writeCondition({ dated: true, where: [{ kind: 'place', name: 'Auvoth' }] }).when, "time() != null && query('scene.place') != null && (query('scene.place').name == 'Auvoth')");
+    // A date, a delay or an end already say it, so nothing is added.
+    assert.equal(writeCondition({ dated: true, from: 60 }).when, 'time() != null && time() >= 60');
+    assert.equal(writeCondition({ dated: true, until: 60 }).when, 'time() != null && time() < 60');
+    assert.equal(writeCondition({ dated: true, since: { name: 'X', minutes: 5 } }).when, "query('chronicle.passed', { name: 'X', minutes: 5 })");
+    assert.equal(readCondition('time() != null').dated, true);
+    assert.equal(readCondition('time() != null && time() < 60').dated, undefined);
+    assert.equal(readCondition('true').dated, undefined);
+    assert.equal(readCondition('time() != null && time() != null'), null);
+    assert.equal(readCondition('time() != null && has(\'Rope\')'), null);
+    // Story Block reads it: false while the story has no clock, true once it has one.
+    const state = minutes => ({ state: { domains: { director: { time: { minutes } } } } });
+    assert.equal(evaluateCondition('time() != null', state(null)).met, false);
+    assert.equal(evaluateCondition('time() != null', state(0)).met, true);
+});
+
+test('the names a condition asks the chronicle about are found, written by the form or by hand', () => {
+    assert.deepEqual(chronicleNames("query('chronicle.passed', { name: 'It\\'s over', minutes: 5 }) && true"), ["It's over"]);
+    assert.deepEqual(chronicleNames('query("chronicle.passed", { name: "Old news", minutes: 5 }) || query(\'chronicle.passed\', { name: \'B\', minutes: 1 })'), ['Old news', 'B']);
+    assert.deepEqual(chronicleNames('true'), []);
+    assert.deepEqual(chronicleNames(undefined), []);
 });

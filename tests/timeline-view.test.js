@@ -7,6 +7,7 @@ import { renderScreen } from '../src/screens/index.js';
 import { createTestContext } from './helpers/dom.js';
 import { readCondition } from '../src/timeline/condition.js';
 import { parse } from '../vendor/story-block/src/v2/events/condition.js';
+import { renderProblemGroups } from '../src/screens/problems.js';
 
 const ersveil = readFileSync(new URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8');
 const base = events => ({
@@ -303,4 +304,105 @@ test('several events change in one edit (one undo), and only the events that are
     assert.equal(setRecords(model, 'events', [events[1], events[0]]).ok, false);
     assert.equal(setRecords(model, 'events', [events[0]]).ok, false);
     assert.equal(setRecords(model, 'events', [events[0], { ...events[1], id: 'c' }]).ok, false);
+});
+
+test('an event others count days from waits until the story has a date, and the form says so', () => {
+    const ctx = open(base([
+        { id: 'cracks', when: 'true', cue: 'Cracks.', then: [{ command: 'chronicle.lasting', payload: { name: 'Seal cracking', state: 'ongoing' } }] },
+        { id: 'seal-fails', when: 'true', cue: 'It fails.' },
+    ]), 'events', 'seal-fails');
+    click(ctx, 'After another event');
+    assert.equal(events(ctx)[0].when, 'true');
+    change(find(ctx, aria('Delay')), '2');
+    // One edit changes both events: the delay, and the guard of the event it counts from.
+    assert.equal(events(ctx)[1].when, "query('chronicle.passed', { name: 'Seal cracking', minutes: 2880 })");
+    assert.equal(events(ctx)[0].when, 'time() != null');
+    assert.equal(parse(events(ctx)[0].when).ok, true);
+    ctx.history.undo(); ctx.render();
+    assert.equal(events(ctx)[0].when, 'true');
+    assert.equal(events(ctx)[1].when, 'true');
+    ctx.history.redo(); ctx.render();
+    ctx.select('events', 'cracks');
+    assert.match(ctx.inspector.textContent, /Waits until the story has a date: “Seal fails” counts its days from this event\./);
+    assert.match(ctx.inspector.textContent, /When this fires: once the story has a date, on the first reply\./);
+    assert.equal(ctx.main.querySelectorAll('button.tl-row')[0].textContent.includes('Any time'), true);
+    // Places keep the guard in front, and the form still reads it.
+    click(ctx, 'Only in…');
+    const search = find(ctx, aria('Add a region or place'));
+    search.value = 'Auvoth';
+    search.dispatchEvent({ type: 'input', target: search });
+    click(ctx, 'Auvoth · place');
+    assert.equal(events(ctx)[0].when, "time() != null && query('scene.place') != null && (query('scene.place').name == 'Auvoth')");
+    assert.equal(readCondition(events(ctx)[0].when).dated, true);
+    assert.match(ctx.inspector.textContent, /once the story has a date, on the first reply while the party is in Auvoth/);
+    // Choosing a date says it already; going back to any time puts it back.
+    click(ctx, 'On a date');
+    assert.match(events(ctx)[0].when, /^time\(\) != null && time\(\) >= \d+/);
+    click(ctx, 'Any time');
+    assert.equal(events(ctx)[0].when, "time() != null && query('scene.place') != null && (query('scene.place').name == 'Auvoth')");
+    click(ctx, 'Anywhere');
+    assert.equal(events(ctx)[0].when, 'time() != null');
+    // The delay is cleared, or the event it counts from is changed: the guard goes with it.
+    ctx.select('events', 'seal-fails');
+    change(find(ctx, aria('Delay')), '');
+    assert.equal(events(ctx)[0].when, 'true');
+    change(find(ctx, aria('Delay')), '3');
+    assert.equal(events(ctx)[0].when, 'time() != null');
+    ctx.select('events', 'cracks');
+    check(ctx, 'Add to Story Director', false);
+    assert.equal(events(ctx)[0].when, 'true');
+    assert.equal(ctx.model.validation.ok, true, JSON.stringify(ctx.model.validation.errors));
+});
+
+test('a condition written by hand is not given a guard, and the raw when is not rewritten', () => {
+    const ctx = open(base([
+        { id: 'cracks', when: 'true || false', cue: 'Cracks.', then: [{ command: 'chronicle.lasting', payload: { name: 'Seal cracking', state: 'ongoing' } }] },
+        { id: 'seal-fails', after: 'cracks', when: "query('chronicle.passed', { name: 'Seal cracking', minutes: 2880 })", cue: 'It fails.' },
+        { id: 'plain', when: 'true', cue: 'Plain.' },
+    ]), 'events', 'cracks');
+    change(find(ctx, aria('Summary')), 'Broken.');
+    assert.equal(events(ctx)[0].when, 'true || false');
+    // Typing the raw condition is the author's own word, even for an event others count from.
+    ctx.select('events', 'seal-fails');
+    change(find(ctx, aria('Delay')), '4');
+    ctx.select('events', 'cracks');
+    assert.equal(events(ctx)[0].when, 'true || false');
+    const raw = ctx.inspector.querySelector(aria('when', 'textarea'));
+    change(raw, 'true');
+    assert.equal(events(ctx)[0].when, 'true');
+    assert.equal(events(ctx)[2].when, 'true');
+});
+
+test('the preview counts from the event, not from a date; Where explains regions; the lasting help says what happens without Story Director', () => {
+    const ctx = open(base([
+        { id: 'cracks', when: "time() != null && time() >= 318153600", cue: 'Cracks.', then: [{ command: 'chronicle.lasting', payload: { name: 'Seal cracking', state: 'ongoing' } }] },
+        { id: 'seal-fails', after: 'cracks', when: "query('chronicle.passed', { name: 'Seal cracking', minutes: 172800 })", cue: 'It fails.' },
+    ]), 'events', 'seal-fails');
+    assert.match(ctx.inspector.textContent, /When this fires: at least 120 days after “Cracks” happens, on the first reply\./);
+    assert.doesNotMatch(ctx.inspector.textContent, /so from/);
+    click(ctx, 'Only in…');
+    assert.match(ctx.inspector.textContent, /Regions match the region the story names for the place\./);
+    ctx.select('events', 'cracks');
+    assert.match(ctx.inspector.textContent, /Needs Story Director with world-event support; without it, this pack will not turn on and Story Block says why\./);
+    assert.doesNotMatch(ctx.inspector.textContent, /still told once/);
+});
+
+test('Problems names what a lasting change needs, and a wait for a world event nothing adds shows there and on the row', () => {
+    const ctx = open(base([
+        { id: 'cracks', when: 'true', cue: 'Cracks.', then: [{ command: 'chronicle.lasting', payload: { name: 'Seal cracking', state: 'ongoing' } }] },
+        { id: 'seal-fails', after: 'cracks', when: "query('chronicle.passed', { name: 'Seal cracking', minutes: 2880 })", cue: 'It fails.' },
+    ]), 'events', 'seal-fails');
+    const problems = () => { const box = ctx.doc.createElement('div'); renderProblemGroups(ctx, box); return box; };
+    assert.match(problems().textContent, /No problems\./);
+    assert.match(problems().textContent, /need Story Director with world-event support/);
+    assert.equal(ctx.main.querySelectorAll('.problem-dot').length, 0);
+    // Take the lasting change away: the delay now waits for nothing.
+    ctx.select('events', 'cracks');
+    check(ctx, 'Add to Story Director', false);
+    const text = problems().textContent;
+    assert.match(text, /Event "seal-fails" waits for “Seal cracking”, which no event in this pack adds/);
+    assert.doesNotMatch(text, /need Story Director/);
+    assert.equal(ctx.model.validation.ok, true);
+    assert.deepEqual(ctx.main.querySelectorAll('.problem-dot').map(dot => dot.getAttribute('aria-label')), ['Waits for a world event nothing adds']);
+    assert.equal(ctx.main.querySelectorAll('button.tl-row')[1].getAttribute('data-has-problem'), null);
 });

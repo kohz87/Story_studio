@@ -42,11 +42,15 @@ The form writes `when` in the one shape the pack's own events use, and reads it 
 
 ```
 time() != null && time() >= <from> && time() < <until>        (a date, until optional)
+time() != null                                                (no date; see below)
 query('chronicle.passed', { name: '<world event>', minutes: <N> })   (at least N story minutes after it)
 query('scene.place') != null && (query('scene.place').region == 'A' || query('scene.place').name == 'B')
 ```
 
-joined with `&&`; no clause at all is `true`. A condition is read back only when writing what was read gives the
+joined with `&&`; no clause at all is `true`. An event with a Lasting change that another event counts days from
+gets `time() != null &&` at the front (the form says "Waits until the story has a date"): Story Director stamps the
+chronicle entry with the story's time when the event happens, and an entry stamped before the story has a date can
+never have days pass after it. It is added and removed with the delay, in the same edit. A condition is read back only when writing what was read gives the
 same text again, so anything else (another call, another order, other spacing) opens as "Written by hand: edit it
 under Advanced" and is never rewritten by the form unless the author chooses "Use the form instead". A condition is
 at most 500 characters (a pack's limit); the form says so when places make it longer.
@@ -63,10 +67,21 @@ is not whole days.
 Ticking **Add to Story Director's chronicle** puts `{ "command": "chronicle.lasting", "payload": { name, state,
 place?, factions?, summary?, keep? } }` in `then`, beside any other steps. Limits (Story Director refuses more, so
 the pack checker flags them in Problems): name 80, state looming, ongoing or resolved, summary 240, place 80, at
-most 4 factions of 80, keep true or false. Story Director records which event wrote the entry; the story's own
-`world` lines can add to its summary but not change its name or state. Without Story Director the news is still told
-once. "N days after" is offered only when the earlier event has a lasting change, because the days count from when
-that entry went into the chronicle; renaming the world event moves the events that count from it in the same edit.
+most 4 factions of 80 (none blank), keep true or false, and no other field; texts are measured after trimming, as
+Story Director does. Story Director records which event wrote the entry; the story's own `world` lines can add to
+its summary but not change its name or state.
+
+Needs Story Director with world-event support; without it, this pack will not turn on and Story Block says why.
+While any event has a Lasting change the pack lists `chronicle-lasting` under `requires.capabilities` (every edit
+keeps that list right, and drops the name when no event has one), and Problems has a line saying so.
+
+"N days after" is offered only when the earlier event has a lasting change, because the days count from when that
+entry went into the chronicle; renaming the world event moves the events that count from it in the same edit. The
+"When this fires" line says "N days after “X” happens" (the real date depends on when X happens). Problems, and the
+event's row in the Timeline, warn when a condition waits for a world event that no event of the pack adds (the
+Lasting change was removed or renamed by hand); the event then never happens unless the story adds that world event
+itself. Under Where, regions are matched against the region the story names for the place, which can differ from the
+region of the pack's place.
 
 ## Part 3: character cards and lorebooks
 

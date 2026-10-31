@@ -1,5 +1,6 @@
 import { safeLabel, el, button, field, icon } from '../dom.js';
 import { KINDS, LABELS, records, identity, localId } from '../records.js';
+import { timelineNotes } from '../timeline/notes.js';
 
 
 const UNSAFE = new Set(['__proto__', 'constructor', 'prototype']);
@@ -133,6 +134,24 @@ function focusTarget(ctx, selector) {
     if (t && typeof t.focus === 'function') t.focus();
 }
 
+// What the Timeline adds that is no error: the requirement of a lasting change, and delays that wait for nothing.
+function renderNotes(ctx, container) {
+    const doc = ctx.doc;
+    const notes = timelineNotes(ctx.model?.document);
+    if (!notes.length) return;
+    const groupEl = el(doc, 'div', '', { class: 'problem-group' });
+    const hdr = el(doc, 'div', '', { class: 'problem-group-hdr' });
+    hdr.append(el(doc, 'span', 'note', { class: 'problem-chip mono' }), el(doc, 'span', 'Good to know', { class: 'problem-title' }), el(doc, 'span', String(notes.length), { class: 'problem-count muted' }));
+    groupEl.append(hdr);
+    for (const note of notes) {
+        const rowEl = el(doc, 'div', '', { class: 'problem-row', 'data-note': note.kind });
+        rowEl.append(el(doc, 'span', note.message, { class: 'problem-msg' }));
+        if (note.path) rowEl.append(el(doc, 'span', note.path, { class: 'problem-path mono muted' }), button(doc, 'Go to', () => goToProblem(ctx, note), { class: 'btn-goto', 'aria-label': `Go to ${safeLabel(note.path)}` }));
+        groupEl.append(rowEl);
+    }
+    container.append(groupEl);
+}
+
 export function renderProblemGroups(ctx, container) {
     const doc = ctx.doc;
     const groups = problemGroups(ctx.model);
@@ -140,6 +159,7 @@ export function renderProblemGroups(ctx, container) {
     if (!groups.length) {
         const message = ctx.model?.validation?.ok ? "No problems. Story Block's checker accepts this pack." : 'Open a pack to see its diagnostics.';
         container.append(el(doc, 'div', message, { class: 'clean-note' }));
+        renderNotes(ctx, container);
         return;
     }
     for (const g of groups) {
@@ -162,6 +182,7 @@ export function renderProblemGroups(ctx, container) {
         }
         container.append(groupEl);
     }
+    renderNotes(ctx, container);
 }
 
 export function renderProblemsDrawer(ctx, host, close) {

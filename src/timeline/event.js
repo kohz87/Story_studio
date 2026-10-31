@@ -2,7 +2,7 @@
 // the plain-words sentence of when it fires. Nothing here changes a pack; the condition is read through condition.js.
 import { slugify } from '../../vendor/story-block/src/v2/packs/validate.js';
 import { identity } from '../identity.js';
-import { readCondition, glanceCondition } from './condition.js';
+import { readCondition, writeCondition, glanceCondition } from './condition.js';
 import { readLasting } from './lasting.js';
 import { DAY, dayText, dateText, yearText, partName, timeText, clockText } from './calendar.js';
 
@@ -28,23 +28,60 @@ export const gapText = ({ n, unit }) => `${n} ${n === 1 ? unit.replace(/s$/, '')
 /**
  * What the form and the list know of an event: `mode` ('date', 'after' or 'any'), `from` and `until` (minutes), `gap`
  * (minutes after the earlier event's chronicle entry, 0 for none), `sinceName`, `where` (`{ kind, name }`), `lasting`,
- * `once`, `after` (the earlier event's ID). `hand` is true when the condition is not one Studio wrote: the dates and
+ * `once`, `after` (the earlier event's ID), `dated` (it waits until the story has a date, for the events that count days
+ * from it). `hand` is true when the condition is not one Studio wrote: the dates and
  * places are then only what can be seen in it, and the form keeps it exactly as it is.
  */
 export function readEvent(record) {
     const id = identity(record, 'events');
     const after = typeof record?.after === 'string' && record.after ? record.after : null;
-    const info = { id, name: humanName(id), once: record?.once !== false, after, lasting: readLasting(record), hand: false, mode: 'any', from: null, until: null, gap: 0, sinceName: null, where: [] };
+    const info = { id, name: humanName(id), once: record?.once !== false, after, lasting: readLasting(record), dated: false, hand: false, mode: 'any', from: null, until: null, gap: 0, sinceName: null, where: [] };
     const read = readCondition(record?.when);
     if (!read) {
         const seen = glanceCondition(record?.when);
         return { ...info, hand: true, mode: after ? 'after' : seen.from !== null ? 'date' : 'any', from: seen.from, until: seen.until, where: seen.where };
     }
-    info.from = read.from; info.until = read.until; info.where = read.where;
+    info.from = read.from; info.until = read.until; info.where = read.where; info.dated = read.dated === true;
     if (read.since) { info.gap = read.since.minutes; info.sinceName = read.since.name; }
     info.mode = read.since || (read.from === null && after) ? 'after' : read.from !== null ? 'date' : 'any';
     if ((read.since && (!after || !gapOf(read.since.minutes))) || (info.mode === 'any' && read.until !== null)) info.hand = true;
     return info;
+}
+
+// ---------------------------------------------------------------- the date guard
+
+/** The events that count days from this event's lasting change. */
+export function countersOf(events, record) {
+    const name = readLasting(record)?.name;
+    const id = identity(record, 'events');
+    return typeof name !== 'string' || !name ? [] : events.filter(other => isRecord(other) && other !== record && other.after === id && readCondition(other.when)?.since?.name === name);
+}
+
+// The record with `time() != null` at the front of its condition while it is counted from and has no date or delay of
+// its own, and without it otherwise; a condition Studio did not write is left as it is.
+function guarded(events, record) {
+    const read = readCondition(record.when);
+    if (!read || read.from !== null || read.until !== null || read.since) return record;
+    const dated = countersOf(events, record).length > 0;
+    if ((read.dated === true) === dated) return record;
+    const written = writeCondition({ ...read, dated });
+    return written.ok ? { ...record, when: written.when } : record;
+}
+
+/**
+ * The events with `events[at]` replaced by `next`, and the guard of each event this touches settled: `next` itself and
+ * the event it follows now and before. An event with a lasting change that another event counts days from waits until
+ * the story has a date (`time() != null`), because its chronicle entry takes the story's time when the event happens.
+ */
+export function settleGuards(events, at, next) {
+    const list = events.map((record, index) => (index === at ? next : record));
+    const touched = new Set([at]);
+    for (const ref of [events[at]?.after, next?.after]) {
+        const found = typeof ref === 'string' && ref ? list.findIndex(record => isRecord(record) && identity(record, 'events') === ref) : -1;
+        if (found >= 0) touched.add(found);
+    }
+    for (const index of touched) if (isRecord(list[index])) list[index] = guarded(list, list[index]);
+    return list;
 }
 
 // ---------------------------------------------------------------- the list
@@ -171,11 +208,10 @@ export function describeWhen(info, calendar, parent = null) {
     } else if (info.mode === 'after') {
         const earlier = `“${parent?.name ?? humanName(info.after)}”`;
         const spec = gapOf(info.gap);
-        let lead = spec ? `at least ${gapText(spec)} after ${earlier}` : `after ${earlier} has happened`;
-        if (spec && parent?.from != null) lead += ` (so from ${dateText(calendar, parent.from)} + ${gapText(spec)})`;
-        parts.push(lead);
+        parts.push(spec ? `at least ${gapText(spec)} after ${earlier} happens` : `after ${earlier} has happened`);
+        if (info.dated) parts.push('once the story has a date');
         if (info.until !== null) parts.push(`and no later than ${whenText(calendar, info.until, 'until')}`);
         parts.push(`on the first reply${where}`);
-    } else parts.push(`on the first reply${where}`);
+    } else parts.push(`${info.dated ? 'once the story has a date, ' : ''}on the first reply${where}`);
     return `${parts.join(', ')}${info.once ? '' : '; it can fire again on later replies'}.`;
 }

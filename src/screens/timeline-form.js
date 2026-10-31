@@ -7,7 +7,7 @@ import { EVENT_LIMITS } from '../../vendor/story-block/src/v2/packs/limits.js';
 import { DAY, PARTS, packCalendar, dateText, partName } from '../timeline/calendar.js';
 import { writeCondition, readCondition } from '../timeline/condition.js';
 import { LASTING_STATES, LASTING_LIMITS, checkLasting, readLasting, withLasting } from '../timeline/lasting.js';
-import { readEvent, humanName, idFromName, gapOf, describeWhen } from '../timeline/event.js';
+import { readEvent, humanName, idFromName, gapOf, describeWhen, settleGuards, countersOf } from '../timeline/event.js';
 
 const STATE_LABELS = { looming: 'Looming', ongoing: 'Ongoing', resolved: 'Resolved' };
 const UNITS = { days: DAY, hours: 60 };
@@ -57,11 +57,19 @@ function checkbox(doc, text, checked, onChange) {
     return label;
 }
 
-/** Saves a whole event record in one step (one undo). A refusal rebuilds the form from the pack and says why. */
-function save(ctx, idx, next) {
+/**
+ * Saves a whole event record in one step (one undo). A refusal rebuilds the form from the pack and says why. The events
+ * the change touches keep their date guard (an event others count days from waits until the story has a date), and
+ * then all change together; `settle` false leaves the guards alone (the author's own condition).
+ */
+function save(ctx, idx, next, settle = true) {
     const checked = validateField(schemaForKind('events'), next);
     if (!checked.ok) return applyEdit(ctx, { ok: false, model: ctx.model, errors: [{ code: checked.code, message: checked.message }] });
-    return applyEdit(ctx, setSchemaField(ctx.model, ['content', 'events', idx], next));
+    const before = records(ctx.model, 'events');
+    const list = settle ? settleGuards(before, idx, next) : before;
+    const others = settle && list.some((record, index) => index !== idx && record !== before[index]);
+    if (!others) return applyEdit(ctx, setSchemaField(ctx.model, ['content', 'events', idx], settle ? list[idx] : next));
+    return applyEdit(ctx, setRecords(ctx.model, 'events', list));
 }
 const refuse = (ctx, message) => applyEdit(ctx, { ok: false, model: ctx.model, errors: [{ code: 'bad-value', message }] });
 
@@ -243,6 +251,8 @@ export function renderEventInspector(ctx, container, { record, idx, problems = [
             if (info.sinceName !== null && parentChronicle !== info.sinceName) whenSet.append(el(doc, 'p', `This waits for a world event called “${info.sinceName}”, which “${parentInfo?.name ?? humanName(info.after)}” does not add now, so it never happens until that is fixed.`, { class: 'warning' }));
             whenSet.append(small(doc, 'No later than (optional)'), dateRow(ctx, ui, { key: `${id}:until`, role: 'until', abs: info.until, label: 'No later than', optional: true, onCommit: abs => apply({ until: abs }) }));
         } else whenSet.append(small(doc, 'It can happen on any reply, wherever the party is, unless you choose places below.'));
+        const counters = info.dated && mode !== 'date' ? countersOf(events, record) : [];
+        if (counters.length) whenSet.append(small(doc, `Waits until the story has a date: ${counters.map(event => `“${humanName(identity(event, 'events'))}”`).join(', ')} counts its days from this event.`));
     }
     form.append(whenSet);
 
@@ -259,6 +269,7 @@ export function renderEventInspector(ctx, container, { record, idx, problems = [
             info.where.forEach((place, index) => chips.append(button(doc, `${place.name} ✕`, () => apply({ where: info.where.filter((_, at) => at !== index) }), { class: 'chip', 'aria-label': `Remove ${place.name}` })));
             whereSet.append(chips);
             whereSet.append(placePicker(ctx, info.where, where => apply({ where })));
+            whereSet.append(small(doc, 'Regions match the region the story names for the place.'));
             whereSet.append(small(doc, mode === 'date' ? 'For news that spreads, add a second event “after this one”, some days later, in other regions.' : 'Elsewhere it waits, and happens the first time the party arrives in one of these.'));
         }
     }
@@ -294,7 +305,7 @@ export function renderEventInspector(ctx, container, { record, idx, problems = [
     const raw = (label, control) => { const row = el(doc, 'div', '', { class: 'fieldset-row' }); row.append(field(doc, label, control)); return row; };
     const when = el(doc, 'textarea', '', { class: 'mono', rows: '4', 'aria-label': 'when' });
     when.value = record.when ?? '';
-    when.addEventListener('change', () => save(ctx, idx, { ...record, when: when.value }));
+    when.addEventListener('change', () => save(ctx, idx, { ...record, when: when.value }, false));
     const after = el(doc, 'input', '', { class: 'mono', 'aria-label': 'after' });
     after.value = info.after ?? '';
     after.addEventListener('change', () => {
@@ -426,6 +437,6 @@ function lastingSet(ctx, ui, { record, idx, info, events }) {
     set.append(chips);
     set.append(text('Summary', 'summary', LASTING_LIMITS.summary, true));
     set.append(checkbox(doc, 'Keep in mind: mentioned on every reply (up to 2)', lasting.keep === true, checked => change({ keep: checked })));
-    set.append(small(doc, 'Players see it in World → News and the Journal once it happens. The story can add detail but can\'t change its state; only another event or the player can. Needs Story Director; without it the news is still told once.'));
+    set.append(small(doc, 'Players see it in World → News and the Journal once it happens. The story can add detail but can\'t change its state; only another event or the player can. Needs Story Director with world-event support; without it, this pack will not turn on and Story Block says why.'));
     return set;
 }

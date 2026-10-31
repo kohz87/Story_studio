@@ -6,6 +6,7 @@ import { renderRecords, getRecordProblems, openRecordRemoveDialog } from './reco
 import { renderEventInspector, timelineState } from './timeline-form.js';
 import { packCalendar } from '../timeline/calendar.js';
 import { timelineRows } from '../timeline/event.js';
+import { missingWorldEvents } from '../timeline/notes.js';
 
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -54,6 +55,7 @@ export function renderTimeline(ctx) {
     const list = el(doc, 'div', '', { class: 'records-list tl-list' });
     const calendar = packCalendar(model.document);
     const { groups } = timelineRows(events, calendar);
+    const waiting = missingWorldEvents(model.document);
     if (!groups.length) list.append(el(doc, 'p', 'No events yet. An event is news the AI is told once, when its date and place come.', { class: 'muted' }));
     for (const group of groups) {
         list.append(el(doc, 'h2', group.title, { class: 'tl-year' }));
@@ -70,6 +72,7 @@ export function renderTimeline(ctx) {
             const title = el(doc, 'span', '', { class: 'record-card-header' });
             title.append(el(doc, 'span', row.info.name, { class: 'record-card-name' }));
             if (problems.length) title.append(el(doc, 'span', '', { class: 'problem-dot', 'aria-label': 'Has problems' }));
+            else if (waiting.has(row.idx)) title.append(el(doc, 'span', '', { class: 'problem-dot', 'aria-label': 'Waits for a world event nothing adds', title: `Waits for ${waiting.get(row.idx).map(name => `“${name}”`).join(', ')}, which no event in this pack adds.` }));
             const chips = el(doc, 'span', '', { class: 'tl-chips' });
             for (const chip of row.chips) chips.append(el(doc, 'span', chip.text, { class: 'chip' }));
             body.append(title, chips);

@@ -5,6 +5,7 @@ import { identity } from './identity.js';
 import { schemaForKind, validateChange } from './form-schema.js';
 import { CASCADE_KINDS } from './records.js';
 import { slugify } from '../vendor/story-block/src/v2/packs/validate.js';
+import { withLastingCapability } from './timeline/lasting.js';
 
 const SB_KINDS = new Set(CASCADE_KINDS.filter(k => k !== 'legacySkills'));
 const ALL_KINDS = new Set(CASCADE_KINDS);
@@ -133,7 +134,8 @@ function getRecordIdentity(kind, record) {
 
 
 function commitSnapshot(newDoc, originalModel) {
-    const snapshot = openPack(newDoc);
+    // The capability a lasting change needs follows the events, so no edit can leave the pack without it.
+    const snapshot = openPack(withLastingCapability(newDoc));
     if (!snapshot || snapshot.document === null) {
         return {
             ok: false,
