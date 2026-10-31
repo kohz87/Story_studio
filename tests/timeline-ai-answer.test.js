@@ -302,11 +302,11 @@ test('review 2: a field of the wrong kind is a problem in words, never a quiet "
     for (const [value, shown] of [[{}, '{}'], [null, 'null'], [-3, '-3'], [1.5, '1.5'], ['soon', '“soon”'], [[3], 'a list'], [{ n: 3 }, 'an object'], [true, 'true']]) {
         const result = read([...parent, { name: 'Child', when: { after: 'Parent', days: value }, news: 'C' }]);
         const issues = problemsOf(result)[1];
-        if (value === null) assert.deepEqual(issues, [], 'null means no delay');
-        else assert.ok(issues.some(text => /not a whole number of at least 1/.test(text)), `${shown}: ${JSON.stringify(issues)}`);
+        assert.ok(issues.some(text => /not a whole number of at least 1/.test(text)), `${shown}: ${JSON.stringify(issues)}`);
     }
-    // What is plainly meant stays quiet: no when, "any time", null for a field left out, anywhere, once true or false.
-    for (const quiet of [{}, { when: 'any time' }, { when: null }, { when: {} }, { until: null }, { where: null }, { where: 'anywhere' }, { where: [] }, { once: null }, { once: true }, { once: false }, { lasting: null }, { lasting: false }]) {
+    // What is plainly meant stays quiet: a field left out, "any time", anywhere, once true or false. (Review 161: a field that is
+    // there as null is not left out; see the test for it below.)
+    for (const quiet of [{}, { when: 'any time' }, { when: {} }, { where: 'anywhere' }, { where: [] }, { once: true }, { once: false }, { lasting: false }]) {
         assert.deepEqual(say(quiet).problems, [], JSON.stringify(quiet));
     }
     assert.equal(say({ once: 'false' }).record.once, undefined, 'a malformed once is not guessed at');
@@ -435,4 +435,146 @@ test('review 9: a citation or other bracket before the JSON does not hide the an
     assert.deepEqual(two.list.map(item => item.name), ['A']);
     // With no event anywhere, the report is as it was.
     assert.deepEqual(readAnswer('[1]', model()).skipped, [{ index: 0, reason: 'It is not an event (an event is an object with a name).' }]);
+});
+
+// ------------------------------------------------------------ review 161
+
+const lonely = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+
+test('review 161-2: a field that is there as null is a problem, never a quiet default; only a field left out takes its default', () => {
+    // The review's repro: a child whose delay, place and repeat setting are null.
+    const text = '[{"name":"Parent","news":"P","lasting":{"name":"P changed","state":"ongoing"}},{"name":"Child","when":{"after":"Parent","days":null},"where":null,"once":null,"news":"C"}]';
+    const result = read(text);
+    const [parent, child] = problemsOf(result);
+    assert.deepEqual(parent, []);
+    assert.ok(child.some(line => /delay of null days is not a whole number of at least 1|not a whole number of at least 1/.test(line)), JSON.stringify(child));
+    assert.ok(child.some(line => /“where” should be .*not null/.test(line)), JSON.stringify(child));
+    assert.ok(child.some(line => /“once” should be true or false, not null/.test(line)), JSON.stringify(child));
+    const kept = keepAll(withDrafts(model(), result.items.map(item => item.draft)));
+    assert.equal(kept.kept, 1, 'only the parent can be kept');
+    assert.deepEqual(kept.result.model.document.content.events.map(event => event.id), ['parent']);
+    // Each field, present as null.
+    const says = (event, pattern, label) => {
+        const { problems } = one({ ...base, news: 'It happened', ...event });
+        assert.ok(problems.some(line => pattern.test(line)), `${label}: ${JSON.stringify(problems)}`);
+    };
+    says({ when: null }, /“when” should be .*not null/, 'when');
+    says({ when: { on: null } }, /The date should be words .*not null/, 'on');
+    says({ when: { after: null } }, /“after” should be the name of an event, not null/, 'after');
+    says({ when: 'any time', until: null }, /The end date should be words .*not null/, 'until');
+    says({ where: null }, /“where” should be .*not null/, 'where');
+    says({ once: null }, /“once” should be true or false, not null/, 'once');
+    says({ lasting: null }, /“lasting” should be an object .*not null/, 'lasting');
+    for (const unit of ['days', 'hours', 'months']) {
+        const result = read([{ name: 'Parent', news: 'P', lasting: { name: 'P changed', state: 'ongoing' } }, { name: 'Child', when: { after: 'Parent', [unit]: null }, news: 'C' }]);
+        assert.ok(problemsOf(result)[1].some(line => new RegExp(`${unit} is not a whole number of at least 1`).test(line)), unit);
+    }
+    const lone = read([{ name: 'Lone', when: { days: null }, news: 'C' }]);
+    assert.ok(problemsOf(lone)[0].some(line => /no earlier event to count from/.test(line)));
+    for (const field of ['name', 'state', 'place', 'summary', 'factions', 'keep']) {
+        const { problems } = one({ ...base, lasting: { name: 'N', state: 'ongoing', [field]: null } });
+        assert.ok(problems.some(line => new RegExp(`Lasting change: ${field} `).test(line)), `${field}: ${JSON.stringify(problems)}`);
+    }
+    // A field that is left out takes its default, quietly: the same event without the null fields is ready.
+    assert.deepEqual(one({ ...base, news: 'It happened', lasting: { name: 'N', state: 'ongoing' } }).problems, []);
+    assert.deepEqual(read(JSON.parse(text.replace(',"days":null', '').replace('"where":null,"once":null,', ''))).items.length, 2);
+    assert.deepEqual(problemsOf(read(JSON.parse(text.replace(',"days":null', '').replace('"where":null,"once":null,', ''))))[1], []);
+});
+
+test('review 161-4: "after" resolves by the exact name the answer used, and two names that match it are not guessed between', () => {
+    const fort = { name: 'Dawn-Watch Falls', news: 'The fort falls.', lasting: { name: 'Fort falls', state: 'ongoing' } };
+    const guard = { name: 'Dawn Watch Falls', news: 'The guard falls.', lasting: { name: 'Guard falls', state: 'ongoing' } };
+    const mourned = after => ({ name: 'The guard is mourned', when: { after, days: 2 }, news: 'The guard is mourned.' });
+    // The review's repro: the name used is the second event's, so the child follows the second, whatever the IDs say.
+    const result = read([fort, guard, mourned('Dawn Watch Falls')]);
+    const [first, second, child] = result.items.map(item => item.draft.record);
+    assert.deepEqual([first.id, second.id], ['dawn-watch-falls', 'dawn-watch-falls-2']);
+    assert.equal(child.after, 'dawn-watch-falls-2');
+    assert.deepEqual(readCondition(child.when).since, { name: 'Guard falls', minutes: 2 * 1440 });
+    assert.deepEqual(problemsOf(result), [[], [], []]);
+    const kept = keepAll(withDrafts(model(), result.items.map(item => item.draft)));
+    assert.equal(kept.kept, 3);
+    assert.equal(kept.result.model.document.content.events.find(event => event.id === 'the-guard-is-mourned').after, 'dawn-watch-falls-2');
+    // And the other name follows the first.
+    assert.equal(read([fort, guard, mourned('Dawn-Watch Falls')]).items[2].draft.record.after, 'dawn-watch-falls');
+    // Case and spacing do not matter.
+    assert.equal(read([fort, guard, mourned('  dawn   WATCH falls ')]).items[2].draft.record.after, 'dawn-watch-falls-2');
+    // Two events whose names are the same but for case and spacing: the child is left with a note, and is not ready.
+    const twin = { ...guard, name: 'dawn  watch FALLS' };
+    const unsure = read([guard, twin, mourned('Dawn Watch Falls')]);
+    const child2 = unsure.items[2].draft.record;
+    assert.equal(child2.after, undefined, 'no guess');
+    const issues = problemsOf(unsure)[2];
+    assert.ok(issues.some(line => /could mean any of 2 events in this answer \(dawn-watch-falls, dawn-watch-falls-2\)/.test(line)), JSON.stringify(issues));
+    assert.equal(keepAll(withDrafts(model(), unsure.items.map(item => item.draft))).kept, 2, 'the two are kept, the child is not');
+    // No name matches exactly but two events make the same ID: not guessed either. One that makes it alone is followed.
+    assert.ok(problemsOf(read([fort, guard, mourned('dawn_watch falls')]))[2].some(line => /could mean any of 2 events/.test(line)));
+    assert.equal(read([fort, mourned('Dawn Watch Falls')]).items[1].draft.record.after, 'dawn-watch-falls');
+    // The pack's event of that ID is followed over an event that only makes the same ID (the pack has no names).
+    const lasting = { command: 'chronicle.lasting', payload: { name: 'Old fall', state: 'ongoing' } };
+    const m = model([{ id: 'dawn-watch-falls', when: 'true', cue: 'Old.', then: [lasting] }]);
+    const packed = read([fort, mourned('Dawn Watch Falls')], m);
+    assert.equal(packed.items[1].draft.record.after, 'dawn-watch-falls', 'the pack\'s event, as no name in the answer is exactly that');
+    const own = read([guard, mourned('Dawn Watch Falls')], m);
+    assert.equal(own.items[1].draft.record.after, 'dawn-watch-falls-2', 'an exact name in the answer still wins over the pack\'s');
+});
+
+test('review 161-5: text bounds count characters, never split one, and say when a text was cut', () => {
+    const dragons = n => '🐉'.repeat(n);
+    // The review's repro: a summary of exactly 240 characters ends in seven dragons, and keeps all seven.
+    const summary = `${'The southern road remains closed as the city prepares for winter. '.repeat(3)}The council has received warnings. ${dragons(7)}`;
+    assert.equal([...summary].length, 240);
+    const road = one({ name: 'Road closes', news: 'The road closes.', lasting: { name: 'Road closed', state: 'ongoing', summary } });
+    assert.deepEqual(road.problems, []);
+    assert.equal(readLasting(road.record).summary, summary);
+    const kept = keepAll(withDrafts(model(), [road.item.draft]));
+    assert.equal(kept.kept, 1);
+    assert.equal(readLasting(kept.result.model.document.content.events[0]).summary, summary, 'kept whole');
+    assert.equal(kept.result.model.validation.ok, true, JSON.stringify(kept.result.model.validation.errors));
+    // Texts at their limit, counted in characters, are kept whole: name, place, faction, summary.
+    const full = one({ ...base, lasting: { name: dragons(80), state: 'ongoing', place: dragons(80), factions: [dragons(80), dragons(80), dragons(80), dragons(80)], summary: dragons(240) } });
+    assert.deepEqual(full.problems, []);
+    assert.deepEqual(readLasting(full.record), { name: dragons(80), state: 'ongoing', place: dragons(80), factions: Array(4).fill(dragons(80)), summary: dragons(240) });
+    // Over the limit: still said as too long (it is cut one character past it, never mid-character), and said as shortened.
+    for (const [field, limit, long] of [['name', 80, 85], ['place', 80, 85], ['summary', 240, 300]]) {
+        const over = one({ ...base, lasting: { name: 'N', state: 'ongoing', [field]: dragons(long) } });
+        const stored = readLasting(over.record)[field];
+        assert.equal([...stored].length, limit + 1, field);
+        assert.ok(!lonely.test(stored), `${field}: no half character`);
+        assert.ok(over.problems.some(line => new RegExp(`Lasting change: ${field} `).test(line)), `${field}: ${JSON.stringify(over.problems)}`);
+        assert.ok(over.problems.some(line => new RegExp(`${long} characters and a lasting change allows ${limit}: it was shortened`).test(line)), `${field}: ${JSON.stringify(over.problems)}`);
+    }
+    // Only just over (one past the limit): nothing was cut, so only the limit is said.
+    const just = one({ ...base, lasting: { name: dragons(81), state: 'ongoing' } });
+    assert.equal([...readLasting(just.record).name].length, 81);
+    assert.ok(just.problems.length === 1 && /name must be 1 to 80/.test(just.problems[0]), JSON.stringify(just.problems));
+    // Too many factions, and a faction name too long.
+    const crowd = one({ ...base, lasting: { name: 'N', state: 'ongoing', factions: Array.from({ length: 9 }, (_, i) => dragons(i + 1)) } });
+    assert.equal(readLasting(crowd.record).factions.length, 5);
+    assert.ok(crowd.problems.some(line => /The list has 9 factions and a lasting change allows 4: it was shortened/.test(line)));
+    // The event's name stands in for a lasting change with none, cut to fit and said.
+    const stand = one({ name: `${'e'.repeat(110)}${dragons(10)}`, news: 'x', lasting: { state: 'ongoing' } });
+    assert.equal([...readLasting(stand.record).name].length, 80);
+    assert.ok(stand.problems.some(line => /takes the event’s, which is 120 characters: only the first 80 were kept/.test(line)));
+    // The news is counted as the pack checker counts it; a valid news is kept whole and a cut one never ends mid-character.
+    const edge = `${'a'.repeat(498)}🐉`;
+    assert.equal(edge.length, 500);
+    const whole = one({ ...base, news: edge });
+    assert.equal(whole.record.cue, edge);
+    assert.deepEqual(whole.problems, []);
+    const split = one({ ...base, news: `${'a'.repeat(499)}🐉 and more` });
+    assert.ok(!lonely.test(split.record.cue));
+    assert.equal(split.record.cue, 'a'.repeat(499));
+    assert.ok(split.problems.some(line => /only the first 500 were kept/.test(line)));
+    // Names: an event name, a place name, and a date are bounded in characters too, and a cut name is said.
+    const name = one({ name: `${'e'.repeat(199)}${dragons(5)}`, news: 'x' });
+    assert.ok(name.item.name === `${'e'.repeat(199)}🐉` && !lonely.test(name.item.name));
+    assert.match(name.item.info.join(' '), /longer than 200 characters/);
+    const where = one({ ...base, where: [`${'p'.repeat(199)}${dragons(5)}`, 'Auvoth'] });
+    assert.ok(readEvent(where.record).where.every(place => !lonely.test(place.name)));
+    assert.ok(where.problems.some(line => /A place name was longer than 200 characters and was shortened/.test(line)), JSON.stringify(where.problems));
+    const date = one({ ...base, when: { on: `Rainmoot 4, CY 613, dawn${' '.repeat(300)}` } });
+    assert.ok(!date.problems.some(line => /longer than 200/.test(line)), 'spaces around a date are no part of it');
+    const longDate = one({ ...base, when: { on: `Rainmoot 4, CY 613, dawn ${dragons(300)}` } });
+    assert.ok(longDate.problems.some(line => /could not be read: it is longer than 200 characters/.test(line)), JSON.stringify(longDate.problems));
 });

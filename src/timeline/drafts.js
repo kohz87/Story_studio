@@ -24,6 +24,9 @@ export const MAX_DRAFTS = 60;
 export const MAX_DRAFT_BYTES = 1024 * 1024;
 const MAX_NOTES = 12;
 
+/** What the writer is told when the browser would not keep the project with its drafts; `result` says what that meant ("they were not added"). */
+export const saveFailed = result => `The browser would not save the project with these drafts, so ${result}. Export your pack to a file first, or make room (clear other site data) and try again.`;
+
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 /** What of an event the older, whole-draft notes are about: its when, after and where, as the form reads them. */
@@ -33,31 +36,35 @@ export function draftSignature(record) {
 }
 
 const NOTE_KINDS = ['when', 'until', 'after', 'delay', 'where', 'once', 'news', 'lasting'];
-/** What of an event a note of this kind is about, as the form reads it. */
-function noteSignature(kind, record) {
+/**
+ * What of an event a note of this kind is about, as the form reads it: that field and nothing else. A note about the end date
+ * is not answered by a change of how the event starts, nor one about the date by a change of the place.
+ */
+function noteSignature(kind, record, field) {
     const info = readEvent(record);
     switch (kind) {
-        case 'when': return [info.mode, info.from];
-        case 'until': return [info.mode, info.until];
+        case 'when': return [info.from];
+        case 'until': return [info.until];
         case 'after': return [info.after];
         case 'delay': return [info.gap];
         case 'where': return info.where.map(place => `${place.kind}:${place.name}`);
         case 'once': return [info.once];
         case 'news': return [typeof record.cue === 'string' ? record.cue : null];
-        case 'lasting': return [info.lasting !== null];
+        // A note about one text of the lasting change (it was cut) is about that text alone.
+        case 'lasting': return field ? [info.lasting?.[field] ?? null] : [info.lasting !== null];
         default: return [];
     }
 }
 
 /**
- * A draft of `record`; `notes` are what could not be written into it: `{ kind, text, ack? }` (about the field of that kind;
- * `ack` is the label of the button that sets it aside), or plain text, which lasts while the event's date, delay, places and
+ * A draft of `record`; `notes` are what could not be written into it: `{ kind, text, ack?, field? }` (about the field of that kind;
+ * `ack` is the label of the button that sets it aside; `field` names the one text of the lasting change it is about), or plain text, which lasts while the event's date, delay, places and
  * the event it follows are as they were.
  */
 export function makeDraft(record, notes = []) {
     return {
         record,
-        notes: notes.map(item => (typeof item === 'string' ? item : { ...item, seen: JSON.stringify(noteSignature(item.kind, record)) })),
+        notes: notes.map(item => (typeof item === 'string' ? item : { ...item, seen: JSON.stringify(noteSignature(item.kind, record, item.field)) })),
         seen: draftSignature(record),
     };
 }
@@ -67,12 +74,12 @@ function activeNotes(draft) {
     const out = [];
     draft.notes.forEach((item, index) => {
         if (typeof item === 'string') { if (draftSignature(draft.record) === draft.seen) out.push({ index, text: item }); }
-        else if (JSON.stringify(noteSignature(item.kind, draft.record)) === item.seen) out.push({ index, text: item.text, ...item.ack ? { ack: item.ack } : {} });
+        else if (JSON.stringify(noteSignature(item.kind, draft.record, item.field)) === item.seen) out.push({ index, text: item.text, ...item.ack ? { ack: item.ack } : {} });
     });
     return out;
 }
 
-const validNote = item => typeof item === 'string' || (isRecord(item) && NOTE_KINDS.includes(item.kind) && typeof item.text === 'string' && typeof item.seen === 'string' && (item.ack === undefined || typeof item.ack === 'string'));
+const validNote = item => typeof item === 'string' || (isRecord(item) && NOTE_KINDS.includes(item.kind) && typeof item.text === 'string' && typeof item.seen === 'string' && (item.ack === undefined || typeof item.ack === 'string') && (item.field === undefined || typeof item.field === 'string'));
 
 /** The drafts of a saved project, checked: a list of `{ record, notes, seen }`; anything else is left out. */
 export function sanitizeDrafts(value) {
@@ -80,7 +87,7 @@ export function sanitizeDrafts(value) {
     const out = [];
     for (const item of value.slice(0, MAX_DRAFTS)) {
         if (!isRecord(item) || !isRecord(item.record) || typeof item.record.id !== 'string' || !item.record.id) continue;
-        const notes = Array.isArray(item.notes) ? item.notes.filter(validNote).slice(0, MAX_NOTES).map(note => (typeof note === 'string' ? note : { kind: note.kind, text: note.text, seen: note.seen, ...note.ack ? { ack: note.ack } : {} })) : [];
+        const notes = Array.isArray(item.notes) ? item.notes.filter(validNote).slice(0, MAX_NOTES).map(note => (typeof note === 'string' ? note : { kind: note.kind, text: note.text, seen: note.seen, ...note.ack ? { ack: note.ack } : {}, ...note.field ? { field: note.field } : {} })) : [];
         out.push({ record: item.record, notes, seen: typeof item.seen === 'string' ? item.seen : draftSignature(item.record) });
     }
     return out;

@@ -9,7 +9,7 @@ import { draftsOf } from '../model.js';
 import { records, identity, localId } from '../records.js';
 import { buildPrompt, wordCount, cutNote, IDEA_LIMIT } from '../timeline/ai-prompt.js';
 import { readAnswer } from '../timeline/ai-answer.js';
-import { addDrafts, draftProblems, draftIssues, waitingFor, summarize, keepDraft, keepAll, keepableCount, discardDraft, ackNote } from '../timeline/drafts.js';
+import { addDrafts, saveFailed, draftProblems, draftIssues, waitingFor, summarize, keepDraft, keepAll, keepableCount, discardDraft, ackNote } from '../timeline/drafts.js';
 import { humanName } from '../timeline/event.js';
 import { timelineState, fieldset, checkbox, small } from './timeline-form.js';
 
@@ -162,15 +162,15 @@ export function renderAiPanel(ctx, container) {
             if (!again.ok || !again.items.length) { ui.result = again; drawResults(); return; }
             const first = again.items[0].id;
             if (applyEdit(ctx, addDrafts(ctx.model, again.items.map(item => item.draft)), { id: first, form: 'draft' })) {
-                // The project is saved with its drafts. If the browser would not keep that, take them back out and say so,
-                // rather than let a reload lose them without a word.
+                // The project is saved with its drafts. If the browser would not keep that, take them back out (the history as it was,
+                // with no redo step for them) and say so, rather than let a reload lose them without a word.
                 if (ctx.saved === false) {
-                    ctx.history.undo();
+                    ctx.history.revert();
                     Object.assign(ctx.selection, { id: null, form: null });
                     ctx.changed();
                     ui.open = true;
                     ctx.render();
-                    ctx.notify('The browser would not save the project with these drafts, so they were not added. Export your pack to a file first, or make room (clear other site data) and try again.');
+                    ctx.notify(saveFailed('they were not added'));
                     return;
                 }
                 Object.assign(ui, { step: 1, answer: '', result: null });

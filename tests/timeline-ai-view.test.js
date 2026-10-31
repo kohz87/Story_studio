@@ -2,12 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { openPack, exportPack, draftsOf } from '../src/model.js';
+import { setSchemaField } from '../src/edits.js';
 import { renderScreen } from '../src/screens/index.js';
 import { createTestContext } from './helpers/dom.js';
 import { buildPrompt, wordCount } from '../src/timeline/ai-prompt.js';
 import { withDrafts } from '../src/model.js';
 import { makeDraft } from '../src/timeline/drafts.js';
 import { writeCondition } from '../src/timeline/condition.js';
+import { mountStudio } from '../src/studio.js';
+import { MockDocument } from './helpers/dom.js';
+import { DRAFT_KEY } from '../src/session.js';
 
 const ersveil = readFileSync(new URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8');
 const idea = 'The Emperor of Highmark dies in early winter CY 612. The news reaches the north about two weeks later.';
@@ -466,3 +470,147 @@ test('review 8: the prompt stays within the limit for a big pack, and the note u
     tick(ctx, 'Regions and places', false);
     assert.ok(prompt(ctx).length <= 24000, String(prompt(ctx).length));
 });
+
+// ------------------------------------------------------------ review 161
+
+test('review 161-1: an end date that was not words stays a problem when only the start is changed, until it is set or accepted', () => {
+    const ctx = open();
+    click(ctx, '✦ Write with an AI');
+    paste(ctx, [{ name: 'Weather report', when: { on: 'Icewane 4, CY 612, dawn' }, until: 123, news: 'The storm arrives.' }]);
+    click(ctx, 'Add 1 as a draft');
+    assert.match(banner(ctx), /The end date should be words/);
+    assert.ok(named(ctx, 'Keep').disabled);
+    // The start now follows an event, with no end set and none accepted: the end is still open.
+    click(ctx, 'After another event');
+    assert.match(banner(ctx), /The end date should be words/, 'changing only the start mode does not answer the end date');
+    assert.ok(named(ctx, 'Keep').disabled);
+    assert.ok(named(ctx, 'No end date is fine'));
+    // And back to a date and to any time: still open.
+    click(ctx, 'On a date');
+    assert.match(banner(ctx), /The end date should be words/);
+    // The writer's own button is what answers it.
+    click(ctx, 'After another event');
+    click(ctx, 'No end date is fine');
+    assert.ok(!/end date/.test(banner(ctx)));
+    assert.ok(!/The end date/.test(banner(ctx)));
+});
+
+test('review 161-2/4/5: through the controls, null fields, a name used twice and a text of dragons behave as the lead decided', () => {
+    const cards = ctx => ctx.inspector.querySelectorAll('.tl-ai-draft').map(card => card.textContent);
+    // 2: the child with null delay, place and repeat setting is not Ready, and Keep all keeps only the parent.
+    let ctx = open();
+    click(ctx, '✦ Write with an AI');
+    paste(ctx, [{ name: 'Parent', news: 'P', lasting: { name: 'P changed', state: 'ongoing' } }, { name: 'Child', when: { after: 'Parent', days: null }, where: null, once: null, news: 'C' }]);
+    assert.match(cards(ctx)[0], /^✓ Ready/);
+    assert.match(cards(ctx)[1], /^⚠ Needs a look/);
+    click(ctx, 'Add 2 as drafts');
+    click(ctx, 'Keep the 1 that is ready');
+    assert.deepEqual(ctx.model.document.content.events.slice(7).map(event => event.id), ['parent']);
+    assert.deepEqual(drafts(ctx).map(draft => draft.record.id), ['child']);
+    // 4: two names that make the same ID: the child follows the one whose name it used.
+    ctx = open();
+    click(ctx, '✦ Write with an AI');
+    paste(ctx, [{ name: 'Dawn-Watch Falls', news: 'The fort falls.', lasting: { name: 'Fort falls', state: 'ongoing' } }, { name: 'Dawn Watch Falls', news: 'The guard falls.', lasting: { name: 'Guard falls', state: 'ongoing' } }, { name: 'The guard is mourned', when: { after: 'Dawn Watch Falls', days: 2 }, news: 'The guard is mourned.' }]);
+    click(ctx, 'Add 3 as drafts');
+    click(ctx, 'Keep all 3 drafts');
+    const events = ctx.model.document.content.events;
+    assert.equal(events.find(event => event.id === 'the-guard-is-mourned').after, 'dawn-watch-falls-2');
+    assert.match(events.find(event => event.id === 'the-guard-is-mourned').when, /Guard falls/);
+    // 5: a summary of exactly 240 characters, dragons at its end, is kept whole.
+    const summary = `${'The southern road remains closed as the city prepares for winter. '.repeat(3)}The council has received warnings. ${'🐉'.repeat(7)}`;
+    ctx = open();
+    click(ctx, '✦ Write with an AI');
+    paste(ctx, [{ name: 'Road closes', news: 'The road closes.', lasting: { name: 'Road closed', state: 'ongoing', summary } }]);
+    assert.match(cards(ctx)[0], /^✓ Ready/);
+    click(ctx, 'Add 1 as a draft');
+    click(ctx, 'Keep');
+    assert.equal(ctx.model.document.content.events.at(-1).then[0].payload.summary, summary);
+});
+
+// A browser that keeps the project but throws on a write that holds drafts (its quota is full).
+function mountWithStorage() {
+    const store = new Map();
+    const refuse = { drafts: false };
+    const win = {
+        localStorage: {
+            getItem: key => (store.has(key) ? store.get(key) : null),
+            setItem(key, value) { if (refuse.drafts && /"drafts":\[/.test(value)) throw new Error('quota'); store.set(key, String(value)); },
+            removeItem: key => store.delete(key),
+        },
+        matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+        addEventListener() {}, removeEventListener() {},
+    };
+    const doc = new MockDocument();
+    doc.defaultView = win;
+    const root = doc.createElement('div');
+    doc.body.append(root);
+    const ctx = mountStudio(root);
+    ctx.loadText(ersveil);
+    ctx.onRender = renderScreen;
+    ctx.select('events', null);
+    const toolbar = label => { const node = root.querySelectorAll('button').find(item => item.getAttribute('aria-label') === label); assert.ok(node, label); return node; };
+    return { ctx, refuse, store, toolbar, root };
+}
+const noticeOf = root => root.querySelector('.notice').textContent;
+
+test('review 161-3: a failed draft save leaves nothing to redo, and the redo history from before is kept', () => {
+    const { ctx, refuse, toolbar, root } = mountWithStorage();
+    // An earlier step that was undone: its redo must survive the failed addition.
+    ctx.apply(setName(ctx.model, 'Renamed pack'));
+    toolbar('Undo').click();
+    assert.equal(toolbar('Redo').disabled, false);
+    click(ctx, '✦ Write with an AI');
+    pasteAndCheck(ctx);
+    refuse.drafts = true;
+    click(ctx, 'Add 3 as drafts');
+    assert.equal(drafts(ctx).length, 0);
+    assert.match(noticeOf(root), /The browser would not save the project with these drafts, so they were not added/);
+    // The redo that is left is the earlier step, not the refused drafts.
+    assert.equal(toolbar('Redo').disabled, false);
+    toolbar('Redo').click();
+    assert.equal(drafts(ctx).length, 0, 'Redo does not bring the refused drafts back');
+    assert.equal(ctx.model.document.name, 'Renamed pack');
+    assert.equal(toolbar('Redo').disabled, true);
+    assert.equal(ctx.saved, true);
+    // With no earlier redo history, nothing is left to redo at all.
+    const bare = mountWithStorage();
+    click(bare.ctx, '✦ Write with an AI');
+    pasteAndCheck(bare.ctx);
+    bare.refuse.drafts = true;
+    click(bare.ctx, 'Add 3 as drafts');
+    assert.equal(bare.toolbar('Redo').disabled, true);
+    assert.equal(bare.toolbar('Undo').disabled, true);
+    assert.equal(bare.ctx.history.canRedo, false);
+});
+
+test('review 161-3: Undo and Redo of a draft change whose save fails say so and put the history back', () => {
+    const { ctx, refuse, toolbar, root } = mountWithStorage();
+    click(ctx, '✦ Write with an AI');
+    pasteAndCheck(ctx);
+    click(ctx, 'Add 3 as drafts');
+    assert.equal(drafts(ctx).length, 3);
+    // Undo the addition (saves fine), then the browser refuses a project with drafts: Redo is refused and nothing moves.
+    toolbar('Undo').click();
+    assert.equal(drafts(ctx).length, 0);
+    assert.equal(toolbar('Redo').disabled, false);
+    refuse.drafts = true;
+    toolbar('Redo').click();
+    assert.equal(drafts(ctx).length, 0, 'the drafts were not brought back');
+    assert.match(noticeOf(root), /The browser would not save the project with these drafts, so Redo left them as they were/);
+    assert.equal(toolbar('Redo').disabled, false, 'the step is still there to redo once there is room');
+    assert.equal(ctx.saved, true, 'the project as it is was saved');
+    refuse.drafts = false;
+    toolbar('Redo').click();
+    assert.equal(drafts(ctx).length, 3);
+    assert.equal(ctx.saved, true);
+    // The same for Undo: drop the drafts one at a time (a discard saves fine), then Undo it with the store refusing.
+    click(ctx, 'Discard');
+    assert.equal(drafts(ctx).length, 2);
+    refuse.drafts = true;
+    toolbar('Undo').click();
+    assert.equal(drafts(ctx).length, 2, 'the discarded draft was not brought back');
+    assert.match(noticeOf(root), /so Undo left them as they were/);
+    assert.equal(toolbar('Undo').disabled, false);
+    assert.equal(toolbar('Redo').disabled, true, 'and no redo step was made for it');
+});
+const setName = (model, name) => setSchemaField(model, ['name'], name);

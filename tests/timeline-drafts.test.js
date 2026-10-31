@@ -9,6 +9,7 @@ import { readAnswer } from '../src/timeline/ai-answer.js';
 import { makeDraft, addDrafts, discardDraft, keepDraft, keepAll, keepableCount, draftProblems, draftIssues, ackNote, renameDraft, waitingFor, sanitizeDrafts, MAX_DRAFTS, NEWS_PLACEHOLDER } from '../src/timeline/drafts.js';
 import { renderProblemGroups } from '../src/screens/problems.js';
 import { createTestContext } from './helpers/dom.js';
+import { writeCondition } from '../src/timeline/condition.js';
 
 const ersveil = readFileSync(new URL('./fixtures/ersveil-open-world.json', import.meta.url), 'utf8');
 const answer = [
@@ -322,4 +323,36 @@ test('review 5: a draft can be renamed on its own, whatever the pack has: it is 
     assert.equal(renameDraft(held, 0, '').ok, false);
     assert.equal(renameDraft(held, 9, 'x').ok, false);
     void pack;
+});
+
+test('review 161-1: a note belongs to its own field only: changing another field, the start mode included, never answers it', () => {
+    const plain = openPack(ersveil);
+    const written = (spec, more = {}) => {
+        const condition = writeCondition({ from: null, until: null, since: null, where: [], ...spec });
+        assert.ok(condition.ok, condition.reason);
+        return { id: 'probe', when: condition.when, cue: 'News.', ...more };
+    };
+    const base = written({ from: 600000 });
+    // Each way to change an event, and the fields of the notes it touches.
+    const changes = [
+        [['when', 'after'], written({ from: null }, { after: 'bluewatch-guild-board' })],
+        [['when', 'after', 'delay'], written({ from: null, since: { name: 'Board change', minutes: 1440 } }, { after: 'bluewatch-guild-board' })],
+        [['until'], written({ from: 600000, until: 700000 })],
+        [['where'], written({ from: 600000, where: [{ kind: 'place', name: 'Auvoth' }] })],
+        [['after'], { ...base, after: 'bluewatch-guild-board' }],
+        [['once'], { ...base, once: false }],
+        [['news'], { ...base, cue: 'Other news.' }],
+        [['lasting'], { ...base, then: [{ command: 'chronicle.lasting', payload: { name: 'Probe', state: 'ongoing' } }] }],
+    ];
+    const kinds = ['when', 'until', 'after', 'delay', 'where', 'once', 'news', 'lasting'];
+    for (const kind of kinds) {
+        const draft = makeDraft(base, [{ kind, text: `NOTE ${kind}` }]);
+        const said = record => draftIssues(plain, [{ ...draft, record }], 0).some(issue => issue.text === `NOTE ${kind}`);
+        assert.ok(said(base), `${kind}: said for the event it was made for`);
+        for (const [touches, record] of changes) {
+            // A note about the date or the delay is answered by a change of the date or the delay: the start moved off the date.
+            if (touches.includes(kind)) assert.ok(!said(record), `${kind}: answered by a change of its own field`);
+            else assert.ok(said(record), `${kind}: still said after a change of ${touches.join(', ')}`);
+        }
+    }
 });
