@@ -83,6 +83,30 @@ Lasting change was removed or renamed by hand); the event then never happens unl
 itself. Under Where, regions are matched against the region the story names for the place, which can differ from the
 region of the pack's place.
 
+### Writing events with an AI
+
+Studio never calls an AI or the network. **✦ Write with an AI** (beside **+ Add event**, opening in the inspector)
+builds a prompt for the writer to paste into a chat of their own (`src/timeline/ai-prompt.js`, pure): the pack's
+calendar and start, regions, the names in its lorebook, its existing events, the answer format and rules, the writer's
+idea (at most 2,000 characters) and the full place list last. The same pack and idea give the same text; it is held to
+about 24,000 characters by cutting the place list (sub-places first), and the fold says so with the count.
+`docs/AI_PROMPT.md` is the prompt with blanks.
+
+The answer is read by `src/timeline/ai-answer.js` (pure): tolerant of a code fence or text around the JSON, of one
+event instead of a list and of month, region, place and alias names in any case; strict about what it writes. Each
+event becomes the spec the event form uses (`writeCondition`, the lasting change's own limits through `checkLasting`,
+the date guard through `settleGuards`), so a draft is what the form would have written. What cannot be written (an
+unreadable date or month, an "after" that names no event, a delay on an earlier event with no lasting change) is left
+out and said in the draft's notes; the rest is checked live by `draftProblems` (`src/timeline/drafts.js`).
+
+A draft is `{ record, notes, seen }` held beside the open project's snapshot (`draftsOf`/`withDrafts` in `model.js`): it
+is no part of the document, the pack checker, Problems or the export. Snapshots made by an edit inherit their
+predecessor's drafts (in `createHistory.commit`), so drafts follow undo and redo, are saved with the project in the
+browser's draft slot and come back after a reload. The event form edits a draft through the pack with its drafts as
+events after its own (`combinedModel`); the result is split back into drafts, so the pack's events are not touched
+until **Keep**, which adds the event, settles the guard of the event it follows and refuses a result the pack checker
+would flag. Adding drafts, Keep, Discard and Keep all are one edit each.
+
 ## Part 3: character cards and lorebooks
 
 Open `dist/story-studio.html` directly from disk and open the pack you are editing. The three authoring screens

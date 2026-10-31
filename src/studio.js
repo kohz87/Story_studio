@@ -1,5 +1,5 @@
 import { applyEdit } from './apply-edit.js';
-import { openPack } from './model.js';
+import { openPack, draftsOf } from './model.js';
 import { setSchemaField as setField } from './edits.js';
 import { createHistory } from './history.js';
 import { safeLabel, el, button, field, icon } from './dom.js';
@@ -137,7 +137,8 @@ export function mountStudio(root) {
         get history() { return history; },
         get dirty() {
             if (!history.current?.document) return false;
-            return lastBaselineJson === null || JSON.stringify(history.current.document) !== lastBaselineJson;
+            // Drafts are work that no export holds yet.
+            return lastBaselineJson === null || JSON.stringify(history.current.document) !== lastBaselineJson || draftsOf(history.current).length > 0;
         },
         apply(result) {
             if (destroyed) return false;

@@ -1,6 +1,7 @@
 import { safeLabel, el, button, field, icon } from '../dom.js';
 import { KINDS, LABELS, records, identity, localId } from '../records.js';
 import { timelineNotes } from '../timeline/notes.js';
+import { draftsOf } from '../model.js';
 
 
 const UNSAFE = new Set(['__proto__', 'constructor', 'prototype']);
@@ -233,6 +234,8 @@ export function renderCheck(ctx) {
         countsGrid.append(card);
     }
     left.append(countsGrid);
+    const held = draftsOf(ctx.model).length;
+    if (held) left.append(el(doc, 'p', `${held} ${held === 1 ? 'event written with an AI is a draft' : 'events written with an AI are drafts'} on the Timeline: not checked here and not in the export until kept.`, { class: 'muted' }));
     const problemsList = el(doc, 'div', '', { class: 'problems-box' });
     renderProblemGroups(ctx, problemsList);
     left.append(problemsList);

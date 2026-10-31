@@ -219,3 +219,26 @@ main{padding:14px 16px;overflow:visible;gap:12px}
 .tl-preview{font-size:12.5px;line-height:1.4;padding:8px 10px;border-radius:10px;background:color-mix(in srgb,var(--good) 14%,transparent);border:1px solid color-mix(in srgb,var(--good) 45%,transparent)}
 .tl-advanced textarea.mono,.tl-advanced input.mono{font-size:12px}
 @media(max-width:600px){.tl-row{grid-template-columns:minmax(0,1fr)}}
+/* Timeline: writing events with an AI (the panel) and the drafts it leaves */
+.tl-ai{display:flex;flex-direction:column;gap:12px;min-width:0}
+.tl-ai-steps{display:flex;flex-wrap:wrap;gap:6px}
+.tl-ai-steps span{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+.tl-ai-steps span[aria-current]{color:var(--text);border-color:var(--accent);font-weight:700}
+.tl-ai-incl{display:flex;flex-direction:column;gap:2px}
+.tl-ai-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.tl-ai-note{font-size:12px;color:var(--muted);margin:0;overflow-wrap:anywhere}
+.tl-ai-fold>summary{padding-left:0}
+.tl-ai-pre{font-size:11.5px;line-height:1.45;padding:10px;border-radius:10px;background:var(--field);max-height:300px;overflow:auto;margin:6px 0 0}
+.tl-ai textarea.mono{font-size:12px}
+.tl-ai-results,.tl-ai-list{display:flex;flex-direction:column;gap:8px;min-width:0}
+.tl-ai-draft{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:var(--card);min-width:0}
+.tl-ai-draft b{font-size:14px;overflow-wrap:anywhere}
+.tl-ai-meta{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.tl-ai-ok{color:var(--good);font-weight:700;font-size:13px}
+.tl-ai-warn{color:var(--warn-text)}
+.tl-ai-draft .tl-ai-warn:first-child{font-weight:700;font-size:13px}
+.tl-banner{padding:10px 12px;border-radius:12px;background:var(--warn-soft);border:1px solid var(--warn);font-size:13px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.tl-banner-list{margin:0;padding-left:18px;color:var(--warn-text);overflow-wrap:anywhere}
+.chip.tl-draft{background:var(--warn-soft);color:var(--warn-text);border:1px solid var(--warn)}
+.tl-draft-row{border-style:dashed}
+.tl-warn{color:var(--warn-text);font-size:14px;flex-shrink:0}

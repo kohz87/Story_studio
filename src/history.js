@@ -1,4 +1,5 @@
 // Pack edit history: bounded undo/redo stack controller (SPEC §4, pure snapshots).
+import { inheritDrafts } from './model.js';
 
 /**
  * Creates a bounded undo/redo history controller over immutable pack model snapshots.
@@ -44,6 +45,7 @@ export function createHistory(initialModel, { limit = 100 } = {}) {
             if (undoStack.length > limit) {
                 undoStack.shift();
             }
+            inheritDrafts(editResult.model, currentModel);
             currentModel = editResult.model;
             redoStack.length = 0;
             return true;
