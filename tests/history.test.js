@@ -195,3 +195,38 @@ test('createHistory throws RangeError on non-positive or invalid limit', () => {
         );
     }
 });
+
+test('review 161: revert takes back the latest commit exactly: no redo entry for it, and the redo entries it cleared come back', () => {
+    const model0 = openPack(smallWorld({ places: [{ slug: 'haven', name: 'Haven', x: 0, y: 0 }] }));
+    const history = createHistory(model0);
+    const next = (from, slug) => add(from, 'places', { slug, name: slug.toUpperCase(), x: 1, y: 0 });
+    // Nothing to take back yet.
+    assert.equal(history.revert(), model0);
+    assert.equal(history.canUndo, false);
+    const one = next(model0, 'mill');
+    history.commit(one);
+    history.undo();
+    assert.equal(history.canRedo, true);
+    // A commit clears redo; reverting it puts the earlier redo entry back and leaves none for the commit itself.
+    const two = next(model0, 'ford');
+    history.commit(two);
+    assert.equal(history.canRedo, false);
+    assert.equal(history.revert(), model0);
+    assert.equal(history.canUndo, false, 'the commit left no undo step behind');
+    assert.equal(history.canRedo, true, 'the earlier redo history is kept');
+    assert.equal(history.redo(), one.model);
+    assert.equal(history.canRedo, false);
+    // After an undo or a redo there is no latest commit to take back.
+    assert.equal(history.revert(), one.model);
+    assert.equal(history.canUndo, true);
+    // Once the limit pushed the oldest step out, reverting puts it back.
+    const small = createHistory(model0, { limit: 2 });
+    let from = model0;
+    const made = [];
+    for (const slug of ['aa', 'bb', 'cc']) { const edit = next(from, slug); small.commit(edit); from = edit.model; made.push(edit.model); }
+    small.revert();
+    assert.equal(small.current, made[1]);
+    assert.equal(small.undo(), made[0]);
+    assert.equal(small.undo(), model0);
+    assert.equal(small.canUndo, false);
+});

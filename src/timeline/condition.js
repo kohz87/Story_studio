@@ -10,6 +10,9 @@
 import { EVENT_LIMITS } from '../../vendor/story-block/src/v2/packs/limits.js';
 
 const WORD_LIMIT = 200;
+// The condition language escapes a line break and a tab (\n, \t) but has no escape for a carriage return, and any other
+// control character is not text anyone typed: a word holding one cannot be written.
+const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/;
 const ESCAPES = { '\\': '\\', '\'': '\'', '"': '"', n: '\n', t: '\t' };
 const PASSED = 'query(\'chronicle.passed\', { name: ';
 const PLACE = 'query(\'scene.place\')';
@@ -33,6 +36,7 @@ export function writeCondition({ from = null, until = null, since = null, dated 
     if (since && (!whole(since.minutes) || since.minutes < 1 || typeof since.name !== 'string' || !since.name)) return { ok: false, reason: 'A delay needs a whole number of minutes and the earlier event\'s name.' };
     const words = [...since ? [since.name] : [], ...where.map(place => place.name)];
     if (words.some(word => typeof word !== 'string' || !word || [...word].length > WORD_LIMIT)) return { ok: false, reason: `A place or event name must be 1 to ${WORD_LIMIT} characters.` };
+    if (words.some(word => CONTROL.test(word))) return { ok: false, reason: 'A place or event name cannot hold a carriage return or another control character (a line break or tab is the most a name may hold).' };
     const clauses = [];
     if (from !== null) clauses.push('time() != null', `time() >= ${from}`);
     else if (since) clauses.push(`${PASSED}${quote(since.name)}, minutes: ${since.minutes} })`);

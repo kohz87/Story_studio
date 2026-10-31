@@ -1,5 +1,6 @@
 import { LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
-import { openPack, sourceTextOf } from './model.js';
+import { openPack, sourceTextOf, draftsOf, withDrafts } from './model.js';
+import { sanitizeDrafts } from './timeline/drafts.js';
 
 export const DRAFT_KEY = 'story-studio-draft';
 export const MAX_PACK_BYTES = LIMITS.packBytes;
@@ -19,6 +20,8 @@ export function readDraft(win) {
             if (original.validation.ok && JSON.stringify(original.document) === JSON.stringify(model.document)) model = original;
         }
         if (!model?.document) return null;
+        const drafts = sanitizeDrafts(parsed.drafts);
+        if (drafts.length) model = withDrafts(model, drafts);
         return { model, dirty: Boolean(parsed.dirty) };
     } catch {
         return null;
@@ -34,6 +37,7 @@ export function writeDraft(win, model, dirty) {
             document: model.document,
             sourceText: sourceTextOf(model),
             dirty: Boolean(dirty),
+            ...draftsOf(model).length ? { drafts: draftsOf(model) } : {},
         });
         if (payload.length > MAX_DRAFT_BYTES) return false;
         win.localStorage.setItem(DRAFT_KEY, payload);

@@ -19,8 +19,8 @@ export function timelineState(ctx) {
     return ctx.filters.timeline ??= { view: 'timeline', drafts: {}, rows: {}, open: {} };
 }
 
-const small = (doc, text, attrs = {}) => el(doc, 'p', text, { class: 'tl-small', ...attrs });
-function fieldset(doc, legend, ...children) {
+export const small = (doc, text, attrs = {}) => el(doc, 'p', text, { class: 'tl-small', ...attrs });
+export function fieldset(doc, legend, ...children) {
     const set = el(doc, 'fieldset', '', { class: 'form-fieldset' });
     set.append(el(doc, 'legend', legend), ...children);
     return set;
@@ -48,7 +48,7 @@ function inline(doc, ...children) {
     row.append(...children);
     return row;
 }
-function checkbox(doc, text, checked, onChange) {
+export function checkbox(doc, text, checked, onChange) {
     const box = el(doc, 'input', '', { type: 'checkbox' });
     box.checked = checked;
     box.addEventListener('change', () => onChange(box.checked));
@@ -136,7 +136,8 @@ function dateRow(ctx, ui, { key, role, abs, label, optional = false, onCommit })
     return block;
 }
 
-export function renderEventInspector(ctx, container, { record, idx, problems = [] }) {
+/** The event form. `banner` (a node) makes it the form of a draft: a Draft chip for the Event one, and the banner under the title. */
+export function renderEventInspector(ctx, container, { record, idx, problems = [], banner = null }) {
     const { doc } = ctx;
     const ui = timelineState(ctx);
     const calendar = packCalendar(ctx.model.document);
@@ -151,8 +152,9 @@ export function renderEventInspector(ctx, container, { record, idx, problems = [
     const mode = info.hand ? info.mode : draft.mode ?? info.mode;
 
     const titleRow = el(doc, 'div', '', { class: 'inspector-title-row' });
-    titleRow.append(el(doc, 'h2', info.name || id), el(doc, 'span', 'Event', { class: 'chip' }));
+    titleRow.append(el(doc, 'h2', info.name || id), el(doc, 'span', banner ? 'Draft' : 'Event', { class: banner ? 'chip tl-draft' : 'chip' }));
     container.append(titleRow);
+    if (banner) container.append(banner);
     if (problems.length) container.append(el(doc, 'div', problems.map(problem => problem.message).join('\n'), { role: 'status', class: 'warning' }));
     const form = el(doc, 'div', '', { class: 'inspector-form-body' });
     container.append(form);
@@ -164,7 +166,7 @@ export function renderEventInspector(ctx, container, { record, idx, problems = [
         const next = idFromName(nameInput.value);
         if (!next) return refuse(ctx, 'Give the event a name.');
         if (next === id) { nameInput.value = info.name; return true; }
-        return applyEdit(ctx, renameId(ctx.model, 'events', id, next), { id: next });
+        return applyEdit(ctx, ctx.renameDraft ? ctx.renameDraft(next) : renameId(ctx.model, 'events', id, next), { id: next });
     });
     const saved = small(doc, 'Saved as ');
     saved.append(el(doc, 'code', id), '.');

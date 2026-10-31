@@ -1,5 +1,5 @@
 import { applyEdit } from './apply-edit.js';
-import { openPack } from './model.js';
+import { openPack, draftsOf } from './model.js';
 import { setSchemaField as setField } from './edits.js';
 import { createHistory } from './history.js';
 import { safeLabel, el, button, field, icon } from './dom.js';
@@ -9,6 +9,7 @@ import { downloadPack } from './export.js';
 import { readDraft, writeDraft, MAX_PACK_BYTES } from './session.js';
 import { renderProblemsDrawer } from './screens/problems.js';
 import { createColumns } from './columns.js';
+import { saveFailed } from './timeline/drafts.js';
 
 // The screens below the record kinds in the rail, in order.
 const SCREENS = [['defaults', 'Settings defaults'], ['presentation', 'Screen builder'], ['data-modules', 'Data modules'], ['code-module', 'Code module'], ['narrator', 'Narrator card'], ['lorebook', 'Lorebook'], ['lore-import', 'Import lorebook']];
@@ -59,17 +60,25 @@ export function mountStudio(root) {
         applyEdit(ctx, setField(ctx.model, ['name'], name.value));
     });
     const fingerprint = el(doc, 'span', 'pack · —', { class: 'fingerprint muted' });
-    const undo = button(doc, '', () => {
-        history.undo();
+    // A step through the history that brings drafts back or takes them away is saved with the project like any other. If the
+    // browser would not keep that, the step is taken back (the history is as it was) and the writer is told, never left with
+    // work that a reload would lose.
+    const step = (forward, back, verb) => {
+        const before = history.current;
+        forward();
         ++seq;
+        ctx.saved = true;
         ctx.changed();
-    }, { 'aria-label': 'Undo' });
+        if (ctx.saved === false && draftsOf(history.current) !== draftsOf(before)) {
+            back();
+            ++seq;
+            ctx.changed();
+            ctx.notify(saveFailed(`${verb} left them as they were`));
+        }
+    };
+    const undo = button(doc, '', () => step(() => history.undo(), () => history.redo(), 'Undo'), { 'aria-label': 'Undo' });
     undo.append(icon(doc, 'undo'));
-    const redo = button(doc, '', () => {
-        history.redo();
-        ++seq;
-        ctx.changed();
-    }, { 'aria-label': 'Redo' });
+    const redo = button(doc, '', () => step(() => history.redo(), () => history.undo(), 'Redo'), { 'aria-label': 'Redo' });
     redo.append(icon(doc, 'redo'));
     const file = el(doc, 'input', '', { type: 'file', accept: '.json,application/json', id: 'pack-file', hidden: '', 'aria-label': 'Open pack file' });
     file.addEventListener('change', () => {
@@ -137,7 +146,8 @@ export function mountStudio(root) {
         get history() { return history; },
         get dirty() {
             if (!history.current?.document) return false;
-            return lastBaselineJson === null || JSON.stringify(history.current.document) !== lastBaselineJson;
+            // Drafts are work that no export holds yet.
+            return lastBaselineJson === null || JSON.stringify(history.current.document) !== lastBaselineJson || draftsOf(history.current).length > 0;
         },
         apply(result) {
             if (destroyed) return false;
@@ -148,7 +158,7 @@ export function mountStudio(root) {
             ++seq;
             notice.textContent = '';
             if (!ctx.changed()) {
-                history.undo();
+                history.revert();
                 ctx.render();
                 return false;
             }
@@ -164,7 +174,8 @@ export function mountStudio(root) {
                     renderProblemsDrawer(ctx, problemsHost, () => ctx.closeProblems(true));
                 }
             }
-            if (history.current?.document) writeDraft(win, history.current, ctx.dirty);
+            // Whether the browser kept the project: a screen that adds work only a save holds (drafts) checks it.
+            if (history.current?.document) ctx.saved = writeDraft(win, history.current, ctx.dirty);
             return true;
         },
         notify(message) { notice.textContent = message; },

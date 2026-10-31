@@ -13,6 +13,9 @@ const MAX_STRING = LIMITS.string;
 const MAX_BYTES = LIMITS.packBytes;
 // Original text belongs to the frozen snapshot; undo restores the same snapshot and bytes.
 const sourceTexts = new WeakMap();
+// Drafts (events written with an AI, not yet kept) travel with a snapshot but are no part of its pack: they are not in
+// `document`, its validation or its export. A snapshot an edit makes takes its predecessor's drafts (see inheritDrafts).
+const draftTable = new WeakMap();
 
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -553,6 +556,26 @@ export function indexReferences(document) {
 function checkPack(input) {
     try { return validatePack(input); }
     catch { return { ok: false, errors: [{ code: 'NOT_PLAIN', path: '', message: 'Cannot read pack data' }] }; }
+}
+
+const isObjectLike = value => value !== null && typeof value === 'object';
+
+/** The drafts a snapshot carries, `{ record, notes, seen }` each (see timeline/drafts.js); none for a snapshot made without. */
+export function draftsOf(model) { return (isObjectLike(model) && draftTable.get(model)) || NO_DRAFTS; }
+const NO_DRAFTS = Object.freeze([]);
+
+/** A new snapshot of the same pack carrying `drafts`: the pack, its validation and the bytes it exports stay as they are. */
+export function withDrafts(model, drafts) {
+    const next = Object.freeze({ ...model });
+    if (sourceTexts.has(model)) sourceTexts.set(next, sourceTexts.get(model));
+    draftTable.set(next, Object.freeze([...drafts]));
+    return next;
+}
+
+/** Gives `next` the drafts of the snapshot it came from `from`, unless it has some of its own; used when an edit is committed. */
+export function inheritDrafts(next, from) {
+    if (next === from || !isObjectLike(next) || !isObjectLike(from) || draftTable.has(next) || !draftTable.has(from)) return;
+    draftTable.set(next, draftTable.get(from));
 }
 
 /** Original file text retained for draft persistence; absent for object inputs and edited snapshots. */
