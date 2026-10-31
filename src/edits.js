@@ -5,6 +5,7 @@ import { identity } from './identity.js';
 import { schemaForKind, validateChange } from './form-schema.js';
 import { CASCADE_KINDS } from './records.js';
 import { slugify } from '../vendor/story-block/src/v2/packs/validate.js';
+import { withLastingCapability } from './timeline/lasting.js';
 
 const SB_KINDS = new Set(CASCADE_KINDS.filter(k => k !== 'legacySkills'));
 const ALL_KINDS = new Set(CASCADE_KINDS);
@@ -133,7 +134,8 @@ function getRecordIdentity(kind, record) {
 
 
 function commitSnapshot(newDoc, originalModel) {
-    const snapshot = openPack(newDoc);
+    // The capability a lasting change needs follows the events, so no edit can leave the pack without it.
+    const snapshot = openPack(withLastingCapability(newDoc));
     if (!snapshot || snapshot.document === null) {
         return {
             ok: false,
@@ -197,6 +199,20 @@ export function add(model, kind, record) {
     const target = ensureKindList(doc, kind);
     if (!target) return refuse(model, 'bad-container', kind, 'The record list is not an array.');
     target.push(safe.value);
+    return commitSnapshot(doc, model);
+}
+
+/** Replaces the records of a kind that already exist with `list` (same identities, same order) as one edit: several events changed together. */
+export function setRecords(model, kind, list) {
+    if (!model?.document || !ALL_KINDS.has(kind)) return refuse(model, 'bad-model', kind, 'Open a supported record first.');
+    const safe = validateAndCloneValue(list);
+    const current = readKindList(model.document, kind);
+    if (!safe.ok || !Array.isArray(safe.value) || !current) return refuse(model, 'bad-value', kind, safe.error || 'The records must be a list.');
+    const packId = getPackId(model.document);
+    const keys = items => items.map(item => normalizeId(getRecordIdentity(kind, item), packId));
+    if (JSON.stringify(keys(safe.value)) !== JSON.stringify(keys(current))) return refuse(model, 'identity-field', kind, 'Records cannot be added, removed or renamed here.');
+    const doc = cloneDoc(model.document);
+    doc.content[kind === 'legacySkills' ? 'skills' : kind] = safe.value;
     return commitSnapshot(doc, model);
 }
 

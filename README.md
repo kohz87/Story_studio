@@ -1,10 +1,10 @@
-# Story Studio 0.2.0
+# Story Studio 0.3.0
 
 Story Studio is an offline pack editor and creator kit for Story Block, Story Director and NPC State Delta. Download [the standalone editor](dist/story-studio.html) and open it in a browser; it runs locally without a server.
 
 RPG Battle is no longer supported. Its rules packs cannot be imported; existing RPG Battle chats should stay on the previous versions.
 
-Open a pack to edit its places, routes, events, items, calendar and weather. Data modules have structured forms, a grammar preview and a simulator using Story Block's runtime. Studio checks packs with Story Block's own checker before export, and can also author screens, narrator cards and lorebooks.
+Open a pack to edit its places, routes, events (the Timeline), items, calendar and weather. Data modules have structured forms, a grammar preview and a simulator using Story Block's runtime. Studio checks packs with Story Block's own checker before export, and can also author screens, narrator cards and lorebooks.
 
 The [authoring kit](authoring-kit/README.md) contains prompts, reference material and a checker for drafting a pack from your own notes.
 

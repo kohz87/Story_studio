@@ -2,6 +2,7 @@ import { renderPresentation, renderSettingsDefaults } from './presentation.js';
 import { renderPackSettings } from './pack-settings.js';
 import { el } from '../dom.js';
 import { renderRecords } from './records.js';
+import { renderTimeline } from './timeline.js';
 import { renderCheck } from './problems.js';
 import { KINDS } from '../records.js';
 import { renderNarrator, renderLorebook, renderLoreImport } from './authoring.js';
@@ -28,7 +29,7 @@ export function renderScreen(ctx) {
         return;
     }
     if (ctx.selection.kind !== 'check' && ctx.model?.document && KINDS.includes(ctx.selection.kind)) {
-        renderRecords(ctx);
+        (ctx.selection.kind === 'events' ? renderTimeline : renderRecords)(ctx);
         return;
     }
     ctx.main.append(el(ctx.doc, 'h1', 'Pack editor'));

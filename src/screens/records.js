@@ -1,11 +1,11 @@
 import { applyEdit } from '../apply-edit.js';
 import { safeLabel, el, button } from '../dom.js';
-import { KINDS, CASCADE_KINDS, LABELS, records, identity, localId, kindPath } from '../records.js';
+import { KINDS, CASCADE_KINDS, LABELS, SINGULAR, records, identity, localId, kindPath } from '../records.js';
 import { add, remove } from '../edits.js';
 import { renderForm, createDefault } from '../forms.js';
 import { schemaForRecord, validateField } from '../form-schema.js';
 
-function getRecordProblems(model, kind, record, idx) {
+export function getRecordProblems(model, kind, record, idx) {
     const prefix = [...kindPath(kind), idx].join('.');
     return (model?.validation?.errors ?? []).filter(err => {
         const path = String(err.path ?? '').replace(/\[(\d+)\]/g, '.$1');
@@ -25,17 +25,20 @@ function cascadeChanges(before, after) {
     return changes;
 }
 
-export function renderRecords(ctx) {
+// `hooks` lets a screen that shows one kind its own way (the Timeline) keep the list: `title`, `toolbar` (a node for the
+// header), `addLabel` and `add` (what the add button does), and `inspect` (draws the selected record in the inspector).
+export function renderRecords(ctx, hooks = {}) {
     const { doc, model } = ctx;
     const kind = ctx.selection.kind;
     const schema = schemaForRecord(kind);
     const list = records(model, kind).map((record, idx) => ({ record, idx })).filter(({ record }) => record && typeof record === 'object' && !Array.isArray(record));
-    const singular = (LABELS[kind] || kind).replace(/s$/, '');
+    const singular = SINGULAR[kind] ?? (LABELS[kind] || kind).replace(/s$/, '');
     const screen = el(doc, 'div', '', { class: 'records-screen' });
     const header = el(doc, 'div', '', { class: 'records-header' });
     header.append(el(doc, 'h1', LABELS[kind] || kind),
         el(doc, 'div', `${list.length} ${list.length === 1 ? 'record' : 'records'}`, { class: 'records-subtitle' }),
-        button(doc, `+ Add ${singular}`, () => ctx.select(kind, '__new__')));
+        ...hooks.toolbar ? [hooks.toolbar(doc)] : [],
+        button(doc, hooks.addLabel ?? `+ Add ${singular}`, hooks.add ?? (() => ctx.select(kind, '__new__'))));
     screen.append(header);
     const cards = el(doc, 'div', '', { class: 'records-list' });
     if (!list.length) cards.append(el(doc, 'p', `No ${LABELS[kind] || kind} found in pack.`, { class: 'muted' }));
@@ -61,8 +64,9 @@ export function renderRecords(ctx) {
     if (!selected) { inspector.append(el(doc, 'p', 'Select a record from the list to inspect and edit.', { class: 'muted' })); return; }
     const { record, idx } = selected;
     const id = localId(model, identity(record, kind));
+    if (hooks.inspect) { hooks.inspect(ctx, inspector, { record, idx, id, problems: getRecordProblems(model, kind, record, idx) }); return; }
     const titleRow = el(doc, 'div', '', { class: 'inspector-title-row' });
-    titleRow.append(el(doc, 'h2', record.name || id), el(doc, 'span', LABELS[kind] || kind, { class: 'chip' }));
+    titleRow.append(el(doc, 'h2', record.name || id), el(doc, 'span', SINGULAR[kind] ?? (LABELS[kind] || kind), { class: 'chip' }));
     inspector.append(titleRow);
     const fullId = `pack.${safeLabel(model?.document?.id || 'pack')}/${safeLabel(id)}`;
     const references = (model?.references || []).filter(ref => ref.targetKind === kind && (ref.targetId === fullId || ref.targetId === id));
@@ -129,7 +133,7 @@ function renderAddForm(ctx, container, kind, schema, singularLabel) {
     container.append(actionsRow);
 }
 
-function openRecordRemoveDialog(ctx, kind, record, invoker) {
+export function openRecordRemoveDialog(ctx, kind, record, invoker) {
     const id = identity(record, kind);
     const previewRes = remove(ctx.model, kind, id, { cascade: false });
     if (previewRes.ok) {
