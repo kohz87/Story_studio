@@ -30,7 +30,7 @@ import { FIELD_TYPES, normalizeField } from './registry.js';
 import { SETTING_LIST_ROWS } from './sdk.js';
 import { PROMPT_HINT, featureOf } from './features.js';
 import { compatReport, renderCompat } from './compat.js';
-import { createScreenBar, pinAlerts } from './view/screen-bar.js';
+import { PINNED, createScreenBar, pinAlerts } from './view/screen-bar.js';
 import { iconFor } from './view/icons/index.js';
 import { DEFAULT_TAIL_BUDGET, contextNotice, estimateTokens } from './prompt.js';
 import { STRINGS, fill } from './strings.js';
@@ -121,6 +121,7 @@ export const SETTINGS_TEXT = Object.freeze({
         dropped: '{n} lines left out to fit the budget.',
         droppedOne: '1 line left out to fit the budget.',
         nothing: 'Nothing (no module adds text here now).',
+        hidden: '(hidden)',
         copy: 'Copy',
         copyTitle: 'Copy all of the text below',
         copied: 'Copied.',
@@ -132,7 +133,7 @@ export const SETTINGS_TEXT = Object.freeze({
 export const TABS_TEXT = Object.freeze({
     title: 'Tabs',
     hint: 'order, show or hide',
-    help: 'The order of the Story panel\'s tabs and the game view\'s screens, one list for both. Up and Down move one; a hidden one leaves the tabs and the game view and stays here to show again. Home is always first and always shown. Scene starts hidden while Story Director\'s World is installed (its Now shows the same place, time and people).',
+    help: 'The order of the Story panel\'s tabs and the game view\'s screens, one list for both. Up and Down move one; a hidden one stays here to show again. Each one sits in the bar or under More (the main screens start in the bar). Home is always first, shown and in the bar. Scene starts hidden while another screen that shows the same is installed.',
     none: 'No module has a tab or a screen yet.',
     listLabel: 'Tabs and screens, in order',
     up: 'Up',
@@ -140,6 +141,11 @@ export const TABS_TEXT = Object.freeze({
     upTitle: 'Move {name} up',
     downTitle: 'Move {name} down',
     shown: 'Shown',
+    inBar: 'In the bar',
+    underMore: 'Under More',
+    placeTitle: 'Where {name} sits: in the bar or under More',
+    movedToBar: '{name} is in the bar.',
+    movedToMore: '{name} is under More.',
     shownTitle: 'Show {name} in the tabs and the game view',
     homeTitle: 'Home is always first and always shown',
     hidden: 'hidden',
@@ -148,12 +154,12 @@ export const TABS_TEXT = Object.freeze({
     tab: 'Story panel',
     screen: 'game view',
     reset: 'Reset to default',
-    resetTitle: 'Put every tab back in the default order and show them all',
+    resetTitle: 'Put every tab back in the default order and place, and show them all',
     movedUp: '{name} moved up.',
     movedDown: '{name} moved down.',
     nowHidden: '{name} is hidden.',
     nowShown: '{name} is shown.',
-    wasReset: 'Back to the default order, all shown.',
+    wasReset: 'Back to the default order and places, all shown.',
     // Home's switch is locked; hiding is refused when no tab would stay shown.
     alwaysShown: 'Always shown',
     lastOne: 'At least one tab has to stay shown, so {name} stays.',
@@ -664,23 +670,49 @@ const ownParts = own => (Array.isArray(own) ? own.filter(part => part && typeof 
 
 /**
  * The texts the next reply would get, as "Show what's sent" lists them: { static: [part], tail: [part],
- * own: [part] } (each part { module, label, text, dropped }, empty texts left out unless lines were
+ * own: [part] } (each part { module, label, text, dropped, counted }, empty texts left out unless lines were
  * dropped), and `copy`, all of it as one text: each section's heading, then its parts as sent (the
  * static ones joined by a blank line, the tail's by a line break, as prompt.js joins them).
+ *
+ * `redact(moduleId, text)` (optional) is what the reader may see of a part: the list, the drawing and `copy` use the
+ * text it gives, never the raw one (`counted` keeps the raw text for token counts only; it is never drawn). The prompt
+ * itself is not touched. See `redactSentOf`.
  */
-export function sentText(parts, own = [], { names = id => id } = {}) {
+export function sentText(parts, own = [], { names = id => id, redact = null } = {}) {
     const list = Array.isArray(parts) ? parts.filter(part => part && typeof part.text === 'string') : [];
     const T = SETTINGS_TEXT.sent;
+    const shown = part => (typeof redact === 'function' && part.text ? redact(String(part.module ?? ''), part.text) : part.text);
     const stat = list.filter(part => part.place === 'static' && part.text);
     const tail = list.filter(part => part.place !== 'static' && (part.text || part.dropped));
-    const titled = part => ({ module: String(part.module ?? ''), title: String(part.label ?? names(part.module)), text: part.text, dropped: Number(part.dropped) || 0 });
+    const titled = part => ({ module: String(part.module ?? ''), title: String(part.label ?? names(part.module)), text: shown(part), counted: part.text, dropped: Number(part.dropped) || 0 });
     const mine = ownParts(own).map(part => ({ ...titled(part), title: fill(T.part, { name: names(part.module), label: String(part.label ?? '') }) }));
+    const statShown = stat.map(titled);
+    const tailShown = tail.map(titled);
     const sections = [
-        [T.static, stat.map(part => part.text).join('\n\n')],
-        [T.tail, tail.map(part => part.text).filter(Boolean).join('\n')],
+        [T.static, statShown.map(part => part.text).join('\n\n')],
+        [T.tail, tailShown.map(part => part.text).filter(Boolean).join('\n')],
         ...mine.map(part => [part.title, part.text]),
     ].filter(([, text]) => text);
-    return { static: stat.map(titled), tail: tail.map(titled), own: mine, copy: sections.map(([head, text]) => `[${head}]\n${text}`).join('\n\n') };
+    return { static: statShown, tail: tailShown, own: mine, copy: sections.map(([head, text]) => `[${head}]\n${text}`).join('\n\n') };
+}
+
+/**
+ * The `redact(moduleId, text)` for sentText over a registry: a module with `hooks.redactSent(text)` says what the reader
+ * sees of its text (NPC State Delta turns each locked note into "Mira: 1 hidden note"). Only the view and its copy use it. A hook that
+ * throws, or answers anything but a string, shows the fixed "(hidden)" line, never the raw text. A module with no such hook is shown as sent.
+ */
+export function redactSentOf(registry) {
+    return (moduleId, text) => {
+        let hook;
+        try { hook = registry?.module?.(moduleId)?.hooks?.redactSent; } catch { hook = null; }
+        if (typeof hook !== 'function') return text;
+        try {
+            const shown = hook(text);
+            return typeof shown === 'string' ? shown : SETTINGS_TEXT.sent.hidden;
+        } catch {
+            return SETTINGS_TEXT.sent.hidden;
+        }
+    };
 }
 
 // One feature's row: its switch, label, description and (when it changes the static prompt) the hint.
@@ -1049,10 +1081,13 @@ export function diagnosticsKeys(registry) {
  * tabs and More, as the game view's bar (More holds the rest). The tabs are `registry.tabs()`, in its order (Story Block's
  * panel gives the module tabs and the tab screens in the reader's order, without the hidden ones). A tab that is gone falls
  * back to the first. The pane scrolls inside `root`; the bar stays where it is.
- * `options`: { registry, view: () => view, api (the sdk), doc?, active?, barHost? }. Tabs read the head state's view only,
+ * `options`: { registry, view: () => view, api (the sdk), doc?, active?, barHost?, inBar? (tab → in the bar, not under More), slots? (→ how many
+ * slots the strip has before More, four by default; the panel gives more on a wide window) }. A screen the reader put in the bar takes a slot
+ * in the reader's order; when more are in the bar than there are slots, the ones past the last slot are under More as well (the game view's
+ * phone bar does the same). Tabs read the head state's view only,
  * never message text. Returns { refresh(), select(id), active(), bar }.
  */
-export function createTabHost(root, { registry, view, api = null, doc = globalThis.document, active = null, barHost = null }) {
+export function createTabHost(root, { registry, view, api = null, doc = globalThis.document, active = null, barHost = null, inBar = null, slots = null }) {
     let current = active;
     let release = null;       // what the last drawing of the pane left behind (a dispose function or { destroy }), taken down on the next draw
     const pane = el(doc, 'div', 'story-suite-pane');
@@ -1069,12 +1104,24 @@ export function createTabHost(root, { registry, view, api = null, doc = globalTh
         },
     });
 
+    // The strip: the tabs that are in the bar take the slots in the reader's order, the rest are under More.
+    function drawBar(tabs) {
+        let room = PINNED;
+        try { room = typeof slots === 'function' ? Number(slots()) || PINNED : PINNED; } catch { room = PINNED; }
+        room = Math.max(1, Math.floor(room));
+        // An active tab's alert (a red dot) takes the last pinned slot while it has something to show (screen-bar.js pinAlerts).
+        bar.update({ items: pinAlerts(tabs.map(tab => ({ id: tab.id, label: tab.title, icon: iconFor(tab.id, tab.icon), alert: tab.alert === true,
+            alertText: tab.alertText ?? '', moreOnly: typeof inBar === 'function' && !inBar(tab) })), room), current: current ?? '', pinned: room });
+    }
+    // The panel's width changes with the window: the strip is laid out again (the open tab is left as it is).
+    const win = doc.defaultView ?? null;
+    const onResize = () => { if (typeof slots === 'function') drawBar(registry.tabs()); };
+    win?.addEventListener?.('resize', onResize);
+
     function draw() {
         const tabs = registry.tabs();
         if (!tabs.some(tab => tab.id === current)) current = tabs[0]?.id ?? null;
-        // An active tab's alert (a red dot) takes the last pinned slot while it has something to show (screen-bar.js pinAlerts).
-        bar.update({ items: pinAlerts(tabs.map(tab => ({ id: tab.id, label: tab.title, icon: iconFor(tab.id, tab.icon), alert: tab.alert === true,
-            alertText: tab.alertText ?? '', moreOnly: tab.id.startsWith('story-block/block/') }))), current: current ?? '' });
+        drawBar(tabs);
         // The pane's widgets go before the pane is drawn again (a redraw of the same tab too): their listeners and observers.
         dispose(pane);
         if (typeof release === 'function') { try { release(); } catch { /* a tab's cleanup failing must not block the redraw */ } }
@@ -1106,6 +1153,7 @@ export function createTabHost(root, { registry, view, api = null, doc = globalTh
         bar,
         /** Takes the open tab's widgets down (its pane disposed, and what its render returned). */
         destroy() {
+            win?.removeEventListener?.('resize', onResize);
             dispose(pane);
             if (typeof release === 'function') { try { release(); } catch { /* a tab's cleanup failing must not block teardown */ } }
             release = null;

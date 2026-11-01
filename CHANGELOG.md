@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0
+
+- **Cast.** A new part beside People / creatures for a pack's hand-written people (Story Block 2.15.0 or later). Each
+  person's form follows the game: who they are (name, other names, one line, look, voice, personality, background),
+  a portrait (any picture, shrunk in the browser to a WebP of 64 KB or less, with its size shown), where their story
+  starts (a place from this pack, routine, goal), what draws them to the party, their relationship at the start
+  (meters, stages, your own fields), whether they may die before they are met, and up to eight secrets — each opening at
+  a meter value or on a story event — with a preview of what a player sees: the opened ones and a blank bar for the rest.
+- **Export as one .zip** (pack.json and a portraits folder), or pack.json alone; **Open pack** takes the .zip back. The
+  check lists the cast, the portraits, the starting places and the secrets.
+- Studio's own copy of Story Block is now 2.15.0, so its checks match the game.
+
 ## 0.4.0
 
 - **Write with an AI** on the Timeline. Studio builds a prompt from the open pack (the calendar and the story's start, regions and places, names from the lorebook, the events already there) and your idea, to copy or save and paste into any AI chat; Studio never calls an AI or the network. Paste the answer back and **Check it** reads it (a code fence or sentence around it, one event instead of a list, and names in any case are fine) and says, event by event, whether it is ready or needs a look, in plain words: a place or region the pack lacks, a date before the story starts or one that cannot be read, an unknown month, an "after" that names nothing or whose earlier event has no lasting change, news over 500 characters, a lasting change outside Story Director's limits, an ID already taken. Each event is written the way the event form writes it.

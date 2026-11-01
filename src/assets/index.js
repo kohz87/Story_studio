@@ -24,6 +24,7 @@ export const SB_ICONS = Object.freeze({
     'kind-items': 'ph-package',
     'kind-foes': 'ph-skull',
     'kind-places': 'ph-map-pin',
+    'kind-cast': 'ph-user',
     'kind-quests': 'ph-scroll',
     'kind-more': 'ph-dots-three-outline',
     info: 'ph-info',

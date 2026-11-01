@@ -118,6 +118,29 @@ events after its own (`combinedModel`); the result is split back into drafts, so
 until **Keep**, which adds the event, settles the guard of the event it follows and refuses a result the pack checker
 would flag. Adding drafts, Keep, Discard and Keep all are one edit each.
 
+## Cast: the people of a pack
+
+The **Cast** part (in the rail beside People / creatures) edits `content.cast`: people the story meets, each a prepared
+dossier. The list shows a portrait, one line, where they start and chips (secrets, drawn to, portrait size). The form
+follows the approved mockup: Who they are, Portrait, Where their story starts, Drawn to, Relationship at the start
+(meter preset, starting values, stages, own fields), Before they are met, and up to eight Secrets with the player-view
+preview (a blank bar and the rule for each hidden secret; an event's words are never shown). Every limit is Story
+Block's (`CAST_LIMITS`, `PORTRAIT_LIMITS`, `ZIP_LIMITS`) and every problem message is the checker's own, shown under the
+field and in the Problems list, whose "Go to" finds the field. Edits are single undo steps; a new person's key follows
+their name until they are named once.
+
+Portraits are image files beside the pack, not part of `pack.json`. Choosing one shrinks it in the browser (canvas, WebP)
+until it is at most 64 KB and 600 px on its long side; a WebP, PNG or JPEG that already fits is kept as it is. The
+pictures travel with each snapshot of the pack (`portraitsOf`, `withPortraits` in `src/model.js`), so Undo and Redo
+bring them back with the edit that changed them, and the browser keeps the current set in IndexedDB so a reload brings
+them back (`src/portrait-store.js`; without IndexedDB only the reload loses them).
+
+**Check / export** lists the cast and portrait results (limits, pictures held, a place nobody can find, a missing
+voice). A pack with a cast exports one `.zip` (`pack.json`, then `portraits/<file>` for each picture the cast names;
+written in the browser with `CompressionStream`, stored when deflate does not help, no dependency) and, beside it,
+"Export pack.json only". Open pack takes that `.zip` too, through Story Block's own reader
+(`vendor/story-block/src/v2/packs/bundle.js`), so Studio and the game refuse the same zips.
+
 ## Part 3: character cards and lorebooks
 
 Open `dist/story-studio.html` directly from disk and open the pack you are editing. The three authoring screens

@@ -50,6 +50,7 @@ with that module's `svgIcon(doc, id)` (viewBox 256, `fill="currentColor"`, so th
 | `kind-items` | `ph-package` |
 | `kind-foes` | `ph-skull` |
 | `kind-places` | `ph-map-pin` |
+| `kind-cast` | `ph-user` |
 | `kind-quests` | `ph-scroll` |
 | `kind-more` | `ph-dots-three-outline` |
 | `info` (record notes) | `ph-info` |

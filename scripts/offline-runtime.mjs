@@ -7,6 +7,10 @@ const defaults = new Map([
         source: '(...args) => globalThis.fetch(...args)', count: 1,
         stub: "() => { throw new Error('Chat-file requests are unavailable offline.'); }",
     }],
+    [fileURLToPath(new URL('../vendor/story-block/src/v2/packs/st-adapter.js', import.meta.url)), {
+        source: '(...args) => globalThis.fetch(...args)', count: 1,
+        stub: "() => { throw new Error('Portrait files are unavailable offline.'); }",
+    }],
     [fileURLToPath(new URL('../vendor/story-block/src/v2/rewind.js', import.meta.url)), {
         source: 'path => import(path)', count: 2,
         stub: "() => { throw new Error('Branch module loading is unavailable offline.'); }",
@@ -16,7 +20,7 @@ const defaults = new Map([
 export const offlineRuntime = {
     name: 'offline-runtime',
     setup(builder) {
-        builder.onLoad({ filter: /\/(?:chat-file|rewind)\.js$/ }, async ({ path }) => {
+        builder.onLoad({ filter: /\/(?:chat-file|rewind|st-adapter)\.js$/ }, async ({ path }) => {
             const replacement = defaults.get(path);
             if (!replacement) return;
             const contents = await readFile(path, 'utf8');

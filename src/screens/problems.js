@@ -1,7 +1,9 @@
 import { safeLabel, el, button, field, icon } from '../dom.js';
 import { KINDS, LABELS, records, identity, localId } from '../records.js';
 import { timelineNotes } from '../timeline/notes.js';
-import { draftsOf } from '../model.js';
+import { draftsOf, exportPack } from '../model.js';
+import { castCheck, castOf, zipListing, zipPortraits } from '../cast/data.js';
+import { kb } from '../cast/portrait.js';
 
 
 const UNSAFE = new Set(['__proto__', 'constructor', 'prototype']);
@@ -236,13 +238,27 @@ export function renderCheck(ctx) {
     left.append(countsGrid);
     const held = draftsOf(ctx.model).length;
     if (held) left.append(el(doc, 'p', `${held} ${held === 1 ? 'event written with an AI is a draft' : 'events written with an AI are drafts'} on the Timeline: not checked here and not in the export until kept.`, { class: 'muted' }));
+    // The cast: what Story Block's checker accepts, and what only the author can judge (a picture not held, a place nobody can find).
+    const castLines = castCheck(ctx.model);
+    if (castLines.length) {
+        const castBox = el(doc, 'section', '', { class: 'cf-check', 'aria-label': 'Cast check' });
+        castBox.append(el(doc, 'h2', 'Cast', { class: 'export-title' }));
+        const list = el(doc, 'ul', '', { class: 'cf-list' });
+        for (const item of castLines) list.append(el(doc, 'li', item.text, { class: `cf-${item.level}`, 'data-level': item.level }));
+        castBox.append(list);
+        left.append(castBox);
+    }
     const problemsList = el(doc, 'div', '', { class: 'problems-box' });
     renderProblemGroups(ctx, problemsList);
     left.append(problemsList);
 
     const right = el(doc, 'section', '', { class: 'check-right', 'aria-label': 'Export' });
     right.append(el(doc, 'h2', 'Export', { class: 'export-title' }));
-    const defaultFilename = ctx.filename || (ctx.model?.document?.id ? `${localId(ctx.model, ctx.model.document.id)}.json` : 'pack.json');
+    const hasCast = castOf(ctx.model).length > 0;
+    // A pack with a cast is shared as a .zip, so its default name carries the version (ersveil-2.3.0.zip).
+    const version = typeof ctx.model?.document?.version === 'string' && /^[0-9A-Za-z._-]{1,32}$/.test(ctx.model.document.version) ? ctx.model.document.version : '';
+    const stem = ctx.model?.document?.id ? `${localId(ctx.model, ctx.model.document.id)}${hasCast && version ? `-${version}` : ''}` : 'pack';
+    const defaultFilename = ctx.filename || `${stem}.json`;
     const fnInput = el(doc, 'input', '', { id: 'filename', class: 'fn-input mono', value: defaultFilename });
     fnInput.addEventListener('input', () => { ctx.filename = fnInput.value; });
     right.append(field(doc, 'FILE NAME', fnInput));
@@ -266,11 +282,28 @@ export function renderCheck(ctx) {
     }
     right.append(insideBox);
 
+    if (hasCast) {
+        const listing = zipListing(ctx.model, ok ? new TextEncoder().encode(exportPack(ctx.model)).length : 0, defaultFilename.replace(/\.json$/i, ''));
+        const zipBox = el(doc, 'div', '', { class: 'inside-section' });
+        zipBox.append(el(doc, 'div', 'THE .ZIP', { class: 'section-label muted' }));
+        const width = Math.max(...listing.rows.map(row => row[0].length));
+        zipBox.append(el(doc, 'pre', [listing.name, ...listing.rows.map(([name, size]) => `  ${name.padEnd(width)}  ${size ? `${kb(size)} KB` : '—'}`)].join('\n'), { class: 'cf-zip', 'data-cf': 'zip' }));
+        const { missing } = zipPortraits(ctx.model);
+        zipBox.append(el(doc, 'p', `Story Block imports the .zip in Settings → Tabs & Packs. A newer version brings new people into running chats from that story day, hidden until met; people already met keep their dossiers.${missing.length ? ` ${missing.length === 1 ? 'One portrait has' : `${missing.length} portraits have`} no picture held and ${missing.length === 1 ? 'is' : 'are'} left out.` : ''}`, { class: 'cf-hint' }));
+        right.append(zipBox);
+    }
     const bottom = el(doc, 'div', '', { class: 'export-bottom' });
     if (!ok) bottom.append(el(doc, 'div', `Fix the ${errCount} problems first.`, { role: 'status', class: 'export-warn' }));
-    const expBtn = button(doc, 'Export pack file', () => {
+    if (hasCast) {
+        const zipBtn = button(doc, 'Export .zip', () => {
+            if (ok && typeof ctx.downloadZip === 'function') ctx.downloadZip(fnInput.value.replace(/\.json$/i, '') || 'pack');
+        }, { id: 'export-zip', class: `primary btn-export ${ok ? 'btn-export-active' : 'btn-export-disabled'}`, 'aria-disabled': ok ? 'false' : 'true' });
+        if (!ok) { zipBtn.disabled = true; zipBtn.title = 'Fix the problems first'; }
+        bottom.append(zipBtn);
+    }
+    const expBtn = button(doc, hasCast ? 'Export pack.json only' : 'Export pack file', () => {
         if (ok && typeof ctx.download === 'function') ctx.download(fnInput.value || 'pack.json');
-    }, { id: 'export-btn', class: `primary btn-export ${ok ? 'btn-export-active' : 'btn-export-disabled'}`, 'aria-disabled': ok ? 'false' : 'true' });
+    }, { id: 'export-btn', class: `${hasCast ? '' : 'primary '}btn-export ${ok ? (hasCast ? 'btn-export-quiet' : 'btn-export-active') : 'btn-export-disabled'}`, 'aria-disabled': ok ? 'false' : 'true' });
     if (!ok) { expBtn.disabled = true; expBtn.title = 'Fix the problems first'; }
     bottom.append(expBtn);
     right.append(bottom);
