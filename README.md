@@ -1,4 +1,4 @@
-# Story Studio 0.5.0
+# Story Studio 0.5.1
 
 Story Studio is an offline pack editor and creator kit for Story Block, Story Director and NPC State Delta. Download [the standalone editor](dist/story-studio.html) and open it in a browser; it runs locally without a server.
 
