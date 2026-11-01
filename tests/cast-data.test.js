@@ -46,7 +46,7 @@ test('the problems under a path are Story Block’s own messages, found by the p
     const model = openPack(castPack({ cast }));
     assert.equal(model.validation.ok, false);
     assert.match(problemsAt(model, ['content', 'cast', 0, 'look']).join(' '), /plain text/);
-    assert.match(problemsAt(model, ['content', 'cast', 1, 'secrets', 0]).join(' '), /meter.*or by a story event/);
+    assert.match(problemsAt(model, ['content', 'cast', 1, 'secrets', 0]).join(' '), /needs a rule: a meter .*or both/);
     assert.deepEqual(problemsAt(model, ['content', 'cast', 0, 'voice']), []);
     assert.ok(problemsAt(model, ['content', 'cast', 0]).length >= 1);
 });

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+- A cast secret set to open "at a meter" has an optional **"…or also on a story event"**: filled in, the secret opens at
+  the meter value or when the event happens, whichever comes first. The player preview reads "Opens at Trust 90 or
+  with the story". Studio's copy of Story Block is now 2.15.1.
+
 ## 0.5.0
 
 - **Cast.** A new part beside People / creatures for a pack's hand-written people (Story Block 2.15.0 or later). Each
