@@ -59,3 +59,20 @@ test('the pack as a zip with its portraits opens back to the same text, as Story
     assert.equal(read.text, text);
     assert.deepEqual(read.files.map(file => file.name), names);
 });
+
+test('a secret with both rules opens, shows and exports as the very bytes it came in, edited elsewhere or not', () => {
+    const both = JSON.parse(JSON.stringify(entries));
+    both[0].secrets = [{ title: 'Two ways', text: 'Either opens it.', meter: 'trust', at: 90, when: 'Severa or an Inquest agent comes to Bluewatch' }, ...(both[0].secrets ?? [])].slice(0, 8);
+    const bothText = JSON.stringify(castPack({ cast: both }), null, 2) + '\n';
+    const model = openPack(bothText);
+    assert.deepEqual(model.validation.errors, []);
+    assert.equal(exportPack(model), bothText);
+    const edited = setSchemaField(model, ['content', 'cast', 0, 'voice'], 'Low.');
+    assert.equal(edited.ok, true);
+    assert.deepEqual(JSON.parse(exportPack(edited.model)).content.cast[0].secrets[0], both[0].secrets[0]);
+    const ctx = createTestContext(model);
+    ctx.onRender = renderScreen;
+    ctx.select('cast', both[0].id);
+    assert.equal(ctx.inspector.querySelector(`[data-path='${JSON.stringify(['content', 'cast', 0, 'secrets', 0, 'when'])}']`).value, both[0].secrets[0].when);
+    assert.equal(ctx.inspector.querySelector('[data-cf=preview] .cf-hint').textContent, 'Opens at Trust 90 or with the story');
+});

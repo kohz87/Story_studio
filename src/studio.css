@@ -288,3 +288,4 @@ main{padding:14px 16px;overflow:visible;gap:12px}
 .btn-export-quiet{background:transparent;border:1px solid var(--border);color:var(--text);cursor:pointer}
 @media(max-width:600px){.cf-portrait{grid-template-columns:minmax(0,1fr)}}
 .check-screen{flex-shrink:0}
+.cf-also{margin-top:2px;padding:10px 12px;border-radius:10px;border:1px dashed var(--accent);background:var(--accent-soft)}

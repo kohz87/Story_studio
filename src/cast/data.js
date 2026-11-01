@@ -90,9 +90,9 @@ export function opensAtStart(person, secret) {
     return secret.at >= 0 ? start >= secret.at : start <= secret.at;
 }
 
-/** The rule of a secret as words: "Opens at Trust 60" or "Opens with the story". */
+/** The rule of a secret as words: "Opens at Trust 60", "Opens with the story", or for both "Opens at Trust 90 or with the story" (never the event's words). */
 export function ruleText(model, person, secret) {
-    if (typeof secret?.meter === 'string') return `Opens at ${meterLabel(model, person, secret.meter)} ${secret.at}`;
+    if (typeof secret?.meter === 'string') return `Opens at ${meterLabel(model, person, secret.meter)} ${secret.at}${secret.when ? ' or with the story' : ''}`;
     return 'Opens with the story';
 }
 

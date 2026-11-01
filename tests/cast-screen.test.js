@@ -358,11 +358,11 @@ test('the player view shows a blank bar and the rule for each hidden secret and 
     assert.equal(after.querySelector('.cf-tag').textContent, 'Opened · Trust 20');
 });
 
-test('a secret with neither rule, or both, shows Story Block’s message on its card', () => {
+test('a secret with no rule shows Story Block’s message on its card', () => {
     const cast = castEntries();
     cast[0].secrets = [{ title: 'x', text: 'y' }];
     const ctx = open(castPack({ cast }));
-    assert.match(ctx.inspector.querySelector('[data-secret]').textContent, /opens by a meter \("meter" and "at"\) or by a story event \("when"\), one of the two/);
+    assert.match(ctx.inspector.querySelector('[data-secret]').textContent, /needs a rule: a meter \("meter" and "at"\), a story event \("when"\), or both/);
 });
 
 test('removing a person takes them out in one undoable step and clears the selection', () => {
@@ -426,4 +426,67 @@ test('a pack without a cast keeps the check and the one export button as they we
     assert.equal(ctx.main.querySelector('#export-zip'), null);
     assert.equal(ctx.main.querySelector('#export-btn').textContent, 'Export pack file');
     assert.equal(ctx.main.querySelector('#filename').value, 'fixture.json');
+});
+
+test('a meter secret has an optional story event beside it: it saves when beside meter and at, and clears when emptied', () => {
+    const ctx = open();
+    const secret = () => cast(ctx)[0].secrets[0];
+    const also = () => control(ctx, 0, 'secrets', 0, 'when');
+    assert.equal(also().value, '');
+    const box = also().parentElement.parentElement;
+    assert.equal(box.querySelector('label').childNodes[0].textContent, '…or also on a story event (optional)');
+    assert.equal(box.querySelector('.tl-count').textContent, '0 / 120');
+    assert.equal(box.querySelector('.cf-hint').textContent, 'Opens at Trust 20 or when this happens, whichever comes first.');
+    edit(ctx, [0, 'secrets', 0, 'when'], 'the party finds the ledger');
+    assert.deepEqual(secret(), { title: 'Her husband’s debt', text: 'He owed the smugglers.', meter: 'trust', at: 20, when: 'the party finds the ledger' });
+    assert.equal(ctx.model.validation.ok, true, JSON.stringify(ctx.model.validation.errors));
+    assert.equal(also().parentElement.parentElement.querySelector('.tl-count').textContent, '26 / 120');
+    // The meter row is still the meter row, and the mode is still "at a meter".
+    assert.equal(buttons(ctx.inspector.querySelectorAll('[data-secret]')[0], 'at a meter')[0].getAttribute('aria-pressed'), 'true');
+    edit(ctx, [0, 'secrets', 0, 'at'], '30');
+    assert.equal(secret().when, 'the party finds the ledger');
+    assert.match(ctx.inspector.querySelectorAll('[data-secret]')[0].querySelector('.cf-hint').textContent, /^$|Opens at Trust 30 or when this happens/);
+    edit(ctx, [0, 'secrets', 0, 'when'], '  ');
+    assert.equal('when' in secret(), false);
+    assert.equal(secret().at, 30);
+    undo(ctx);
+    assert.equal(secret().when, 'the party finds the ledger');
+});
+
+test('choosing "on a story event" is the event alone, and an event that is already there is kept; "at a meter" keeps meter only', () => {
+    const ctx = open();
+    edit(ctx, [0, 'secrets', 0, 'when'], 'the ledger');
+    press(ctx.inspector.querySelectorAll('[data-secret]')[0], 'on a story event');
+    assert.deepEqual(Object.keys(cast(ctx)[0].secrets[0]).sort(), ['text', 'title', 'when']);
+    assert.equal(cast(ctx)[0].secrets[0].when, 'the ledger');
+    press(ctx.inspector.querySelectorAll('[data-secret]')[0], 'at a meter');
+    assert.deepEqual(Object.keys(cast(ctx)[0].secrets[0]).sort(), ['at', 'meter', 'text', 'title']);
+    assert.equal(ctx.model.validation.ok, true);
+});
+
+test('the story event field is Story Block’s: past 120 characters or with markup it shows the checker’s message under it', () => {
+    const ctx = open();
+    edit(ctx, [0, 'secrets', 0, 'when'], 'x'.repeat(121));
+    const box = control(ctx, 0, 'secrets', 0, 'when').parentElement.parentElement;
+    assert.match(box.querySelector('.cf-error').textContent, /when must be plain text of 1 to 120 characters/);
+    assert.ok(box.querySelector('.tl-count').classList.contains('cf-over'));
+    assert.equal(ctx.model.validation.ok, false);
+    edit(ctx, [0, 'secrets', 0, 'when'], 'a <thing>');
+    assert.equal(ctx.model.validation.ok, false);
+});
+
+test('the player view says "or with the story" for a secret with both rules, never the event’s words, and the check accepts it', () => {
+    const entries = castEntries();
+    entries[0].secrets[1] = { ...entries[0].secrets[1], when: 'Severa comes to Bluewatch' };
+    const ctx = open(castPack({ cast: entries }));
+    const preview = ctx.inspector.querySelector('[data-cf=preview]');
+    assert.deepEqual(preview.querySelectorAll('.cf-hint').map(node => node.textContent), ['Opens at Trust 20', 'Opens at Trust 60 or with the story', 'Opens with the story']);
+    assert.doesNotMatch(preview.textContent, /Severa/);
+    assert.equal(ctx.model.validation.ok, true, JSON.stringify(ctx.model.validation.errors));
+    const check = createTestContext(openPack(castPack({ cast: entries })));
+    check.onRender = renderScreen;
+    check.select('check');
+    const lines = check.main.querySelectorAll('.cf-list li').map(item => item.textContent);
+    assert.equal(lines[0], 'Cast: 2 people, all fields within limits.');
+    assert.ok(lines.includes('Secrets: 3, each opens at a meter or on a story event.'));
 });

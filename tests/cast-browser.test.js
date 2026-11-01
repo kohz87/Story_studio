@@ -407,3 +407,30 @@ test('the twelve real Ersveil entries open in the browser and export, as pack.js
         assert.match(await page.locator('.cf-list').innerText(), /names the portrait .+ no picture is held/);
     });
 });
+
+test('the story event beside a meter secret keeps the target size, labels and contrast in both themes, and saves through the control', async () => {
+    const entries = castEntries();
+    entries[0].secrets[0].when = 'Severa comes to Bluewatch';
+    const text = JSON.stringify(castPack({ cast: entries }));
+    for (const theme of ['dark', 'light']) {
+        await withPage({ theme }, async page => {
+            await load(page, text);
+            await openPerson(page, 'Fenna');
+            const also = page.getByLabel('Secret 1 also opens on a story event');
+            assert.equal(await also.inputValue(), 'Severa comes to Bluewatch');
+            assert.deepEqual(await findings(page), []);
+            const ratio = await page.locator('.cf-also .cf-hint').first().evaluate(node => {
+                const channel = value => { const v = value / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+                const lum = ([r, g, b]) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+                const hex = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+                const [high, low] = [lum(getComputedStyle(node).color.match(/[\d.]+/g).slice(0, 3).map(Number)), lum([1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16)))].sort((a, b) => b - a);
+                return (high + 0.05) / (low + 0.05);
+            });
+            assert.ok(ratio >= 4.5, `${theme} ${ratio}`);
+            await also.fill('');
+            await also.press('Tab');
+            assert.equal(await page.getByLabel('Secret 1 also opens on a story event').inputValue(), '');
+            assert.match(await page.locator('.cf-preview .cf-hint').first().innerText(), /^Opens at Trust 20$/);
+        });
+    }
+});

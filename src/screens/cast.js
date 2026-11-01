@@ -15,7 +15,7 @@ import { oneLine } from '../../vendor/story-block/src/text.js';
 import { slugify } from '../../vendor/story-block/src/v2/packs/validate.js';
 import { browserIo, fitPortrait, kb, pictureUrl, portraitFileName, sniffImage } from '../cast/portrait.js';
 import {
-    CAST_LIMITS, METER_LIMITS, PORTRAIT_LIMITS, PLACEHOLDER_ID, cardTags, idForName, metersOf, newPerson, pictureOf, placeNames,
+    CAST_LIMITS, METER_LIMITS, PORTRAIT_LIMITS, PLACEHOLDER_ID, cardTags, idForName, meterLabel, metersOf, newPerson, pictureOf, placeNames,
     playerView, portraitNames, presetChoices, problemsAt, problemsExactly, problemsOfPerson,
 } from '../cast/data.js';
 
@@ -460,7 +460,7 @@ function secretCard(ctx, index, person, secret, at, total) {
     const mode = el(doc, 'span', '', { class: 'cf-seg', role: 'group', 'aria-label': `Secret ${at + 1} opens` });
     mode.append(
         button(doc, 'at a meter', () => { if (!byMeter) save(target => { delete target.when; target.meter = meters[0].id; target.at = 40; }); }, { 'aria-pressed': String(byMeter) }),
-        button(doc, 'on a story event', () => { if (byMeter) save(target => { delete target.meter; delete target.at; target.when = '[STORY EVENT]'; }); }, { 'aria-pressed': String(!byMeter) }),
+        button(doc, 'on a story event', () => { if (byMeter) save(target => { delete target.meter; delete target.at; target.when = target.when || '[STORY EVENT]'; }); }, { 'aria-pressed': String(!byMeter) }),
     );
     opens.append(el(doc, 'span', 'Opens'), mode);
     if (byMeter) {
@@ -475,13 +475,24 @@ function secretCard(ctx, index, person, secret, at, total) {
             save(target => { target.at = value; });
         });
         opens.append(meter, level);
+        card.append(opens);
+        // A secret may open by its meter or by a story event, whichever comes first: the event is an optional second rule.
+        const also = el(doc, 'input', '', { 'aria-label': `Secret ${at + 1} also opens on a story event`, 'data-path': JSON.stringify([...base, 'when']), value: safeLabel(secret.when ?? ''), placeholder: 'the party finds the weir ledger' });
+        also.addEventListener('change', () => {
+            const value = line(also.value);
+            save(target => { if (value) target.when = value; else delete target.when; });
+        });
+        const hintText = `Opens at ${meterLabel(model, person, secret.meter)} ${safeLabel(secret.at ?? '')} or when this happens, whichever comes first.`;
+        const extra = wrap(ctx, '…or also on a story event (optional)', also, { path: [...base, 'when'], max: CAST_LIMITS.secretWhen, note: hintText });
+        extra.classList.add('cf-also');
+        card.append(extra);
     } else {
         const when = el(doc, 'input', '', { 'aria-label': `Secret ${at + 1} story event`, 'data-path': JSON.stringify([...base, 'when']), value: safeLabel(secret.when ?? ''), placeholder: 'the party finds the weir ledger' });
         when.addEventListener('change', () => save(target => { target.when = line(when.value); }));
         opens.append(when);
+        card.append(opens);
     }
-    card.append(opens);
-    for (const key of ['meter', 'at', 'when']) {
+    for (const key of byMeter ? ['meter', 'at'] : ['meter', 'at', 'when']) {
         const problem = problemNote(doc, model, [...base, key]);
         if (problem) card.append(problem);
     }
