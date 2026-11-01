@@ -16,6 +16,10 @@ const sourceTexts = new WeakMap();
 // Drafts (events written with an AI, not yet kept) travel with a snapshot but are no part of its pack: they are not in
 // `document`, its validation or its export. A snapshot an edit makes takes its predecessor's drafts (see inheritDrafts).
 const draftTable = new WeakMap();
+// Portrait pictures of the cast travel the same way: a snapshot holds the images its pack's `portrait` names refer to
+// (name -> { bytes, type, width, height }); they are no part of its pack, so a swap of a picture is undone and redone with the
+// edit that made it, and the pack's bytes and hashes never see them.
+const portraitTable = new WeakMap();
 
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -568,8 +572,28 @@ const NO_DRAFTS = Object.freeze([]);
 export function withDrafts(model, drafts) {
     const next = Object.freeze({ ...model });
     if (sourceTexts.has(model)) sourceTexts.set(next, sourceTexts.get(model));
+    if (portraitTable.has(model)) portraitTable.set(next, portraitTable.get(model));
     draftTable.set(next, Object.freeze([...drafts]));
     return next;
+}
+
+const NO_PORTRAITS = new Map();
+/** The portrait pictures a snapshot carries, as a Map (name -> { bytes, type, width, height }); empty for a snapshot made without. Never change it. */
+export function portraitsOf(model) { return (isObjectLike(model) && portraitTable.get(model)) || NO_PORTRAITS; }
+
+/** A new snapshot of the same pack carrying `portraits` (a Map or a list of [name, picture]): the pack itself is untouched. */
+export function withPortraits(model, portraits) {
+    const next = Object.freeze({ ...model });
+    if (sourceTexts.has(model)) sourceTexts.set(next, sourceTexts.get(model));
+    if (draftTable.has(model)) draftTable.set(next, draftTable.get(model));
+    portraitTable.set(next, new Map(portraits));
+    return next;
+}
+
+/** Gives `next` the portraits of the snapshot it came from, unless it has some of its own; used when an edit is committed. */
+export function inheritPortraits(next, from) {
+    if (next === from || !isObjectLike(next) || !isObjectLike(from) || portraitTable.has(next) || !portraitTable.has(from)) return;
+    portraitTable.set(next, portraitTable.get(from));
 }
 
 /** Gives `next` the drafts of the snapshot it came from `from`, unless it has some of its own; used when an edit is committed. */

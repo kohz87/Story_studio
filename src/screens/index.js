@@ -9,6 +9,7 @@ import { renderNarrator, renderLorebook, renderLoreImport } from './authoring.js
 import { renderDataModules } from './dm/index.js';
 import { DRAFT_WITH_AI } from '../draft-hint.js';
 import { renderCodeModule } from './code-module.js';
+import { renderCast } from './cast.js';
 
 export function renderScreen(ctx) {
     if (ctx.selection.kind === 'code-module') {
@@ -29,7 +30,7 @@ export function renderScreen(ctx) {
         return;
     }
     if (ctx.selection.kind !== 'check' && ctx.model?.document && KINDS.includes(ctx.selection.kind)) {
-        (ctx.selection.kind === 'events' ? renderTimeline : renderRecords)(ctx);
+        (ctx.selection.kind === 'events' ? renderTimeline : ctx.selection.kind === 'cast' ? renderCast : renderRecords)(ctx);
         return;
     }
     ctx.main.append(el(ctx.doc, 'h1', 'Pack editor'));

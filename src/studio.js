@@ -1,12 +1,17 @@
 import { applyEdit } from './apply-edit.js';
-import { openPack, draftsOf } from './model.js';
+import { openPack, draftsOf, portraitsOf, withPortraits } from './model.js';
 import { setSchemaField as setField } from './edits.js';
 import { createHistory } from './history.js';
 import { safeLabel, el, button, field, icon } from './dom.js';
-import { KINDS, LABELS, records, identity, localId } from './records.js';
+import { KINDS, RAIL_KINDS, LABELS, records, identity, localId } from './records.js';
 import { renderScreen } from './screens/index.js';
-import { downloadPack } from './export.js';
+import { downloadPack, downloadZip } from './export.js';
 import { readDraft, writeDraft, MAX_PACK_BYTES } from './session.js';
+import { saveHeld, loadHeld } from './portrait-store.js';
+import { isZipFile, readPackZip } from '../vendor/story-block/src/v2/packs/bundle.js';
+import { ZIP_LIMITS, PORTRAIT_LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
+import { imageSize, sniffImage, kb } from './cast/portrait.js';
+import { portraitSignature, portraitNames } from './cast/data.js';
 import { renderProblemsDrawer } from './screens/problems.js';
 import { createColumns } from './columns.js';
 import { saveFailed } from './timeline/drafts.js';
@@ -22,6 +27,9 @@ export function mountStudio(root) {
     let seq = 0;
     const selection = { kind: 'places', id: null, form: null };
     let lastBaselineJson = null;
+    // The pictures of the cast are no part of the pack's text: what the last export held, and what the browser last kept.
+    let lastBaselinePortraits = '';
+    let lastKept = null;
 
     const restored = readDraft(win);
     let history = createHistory(restored?.model ?? null);
@@ -33,6 +41,7 @@ export function mountStudio(root) {
         }
     }
 
+    lastKept = portraitsOf(history.current);
     const media = win?.matchMedia?.('(prefers-color-scheme: light)');
     let themeChoice;
     try { themeChoice = win?.localStorage?.getItem('story-studio-theme'); } catch { /* Storage is optional. */ }
@@ -80,7 +89,7 @@ export function mountStudio(root) {
     undo.append(icon(doc, 'undo'));
     const redo = button(doc, '', () => step(() => history.redo(), () => history.undo(), 'Redo'), { 'aria-label': 'Redo' });
     redo.append(icon(doc, 'redo'));
-    const file = el(doc, 'input', '', { type: 'file', accept: '.json,application/json', id: 'pack-file', hidden: '', 'aria-label': 'Open pack file' });
+    const file = el(doc, 'input', '', { type: 'file', accept: '.json,application/json,.zip,application/zip', id: 'pack-file', hidden: '', 'aria-label': 'Open pack file' });
     file.addEventListener('change', () => {
         const f = file.files?.[0];
         file.value = '';
@@ -140,6 +149,14 @@ export function mountStudio(root) {
     win?.addEventListener?.('drop', onDrop);
 
 
+    // The pictures are kept in the browser beside the project, whenever the open pack's set of them is a new one.
+    const keepPortraits = () => {
+        const held = portraitsOf(history.current);
+        if (held === lastKept) return;
+        lastKept = held;
+        saveHeld(win, held);
+    };
+
     const ctx = {
         doc, win, root, app, main, inspector: inspectorBody, overlays, selection, file, authoring: {}, filters: {},
         get model() { return history.current; },
@@ -147,7 +164,8 @@ export function mountStudio(root) {
         get dirty() {
             if (!history.current?.document) return false;
             // Drafts are work that no export holds yet.
-            return lastBaselineJson === null || JSON.stringify(history.current.document) !== lastBaselineJson || draftsOf(history.current).length > 0;
+            return lastBaselineJson === null || JSON.stringify(history.current.document) !== lastBaselineJson || draftsOf(history.current).length > 0
+                || portraitSignature(history.current) !== lastBaselinePortraits;
         },
         apply(result) {
             if (destroyed) return false;
@@ -176,6 +194,7 @@ export function mountStudio(root) {
             }
             // Whether the browser kept the project: a screen that adds work only a save holds (drafts) checks it.
             if (history.current?.document) ctx.saved = writeDraft(win, history.current, ctx.dirty);
+            keepPortraits();
             return true;
         },
         notify(message) { notice.textContent = message; },
@@ -209,18 +228,24 @@ export function mountStudio(root) {
             const id = typeof ctx.model?.document?.id === 'string' ? ctx.model.document.id : 'pack';
             return downloadPack(ctx, filename || ctx.filename || `${id}.json`);
         },
+        downloadZip(filename) {
+            const id = typeof ctx.model?.document?.id === 'string' ? ctx.model.document.id : 'pack';
+            return downloadZip(ctx, filename || `${id}.zip`);
+        },
         markExported() {
             if (!destroyed && history.current?.validation?.ok) {
                 lastBaselineJson = JSON.stringify(history.current.document);
+                lastBaselinePortraits = portraitSignature(history.current);
                 writeDraft(win, history.current, false);
             }
         },
-        loadText(textOrObject) {
+        loadText(textOrObject, portraits) {
             if (destroyed) return null;
             ++seq;
             let model;
             try {
                 model = openPack(textOrObject);
+                if (model.document && portraits?.size) model = withPortraits(model, portraits);
             } catch (err) {
                 model = {
                     document: null,
@@ -228,7 +253,7 @@ export function mountStudio(root) {
                 };
             }
             if (model?.document) {
-                const previous = { history, selection: { ...selection }, baseline: lastBaselineJson, filename: ctx.filename, authoring: ctx.authoring, filters: ctx.filters };
+                const previous = { history, selection: { ...selection }, baseline: lastBaselineJson, held: lastBaselinePortraits, filename: ctx.filename, authoring: ctx.authoring, filters: ctx.filters };
                 history = createHistory(model);
                 ctx.authoring = {};
                 ctx.filters = {};
@@ -236,6 +261,7 @@ export function mountStudio(root) {
                 selection.id = null;
                 selection.form = null;
                 lastBaselineJson = JSON.stringify(model.document);
+                lastBaselinePortraits = portraitSignature(model);
                 ctx.filename = null;
                 notice.textContent = '';
                 app.classList.remove('inspector-open');
@@ -244,6 +270,7 @@ export function mountStudio(root) {
                     history = previous.history;
                     Object.assign(selection, previous.selection);
                     lastBaselineJson = previous.baseline;
+                    lastBaselinePortraits = previous.held;
                     ctx.filename = previous.filename;
                     ctx.authoring = previous.authoring;
                     ctx.filters = previous.filters;
@@ -251,6 +278,7 @@ export function mountStudio(root) {
                     return null;
                 }
                 writeDraft(win, model, false);
+                keepPortraits();
                 return model;
             }
             const errors = model?.validation?.errors || [{ code: 'no-document', message: 'No valid document' }];
@@ -263,6 +291,7 @@ export function mountStudio(root) {
         },
         async openFile(f) {
             if (destroyed) return false;
+            if (isZipFile(f)) return ctx.openZip(f);
             const token = ++seq;
             if (f && typeof f.size === 'number' && f.size > MAX_PACK_BYTES) {
                 ctx.notify('too-large: Pack file exceeds maximum size limit');
@@ -278,6 +307,39 @@ export function mountStudio(root) {
             }
             if (destroyed || token !== seq) return false;
             return ctx.loadText(text);
+        },
+        // A pack as one zip (pack.json and portraits/): the same reader the game uses, so Studio and Story Block agree on what is a pack.
+        async openZip(f) {
+            if (destroyed) return false;
+            const token = ++seq;
+            if (f && typeof f.size === 'number' && f.size > ZIP_LIMITS.archive) {
+                ctx.notify(`too-large: The zip is larger than ${Math.round(ZIP_LIMITS.archive / 1024 / 1024)} MB`);
+                return false;
+            }
+            let opened;
+            const held = new Map();
+            const left = [];
+            try {
+                opened = await readPackZip(new Uint8Array(await f.arrayBuffer()));
+                if (opened.ok) {
+                    for (const file of opened.files) {
+                        const bytes = await file.read();
+                        const type = sniffImage(bytes);
+                        if (!type) left.push(`${file.name} is not a picture`);
+                        else if (bytes.length > PORTRAIT_LIMITS.bytes) left.push(`${file.name} is over ${kb(PORTRAIT_LIMITS.bytes)} KB`);
+                        else held.set(file.name, Object.freeze({ bytes, type, ...(imageSize(bytes) ?? { width: 0, height: 0 }) }));
+                    }
+                }
+            } catch (err) {
+                if (destroyed || token !== seq) return false;
+                ctx.notify(`file-read-error: ${safeLabel(err?.message || 'Failed to read file')}`);
+                return false;
+            }
+            if (destroyed || token !== seq) return false;
+            if (!opened.ok) { ctx.notify(`zip-refused: ${safeLabel(opened.message)}`); return false; }
+            const model = ctx.loadText(opened.text, held);
+            if (model?.document && left.length) ctx.notify(`portrait: ${left.join('; ')}; left out.`);
+            return model;
         },
         render() {
             if (destroyed) return false;
@@ -302,16 +364,17 @@ export function mountStudio(root) {
             exportButton.title = exportButton.disabled ? 'Fix the problems first' : 'Export pack';
             rail.replaceChildren();
             const list = el(doc, 'div', '', { class: 'parts-list' });
-            for (const kind of KINDS.slice(0, 8)) {
+            for (const kind of RAIL_KINDS) {
                 const nav = button(doc, '', () => ctx.select(kind), { 'aria-current': selection.kind === kind ? 'page' : 'false' });
                 const asset = kind === 'creatures' ? 'kind-foes' : `kind-${kind}`;
                 nav.append(icon(doc, asset), el(doc, 'span', LABELS[kind]), el(doc, 'small', records(model, kind).length));
                 list.append(nav);
             }
             const more = el(doc, 'details');
-            more.open = KINDS.slice(8).includes(selection.kind);
+            const moreKinds = KINDS.filter(kind => !RAIL_KINDS.includes(kind));
+            more.open = moreKinds.includes(selection.kind);
             more.append(el(doc, 'summary', 'More kinds'));
-            for (const kind of KINDS.slice(8)) more.append(button(doc, `${LABELS[kind]} (${records(model, kind).length})`, () => ctx.select(kind)));
+            for (const kind of moreKinds) more.append(button(doc, `${LABELS[kind]} (${records(model, kind).length})`, () => ctx.select(kind)));
             list.append(more, button(doc, 'Pack settings', () => ctx.select('settings')));
             for (const [kind, label] of SCREENS) {
                 list.append(button(doc, label, () => ctx.select(kind), { 'aria-current': selection.kind === kind ? 'page' : 'false' }));
@@ -319,7 +382,7 @@ export function mountStudio(root) {
             list.append(check);
             // On a phone the parts list is a disclosure whose summary names where the creator is; elsewhere it is always open.
             const disclosure = el(doc, 'details', '', { class: 'parts' });
-            const railKind = KINDS.slice(0, 8).includes(selection.kind);
+            const railKind = RAIL_KINDS.includes(selection.kind);
             const summary = el(doc, 'summary');
             summary.append(
                 icon(doc, !railKind ? 'kind-more' : selection.kind === 'creatures' ? 'kind-foes' : `kind-${selection.kind}`),
@@ -358,6 +421,17 @@ export function mountStudio(root) {
     media?.addEventListener?.('change', setTheme);
     setTheme();
     ctx.render();
+    // A reload brings the cast's pictures back from where they were kept, if nothing has been edited meanwhile.
+    if (restored?.model?.document && portraitNames(records(restored.model, 'cast')).length) {
+        const start = history.current;
+        loadHeld(win).then(held => {
+            if (destroyed || !held?.size || history.current !== start) return;
+            history = createHistory(withPortraits(start, held));
+            lastKept = portraitsOf(history.current);
+            lastBaselinePortraits = portraitSignature(history.current);
+            ctx.render();
+        });
+    }
     return ctx;
 }
 

@@ -243,3 +243,48 @@ main{padding:14px 16px;overflow:visible;gap:12px}
 .chip.tl-draft{background:var(--warn-soft);color:var(--warn-text);border:1px solid var(--warn)}
 .tl-draft-row{border-style:dashed}
 .tl-warn{color:var(--warn-text);font-size:14px;flex-shrink:0}
+
+/* Cast: the list cards (a portrait beside the text) and the person's form */
+.cast-card{display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;align-items:center}
+.cast-card img,.cast-face{width:44px;height:44px;border-radius:10px;object-fit:cover}
+.cast-face{display:flex;align-items:center;justify-content:center;background:var(--accent-soft);color:var(--text);font-weight:800;font-size:18px}
+.cast-body{display:flex;flex-direction:column;gap:4px;min-width:0}
+.cast-card .record-card-meta{white-space:normal;font-family:inherit}
+.cc-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.cc-tag{font-size:11px;padding:1px 8px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+.cf{min-width:0}
+.cf-form{gap:14px}
+.cf-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+.cf-field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.cf-label{font-size:12px;font-weight:700;color:var(--muted)}
+.cf-hint{font-size:12px;line-height:1.4;color:var(--muted);margin:2px 0 0;overflow-wrap:anywhere}
+.cf-error{font-size:12px;line-height:1.4;color:var(--danger-text);white-space:pre-wrap;overflow-wrap:anywhere}
+.cf-over{color:var(--danger-text);font-weight:700}
+.cf-ok{color:var(--good)}.cf-warn{color:var(--warn-text)}.cf-bad{color:var(--danger-text)}
+.cf-stack{display:flex;flex-direction:column;gap:8px;min-width:0}
+.cf-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;min-width:0}
+.cf-portrait{display:grid;grid-template-columns:100px minmax(0,1fr);gap:14px;align-items:start}
+.cf-face img,.cf-face-empty{width:100px;height:125px;object-fit:cover;border-radius:12px;border:1px solid var(--border)}
+.cf-face-empty{display:flex;align-items:center;justify-content:center;background:var(--accent-soft);font-size:34px;font-weight:800}
+.cf-chip{display:inline-flex;gap:4px;align-items:center;font-size:13px;padding:0 0 0 12px;border-radius:999px;background:var(--accent-soft);border:1px solid var(--accent);min-height:44px}
+.cf-chip button{border-color:transparent;background:transparent;color:var(--muted)}
+.cf-row>input[placeholder]{width:180px}
+.cf-secret{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;border:1px solid var(--border);background:var(--card)}
+.cf-secret-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.cf-secret-head b{font-size:14px}
+.cf-seg{display:inline-flex;border:1px solid var(--border);border-radius:999px;overflow:hidden}
+.cf-seg button{border:0;border-radius:0;font-size:12.5px;padding:4px 12px}
+.cf-seg button[aria-pressed=true]{background:var(--accent);color:#fff}
+.cf-row select{width:auto;max-width:100%}
+.cf-row input[type=number]{width:96px}
+.cf-row>input:not([type]),.cf-row>input[type=text]{flex:1;min-width:140px}
+.cf-preview{padding:10px 12px;border-radius:12px;background:var(--tile);font-size:13px;display:flex;flex-direction:column;gap:6px}
+.cf-bar{display:block;height:11px;width:62%;border-radius:6px;background:repeating-linear-gradient(90deg,var(--link) 0 10px,var(--track) 10px 14px)}
+.cf-preview .cf-bar:nth-of-type(even){width:48%}
+.cf-tag{font-size:11px;padding:1px 8px;border-radius:999px;border:1px solid var(--good);color:var(--good)}
+.cf-list{display:flex;flex-direction:column;gap:6px;font-size:13px;margin:0;padding-left:18px;overflow-wrap:anywhere}
+.cf-check{border-radius:18px;background:var(--card);border:1px solid var(--border);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.cf-zip{font:12px/1.5 ui-monospace,Menlo,monospace;padding:10px 12px;border-radius:10px;background:var(--tile);white-space:pre;overflow:auto;margin:0}
+.btn-export-quiet{background:transparent;border:1px solid var(--border);color:var(--text);cursor:pointer}
+@media(max-width:600px){.cf-portrait{grid-template-columns:minmax(0,1fr)}}
+.check-screen{flex-shrink:0}
