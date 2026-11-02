@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0
+
+- **Stat formula** is the first card of Pack settings: choose which formula the story plays on, **Reader's choice**
+  (the pack names none and the reader decides), **Standard** or **Classic**, with a line saying what each means. The
+  choice is kept as the pack's `content.rpg.formula` and goes through Undo, Redo, Check and export like any other edit;
+  the pack's RPG numbers and skill sets are left as they are, and the JSON card for `content.rpg` stays below it.
+- **Portraits up to 150 KB and 1200 px** on the long side (was 64 KB and 600 px), as Story Block 2.16.0 allows: a
+  picture is shrunk in the browser to a WebP within those limits, and the check, the zip import and the cast screen
+  say 150 KB. Studio reads both limits from Story Block, so a later change there needs no change here.
+- Studio's copy of Story Block is now 2.16.0.
+
 ## 0.5.1
 
 - A cast secret set to open "at a meter" has an optional **"…or also on a story event"**: filled in, the secret opens at

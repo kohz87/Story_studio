@@ -130,7 +130,7 @@ field and in the Problems list, whose "Go to" finds the field. Edits are single 
 their name until they are named once.
 
 Portraits are image files beside the pack, not part of `pack.json`. Choosing one shrinks it in the browser (canvas, WebP)
-until it is at most 64 KB and 600 px on its long side; a WebP, PNG or JPEG that already fits is kept as it is. The
+until it is within Story Block's `PORTRAIT_LIMITS` (bytes, and `side` pixels on its long side, 600 where the vendored Story Block names none); a WebP, PNG or JPEG that already fits is kept as it is. The
 pictures travel with each snapshot of the pack (`portraitsOf`, `withPortraits` in `src/model.js`), so Undo and Redo
 bring them back with the edit that changed them, and the browser keeps the current set in IndexedDB so a reload brings
 them back (`src/portrait-store.js`; without IndexedDB only the reload loses them).
@@ -275,6 +275,11 @@ Existing pack-supported economy, currency, calendar, weather, start state and ot
 continue to be editable under **Pack settings** and the existing record editors. For example, the supported
 `economy.scale` is a number from 0.001 to 1000, default 1; it affects built-in money defaults across the
 suite and is distinct from the reader's settings object. Part 4 adds no new pack schema or module settings.
+
+The first card of **Pack settings**, "Stat formula", sets which formula the story plays on (`content.rpg.formula`):
+Reader's choice (the field is absent and the reader decides), Standard or Classic. It writes through the same edit
+pipeline as every other screen (Undo, Redo, Check, export). The other `content.rpg` fields (`skillSets`, `numbers`)
+are kept, an empty `content.rpg` is dropped, and the JSON card for `content.rpg` stays below it.
 
 The vendored host and the authoring kit are synchronized from Story Block using the documented transport.
 

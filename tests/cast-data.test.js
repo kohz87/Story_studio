@@ -4,7 +4,7 @@ import { openPack } from '../src/model.js';
 import { add } from '../src/edits.js';
 import { withPortraits } from '../src/model.js';
 import {
-    CAST_LIMITS, cardTags, castCheck, freshId, idForName, knownPlace, metersOf, newPerson, opensAtStart, playerView, portraitSignature,
+    CAST_LIMITS, PORTRAIT_LIMITS, cardTags, castCheck, freshId, idForName, knownPlace, metersOf, newPerson, opensAtStart, playerView, portraitSignature,
     presetChoices, problemsAt, zipListing, zipPortraits,
 } from '../src/cast/data.js';
 import { fitPortrait, imageSize, kb, pictureUrl, portraitFileName } from '../src/cast/portrait.js';
@@ -114,16 +114,16 @@ test('the cast check reports portraits held, pictures nobody names, a missing pl
     const lines = castCheck(model);
     assert.equal(lines[0].level, 'bad');
     assert.match(lines[0].text, /^Cast: 1 problem in 2 people/);
-    assert.ok(lines.some(line => line.level === 'ok' && /^Portraits: 1 file, \d+ KB together \(each under 64 KB\)\.$/.test(line.text)));
+    assert.ok(lines.some(line => line.level === 'ok' && /^Portraits: 1 file, \d+ KB together \(each under 150 KB\)\.$/.test(line.text)));
     assert.ok(lines.some(line => line.level === 'warn' && /A picture is held that no one names \(stray\.webp\)/.test(line.text)));
     assert.ok(lines.some(line => line.level === 'warn' && /Sera starts at "Nowhere"/.test(line.text)));
     const none = castCheck(openPack(castPack({ places: [], cast: [castEntries()[1]] })));
     assert.ok(none.some(line => /no places/.test(line.text)));
 });
 
-test('a picture over 64 KB, or more files than a pack may name, is a problem in the check', () => {
-    const big = withPortraits(openPack(castPack()), [['fenna.webp', picture(new Uint8Array(70 * 1024).fill(1))]]);
-    assert.ok(castCheck(big).some(line => line.level === 'bad' && /fenna\.webp is over 64 KB/.test(line.text)));
+test('a picture over 150 KB, or more files than a pack may name, is a problem in the check', () => {
+    const big = withPortraits(openPack(castPack()), [['fenna.webp', picture(new Uint8Array(160 * 1024).fill(1))]]);
+    assert.ok(castCheck(big).some(line => line.level === 'bad' && /fenna\.webp is over 150 KB/.test(line.text)));
     const cast = Array.from({ length: 33 }, (_, n) => ({ ...castEntries()[1], id: `p${n}`, name: `P${n}`, portrait: `p${n}.webp` }));
     const many = openPack(castPack({ cast }));
     assert.ok(castCheck(many).some(line => line.level === 'bad' && /33 files named; a pack may name at most 32/.test(line.text)));
@@ -171,19 +171,47 @@ test('a picture that already fits is kept as it is; a big one is tried at fewer 
         size: async () => ({ width: 1200, height: 1500 }),
         encode: async (side, quality) => { calls.push([side, quality]); return { bytes: new Uint8Array(side * 500 * quality), type: 'webp', width: side, height: side }; },
     };
-    const fit = await fitPortrait(big, io, { maxBytes: 64 * 1024 });
+    const fit = await fitPortrait(big, io);
     assert.equal(fit.changed, true);
-    assert.ok(fit.bytes.length <= 64 * 1024);
-    assert.deepEqual(calls[0], [600, 0.85]);
+    assert.ok(fit.bytes.length <= 150 * 1024);
+    assert.deepEqual(calls[0], [1200, 0.85]);
     assert.ok(calls.length > 5);
-    assert.ok(calls.every(([side]) => side <= 600));
+    assert.ok(calls.every(([side]) => side <= 1200));
     // Qualities come down before the pixels do.
     assert.deepEqual(calls.slice(0, 5).map(call => call[1]), [0.85, 0.7, 0.55, 0.4, 0.3]);
 });
 
+test('the byte and side limits come from the limits object: 150 KB and 1200 px from a stand-in, the vendored ones (the same) by default', async () => {
+    const limits = Object.freeze({ bytes: 150 * 1024, side: 1200, perPack: 32, name: 64 });
+    const calls = [];
+    const io = {
+        size: async () => ({ width: 2400, height: 1800 }),
+        encode: async (side, quality) => { calls.push([side, quality]); return { bytes: new Uint8Array(Math.round(side * 400 * quality)), type: 'webp', width: side, height: Math.round(side * 0.75) }; },
+    };
+    const fit = await fitPortrait(pngBytes(8, 8, 0), io, { limits });
+    assert.equal(fit.changed, true);
+    assert.ok(fit.bytes.length <= 150 * 1024 && fit.bytes.length > 64 * 1024, `${fit.bytes.length} bytes`);
+    assert.deepEqual(calls[0], [1200, 0.85]);
+    assert.ok(calls.every(([side]) => side <= 1200));
+    // A 1000 px picture of 100 KB fits these limits (the vendored ones now) and is kept; under the earlier 64 KB / 600 px limits it is drawn smaller.
+    const held = new Uint8Array(100 * 1024); held.set(pngBytes(8, 8, 0));
+    const same = await fitPortrait(held, { size: async () => ({ width: 1000, height: 800 }), encode: async () => { throw new Error('not called'); } }, { limits });
+    assert.equal(same.changed, false);
+    const vendored = await fitPortrait(held, { size: async () => ({ width: 1000, height: 800 }), encode: async () => { throw new Error('not called'); } });
+    assert.equal(vendored.changed, false);
+    assert.equal(PORTRAIT_LIMITS.bytes, 150 * 1024);
+    assert.equal(PORTRAIT_LIMITS.side, 1200);
+    const earlier = await fitPortrait(held, { size: async () => ({ width: 1000, height: 800 }), encode: async side => ({ bytes: new Uint8Array(1024), type: 'webp', width: side, height: side }) }, { limits: Object.freeze({ bytes: 64 * 1024, side: 600 }) });
+    assert.equal(earlier.changed, true);
+    assert.equal(earlier.width, 600);
+    // The refusal names the limit it was given.
+    const huge = new Uint8Array(200 * 1024); huge.set(pngBytes(8, 8, 0));
+    await assert.rejects(fitPortrait(huge, { size: async () => ({ width: 100, height: 100 }), encode: async side => ({ bytes: new Uint8Array(1e6), type: 'webp', width: side, height: side }) }, { limits }), /portraits are at most 150 KB/);
+});
+
 test('a picture too large at any size is refused in plain words, and so is an empty file', async () => {
-    const io = { size: async () => ({ width: 1000, height: 1000 }), encode: async side => ({ bytes: new Uint8Array(1e6), type: 'webp', width: side, height: side }) };
-    await assert.rejects(fitPortrait(pngBytes(8, 8, 0), io), /cannot be made small enough: portraits are at most 64 KB/);
+    const io = { size: async () => ({ width: 2000, height: 2000 }), encode: async side => ({ bytes: new Uint8Array(1e6), type: 'webp', width: side, height: side }) };
+    await assert.rejects(fitPortrait(pngBytes(8, 8, 0), io), /cannot be made small enough: portraits are at most 150 KB/);
     await assert.rejects(fitPortrait(new Uint8Array(0), io), /empty/);
 });
 
