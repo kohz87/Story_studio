@@ -114,7 +114,7 @@ test('the Cast sits in the rail beside People / creatures, with its count, and o
     });
 });
 
-test('a big picture is made smaller to fit 64 KB as a WebP, named after the person, and its size is shown', async () => {
+test('a big picture is made smaller to fit 150 KB as a WebP, named after the person, and its size is shown', async () => {
     await withPage({}, async page => {
         await load(page);
         await openPerson(page, 'Fenna');
@@ -123,10 +123,10 @@ test('a big picture is made smaller to fit 64 KB as a WebP, named after the pers
         await choose(page, big);
         await page.locator('.cf-face img').waitFor();
         const text = await facts(page);
-        assert.match(text, /^fenna\.webp · 480 × 600 · \d+ KB \(made smaller from \d+ KB PNG\)\. Pictures are made smaller automatically to fit 64 KB; JPEG, PNG or WebP\.$/);
+        assert.match(text, /^fenna\.webp · 480 × 600 · \d+ KB \(made smaller from \d+ KB PNG\)\. Pictures are made smaller automatically to fit 150 KB; JPEG, PNG or WebP\.$/);
         const { type, bytes } = await pictureBytes(page);
         assert.equal(type, 'data:image/webp;base64');
-        assert.ok(bytes.length <= 64 * 1024, `${bytes.length} bytes`);
+        assert.ok(bytes.length <= 150 * 1024, `${bytes.length} bytes`);
         assert.equal(sniffImage(Uint8Array.from(bytes)), 'webp');
         assert.match(text, new RegExp(`${Math.round(bytes.length / 1024)} KB`));
         assert.equal(await page.locator('main .record-card', { hasText: 'Fenna' }).locator('img').count(), 1);
@@ -203,7 +203,7 @@ test('the pictures come back after a reload, and the check counts them', async (
         await page.locator('.cf-face img').waitFor();
         assert.equal((await pictureBytes(page)).bytes.length, before);
         await navigate(page, 'Check / export');
-        assert.match(await page.locator('.cf-list').innerText(), /Portraits: 1 file, \d+ KB together \(each under 64 KB\)\./);
+        assert.match(await page.locator('.cf-list').innerText(), /Portraits: 1 file, \d+ KB together \(each under 150 KB\)\./);
     });
 });
 
@@ -228,7 +228,7 @@ test('Export .zip gives pack.json and the pictures the cast names, as Story Bloc
         await page.locator('.cf-face img').waitFor();
         await navigate(page, 'Check / export');
         const lines = await page.locator('.cf-list li').allInnerTexts();
-        assert.match(lines.find(line => line.startsWith('Portraits')), /^Portraits: 1 file, \d+ KB together \(each under 64 KB\)\.$/);
+        assert.match(lines.find(line => line.startsWith('Portraits')), /^Portraits: 1 file, \d+ KB together \(each under 150 KB\)\.$/);
         assert.match(await page.locator('.cf-zip').innerText(), /^fixture-2\.0\.0\.zip\n {2}pack\.json +\d+ KB\n {2}portraits\/fenna\.webp +\d+ KB$/);
         const zip = await downloaded(page, '#export-zip');
         assert.equal(zip.name, 'fixture-2.0.0.zip');
@@ -238,7 +238,7 @@ test('Export .zip gives pack.json and the pictures the cast names, as Story Bloc
         assert.deepEqual(read.files.map(file => file.name), ['fenna.webp']);
         const picture = await read.files[0].read();
         assert.equal(sniffImage(picture), 'webp');
-        assert.ok(picture.length <= 64 * 1024);
+        assert.ok(picture.length <= 150 * 1024);
         const plain = await downloaded(page, '#export-btn');
         assert.equal(plain.name, 'fixture-2.0.0.json');
         assert.equal(new TextDecoder().decode(plain.bytes), read.text);
@@ -287,7 +287,7 @@ test('a picture left out of a zip, or too big, is left out with a note and the p
     const zip = await writeZip([{ name: 'pack.json', bytes: new TextEncoder().encode(JSON.stringify(castPack({ cast }))) }, { name: 'portraits/fenna.png', bytes: pngBytes(300, 300, 40) }]);
     await withPage({}, async page => {
         await load(page, Buffer.from(zip), 'big.zip', 'application/zip');
-        assert.match(await page.locator('.notice').innerText(), /portrait: fenna\.png is over 64 KB; left out\./);
+        assert.match(await page.locator('.notice').innerText(), /portrait: fenna\.png is over 150 KB; left out\./);
         await openPerson(page, 'Fenna');
         assert.match(await facts(page), /fenna\.png is named, but no picture is held for it/);
     });

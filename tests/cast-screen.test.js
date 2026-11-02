@@ -52,7 +52,7 @@ test('a held picture is the card’s face and its size is a chip', () => {
     const card = ctx.main.querySelector('button.record-card');
     assert.match(card.querySelector('img').getAttribute('src'), /^data:image\/webp;base64,/);
     assert.match(card.querySelectorAll('.cc-tag').at(-1).textContent, /^portrait \d+ KB$/);
-    assert.match(ctx.inspector.querySelector('[data-portrait-facts]').textContent, /^fenna\.webp · 48 × 60 · \d+ KB\. Pictures are made smaller automatically to fit 64 KB; JPEG, PNG or WebP\.$/);
+    assert.match(ctx.inspector.querySelector('[data-portrait-facts]').textContent, /^fenna\.webp · 48 × 60 · \d+ KB\. Pictures are made smaller automatically to fit 150 KB; JPEG, PNG or WebP\.$/);
     assert.equal(ctx.inspector.querySelector('.cf-face img').getAttribute('alt'), 'Fenna\'s portrait');
 });
 
