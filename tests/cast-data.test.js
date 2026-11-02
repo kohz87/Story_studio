@@ -181,6 +181,29 @@ test('a picture that already fits is kept as it is; a big one is tried at fewer 
     assert.deepEqual(calls.slice(0, 5).map(call => call[1]), [0.85, 0.7, 0.55, 0.4, 0.3]);
 });
 
+test('the byte and side limits come from the limits object: 150 KB and 1200 px from a stand-in, the vendored ones by default', async () => {
+    const limits = Object.freeze({ bytes: 150 * 1024, side: 1200, perPack: 32, name: 64 });
+    const calls = [];
+    const io = {
+        size: async () => ({ width: 2400, height: 1800 }),
+        encode: async (side, quality) => { calls.push([side, quality]); return { bytes: new Uint8Array(Math.round(side * 400 * quality)), type: 'webp', width: side, height: Math.round(side * 0.75) }; },
+    };
+    const fit = await fitPortrait(pngBytes(8, 8, 0), io, { limits });
+    assert.equal(fit.changed, true);
+    assert.ok(fit.bytes.length <= 150 * 1024 && fit.bytes.length > 64 * 1024, `${fit.bytes.length} bytes`);
+    assert.deepEqual(calls[0], [1200, 0.85]);
+    assert.ok(calls.every(([side]) => side <= 1200));
+    // A 1000 px picture of 100 KB already fits these limits and is kept; the same picture is drawn smaller under the vendored ones.
+    const held = new Uint8Array(100 * 1024); held.set(pngBytes(8, 8, 0));
+    const same = await fitPortrait(held, { size: async () => ({ width: 1000, height: 800 }), encode: async () => { throw new Error('not called'); } }, { limits });
+    assert.equal(same.changed, false);
+    const vendored = await fitPortrait(held, { size: async () => ({ width: 1000, height: 800 }), encode: async side => ({ bytes: new Uint8Array(1024), type: 'webp', width: side, height: side }) });
+    assert.equal(vendored.changed, true);
+    // The refusal names the limit it was given.
+    const huge = new Uint8Array(200 * 1024); huge.set(pngBytes(8, 8, 0));
+    await assert.rejects(fitPortrait(huge, { size: async () => ({ width: 100, height: 100 }), encode: async side => ({ bytes: new Uint8Array(1e6), type: 'webp', width: side, height: side }) }, { limits }), /portraits are at most 150 KB/);
+});
+
 test('a picture too large at any size is refused in plain words, and so is an empty file', async () => {
     const io = { size: async () => ({ width: 1000, height: 1000 }), encode: async side => ({ bytes: new Uint8Array(1e6), type: 'webp', width: side, height: side }) };
     await assert.rejects(fitPortrait(pngBytes(8, 8, 0), io), /cannot be made small enough: portraits are at most 64 KB/);

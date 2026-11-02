@@ -1,15 +1,15 @@
 // A cast portrait: the picture a person's `portrait` file name stands for. Pure except `browserIo`, which is the browser's own
 // decoder and encoder (canvas), passed in so the search for a size that fits is testable on its own.
 //
-// A picture is kept as it is when it is already a WebP, PNG or JPEG of at most 64 KB (Story Block's limit) and no larger than
-// 600 px on its long side. Otherwise it is drawn smaller and saved as WebP, trying fewer bytes (quality) and then fewer pixels
+// A picture is kept as it is when it is already a WebP, PNG or JPEG of at most `PORTRAIT_LIMITS.bytes` (Story Block's limit) and no
+// larger than `PORTRAIT_LIMITS.side` pixels on its long side (600 where the vendored Story Block names none). Otherwise it is drawn smaller and saved as WebP, trying fewer bytes (quality) and then fewer pixels
 // until it fits.
 
 import { PORTRAIT_LIMITS, PORTRAIT_NAME } from '../../vendor/story-block/src/v2/packs/limits.js';
 import { PORTRAIT_TYPES, sniffImage } from '../../vendor/story-block/src/v2/packs/portraits.js';
 
 export { PORTRAIT_TYPES, sniffImage };
-export const PORTRAIT_SIDE = 600;
+export const PORTRAIT_SIDE = PORTRAIT_LIMITS.side ?? 600;
 const QUALITIES = [0.85, 0.7, 0.55, 0.4, 0.3];
 const SMALLEST_SIDE = 96;
 
@@ -28,9 +28,10 @@ export function portraitFileName(id, type, taken = new Set()) {
 
 /**
  * Fits a picture into the portrait limits. `io`: `{ size(bytes) -> { width, height }, encode(side, quality) -> { bytes, type, width, height } }`.
+ * `limits` (default Story Block's `PORTRAIT_LIMITS`) gives the byte and side limits; `maxBytes` and `maxSide` override one of them.
  * Returns `{ bytes, type, width, height, from, changed }` (`from` the size it was given), or throws an Error in plain words.
  */
-export async function fitPortrait(bytes, io, { maxBytes = PORTRAIT_LIMITS.bytes, maxSide = PORTRAIT_SIDE } = {}) {
+export async function fitPortrait(bytes, io, { limits = PORTRAIT_LIMITS, maxBytes = limits.bytes, maxSide = limits.side ?? 600 } = {}) {
     const type = sniffImage(bytes);
     if (!bytes?.length) throw new Error('That file is empty.');
     const { width, height } = await io.size(bytes);

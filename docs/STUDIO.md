@@ -130,7 +130,7 @@ field and in the Problems list, whose "Go to" finds the field. Edits are single 
 their name until they are named once.
 
 Portraits are image files beside the pack, not part of `pack.json`. Choosing one shrinks it in the browser (canvas, WebP)
-until it is at most 64 KB and 600 px on its long side; a WebP, PNG or JPEG that already fits is kept as it is. The
+until it is within Story Block's `PORTRAIT_LIMITS` (bytes, and `side` pixels on its long side, 600 where the vendored Story Block names none); a WebP, PNG or JPEG that already fits is kept as it is. The
 pictures travel with each snapshot of the pack (`portraitsOf`, `withPortraits` in `src/model.js`), so Undo and Redo
 bring them back with the edit that changed them, and the browser keeps the current set in IndexedDB so a reload brings
 them back (`src/portrait-store.js`; without IndexedDB only the reload loses them).
