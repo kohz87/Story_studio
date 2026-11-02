@@ -272,6 +272,7 @@ main{padding:14px 16px;overflow:visible;gap:12px}
 .cf-secret{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;border:1px solid var(--border);background:var(--card)}
 .cf-secret-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .cf-secret-head b{font-size:14px}
+.cf-formula{display:grid;gap:8px}
 .cf-seg{display:inline-flex;border:1px solid var(--border);border-radius:999px;overflow:hidden}
 .cf-seg button{border:0;border-radius:0;font-size:12.5px;padding:4px 12px}
 .cf-seg button[aria-pressed=true]{background:var(--accent);color:#fff}

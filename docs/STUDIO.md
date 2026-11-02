@@ -276,6 +276,11 @@ continue to be editable under **Pack settings** and the existing record editors.
 `economy.scale` is a number from 0.001 to 1000, default 1; it affects built-in money defaults across the
 suite and is distinct from the reader's settings object. Part 4 adds no new pack schema or module settings.
 
+The first card of **Pack settings**, "Stat formula", sets which formula the story plays on (`content.rpg.formula`):
+Reader's choice (the field is absent and the reader decides), Standard or Classic. It writes through the same edit
+pipeline as every other screen (Undo, Redo, Check, export). The other `content.rpg` fields (`skillSets`, `numbers`)
+are kept, an empty `content.rpg` is dropped, and the JSON card for `content.rpg` stays below it.
+
 The vendored host and the authoring kit are synchronized from Story Block using the documented transport.
 
 ### Author screens and layouts
