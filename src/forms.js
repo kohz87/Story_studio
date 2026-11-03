@@ -3,6 +3,7 @@ import { safeLabel, el, button, field } from './dom.js';
 import { setSchemaField as setField, renameId } from './edits.js';
 import { records, identity, localId } from './records.js';
 import { referenceTarget, resolveSchema, validateField, validateChange, matchesVariant, VARIANT_LABELS } from './form-schema.js';
+import { GEAR_KEYS, renderGearField } from './gear-form.js';
 import { LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 
 export function parseNumberInput(raw) {
@@ -238,6 +239,11 @@ export function renderForm(ctx, container, input, value, path, passed = {}) {
             const row = el(doc, 'div', '', { class: 'fieldset-row' });
             const present = Object.hasOwn(value, key);
             const required = schema.required?.includes(key);
+            if (options.kind === 'items' && path.length === options.rootPath.length && GEAR_KEYS.includes(key)) {
+                renderGearField(ctx, row, key, value, commit, pathAttrs([...path, key], options),
+                    () => renderJson(ctx, row, value[key], [...path, key], options, key));
+                group.append(row); continue;
+            }
             if (present || required) renderForm(ctx, row, childSchema, value[key], [...path, key], { ...options, label: key });
             if (!required) row.append(button(doc, present ? 'Clear' : `Enable ${key}`, () => {
                 const next = { ...value };
