@@ -64,7 +64,8 @@ test('gear form: stat points never pass the rarity budget', () => {
     const ctx = open({ ...sword, slot: 'weapon', stats: { STR: 2 } });
     assert.equal(errorText(ctx), '');
     set(ctx.inspector.querySelector('input[data-gear-points="0"]'), '3');
-    assert.match(errorText(ctx), /add up to 3; rare gives 2/);
+    assert.equal(errorText(ctx), 'STR 3 would use 3 points; rare gives 2.');
+    assert.equal(ctx.inspector.querySelector('input[data-gear-points="0"]').value, '2');
     assert.deepEqual(gear(ctx).stats, { STR: 2 });
     addStat(ctx);
     assert.match(errorText(ctx), /All 2 points are used/);
@@ -77,6 +78,20 @@ test('gear form: stat points never pass the rarity budget', () => {
     addStat(bare);
     assert.match(errorText(bare), /no stat points/);
     assert.equal(Object.hasOwn(gear(bare), 'stats'), false);
+});
+
+test('gear form: a refused edit names what was tried and the fields show the stored points', () => {
+    const ctx = open({ ...sword, slot: 'weapon', stats: { STR: 1, DEX: 1 } });
+    set(ctx.inspector.querySelector('input[data-gear-points="1"]'), '3');
+    assert.equal(errorText(ctx), 'DEX 3 would use 4 points; rare gives 2.');
+    assert.equal(ctx.inspector.querySelector('input[data-gear-points="0"]').value, '1');
+    assert.equal(ctx.inspector.querySelector('input[data-gear-points="1"]').value, '1');
+    assert.deepEqual(gear(ctx).stats, { STR: 1, DEX: 1 });
+    // A stat change that repeats another row's stat is refused, and the picker goes back to the stored stat.
+    set(ctx.inspector.querySelector('select[data-gear-stat="0"]'), 'DEX');
+    assert.equal(errorText(ctx), 'A stat can be chosen once.');
+    assert.equal(ctx.inspector.querySelector('select[data-gear-stat="0"]').value, 'STR');
+    assert.deepEqual(gear(ctx).stats, { STR: 1, DEX: 1 });
 });
 
 test('gear form: a piece raises at most two stats', () => {

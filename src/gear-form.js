@@ -17,13 +17,16 @@ const total = stats => Object.values(stats).reduce((sum, n) => sum + n, 0);
 /** The stat points a rarity gives (0 for a word Story Block does not know). */
 export const budgetOf = rarity => (Object.hasOwn(GEAR_BUDGET, rarity) ? GEAR_BUDGET[rarity] : 0);
 
-/** The reason a stats map is not one Story Block holds to the rarity's budget, or '' when it is fine. */
-export function statsProblem(stats, rarity) {
+/** The reason a stats map is not one Story Block holds to the rarity's budget, or '' when it is fine.
+ *  `edited` (`{ stat, points }`) is the picker edit that was refused; the budget reason then names that edit. */
+export function statsProblem(stats, rarity, edited = null) {
     const entries = Object.entries(stats);
     if (entries.length > GEAR_MAX_STATS) return `A piece raises at most ${GEAR_MAX_STATS} stats.`;
     if (entries.some(([name, n]) => !GEAR_STATS.includes(name) || !Number.isSafeInteger(n) || n < 1)) return 'Stats are whole points of 1 or more on STR, VIT, AGI, DEX, INT, LUK or CHA.';
     const budget = budgetOf(rarity);
-    if (total(stats) > budget) return `The points add up to ${total(stats)}; ${safeLabel(rarity)} gives ${budget}.`;
+    const used = total(stats);
+    if (used > budget && edited) return `${edited.stat} ${edited.points} would use ${used} ${used === 1 ? 'point' : 'points'}; ${safeLabel(rarity)} gives ${budget}.`;
+    if (used > budget) return `The points add up to ${used}; ${safeLabel(rarity)} gives ${budget}.`;
     return '';
 }
 
@@ -82,9 +85,10 @@ function renderStats(doc, row, record, commit, attrs, renderJson) {
     const show = text => { error.textContent = text; };
     show(statsProblem(given, record.rarity));
     // `entries` is what the picker rows say; a change is written only when it passes, else the error stays and nothing is stored.
-    const write = entries => {
+    // `edited` names the picker edit, so a refused one says what was tried; the caller then puts the stored values back.
+    const write = (entries, edited = null) => {
         const next = Object.fromEntries(entries);
-        const reason = entries.length !== Object.keys(next).length ? 'A stat can be chosen once.' : statsProblem(next, record.rarity);
+        const reason = entries.length !== Object.keys(next).length ? 'A stat can be chosen once.' : statsProblem(next, record.rarity, edited);
         if (reason) { show(reason); return false; }
         show('');
         const copy = { ...record };
@@ -102,11 +106,11 @@ function renderStats(doc, row, record, commit, attrs, renderJson) {
         }
         const amount = el(doc, 'input', '', { type: 'number', step: '1', min: '1', 'data-gear-points': String(index), 'aria-label': `points ${index + 1}` });
         amount.value = String(points);
-        pick.addEventListener('change', () => { if (!write(rows.map((entry, i) => (i === index ? [pick.value, entry[1]] : entry)))) pick.value = name; });
+        pick.addEventListener('change', () => { if (!write(rows.map((entry, i) => (i === index ? [pick.value, entry[1]] : entry)), { stat: pick.value, points })) pick.value = name; });
         amount.addEventListener('change', () => {
             const n = Number(amount.value);
             if (!/^\d+$/.test(amount.value.trim()) || !Number.isSafeInteger(n) || n < 1) { show('Points are a whole number of 1 or more.'); amount.value = String(points); return; }
-            if (!write(rows.map((entry, i) => (i === index ? [entry[0], n] : entry)))) amount.value = String(points);
+            if (!write(rows.map((entry, i) => (i === index ? [entry[0], n] : entry)), { stat: name, points: n })) amount.value = String(points);
         });
         body.append(field(doc, `stat ${index + 1}`, pick), field(doc, 'points', amount));
         line.append(body, button(doc, 'Remove', () => write(rows.filter((_, i) => i !== index)), { class: 'danger', 'aria-label': `Remove stat ${index + 1}` }));
