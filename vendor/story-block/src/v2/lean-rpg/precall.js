@@ -10,13 +10,20 @@
 // connection profile and time limit; the answer is a plan, never a number.
 import { SETTING, TIMEOUT_MS, clip, estimateTokens, hashText, normalizeType, withTimeout } from '../assist/common.js';
 import { stripBlock } from '../capture.js';
-import { CLASS_NAMES, LEAN_RPG_FEATURE, RANK_NAMES, RESOLVE, ROLLS_SETTING, STAGES, STATS, stageWord } from './names.js';
+import { GEAR_VERSION, gearIsOn, gearMarkOf } from './gear.js';
+import { CLASS_NAMES, LEAN_RPG_FEATURE, LV_VERSION, PRACTICE, PRACTICE_SETTING, RANK_NAMES, practiceOf, RESOLVE, ROLLS_SETTING, STAGES, STATS, stageWord } from './names.js';
 import { isStandard, packRulesOf, plannerNoteOf, rulesFromSettings } from './rules.js';
-import { NO_ROLLS_LINE } from './cue.js';
-import { parsePlanAnswer } from './plan.js';
-import { DICE_VERSION, claimKey, prepare } from './resolve.js';
+import { NO_ROLLS_LINE, OPEN_FIGHT_LINE } from './cue.js';
+import { openLinesOf, parsePlanAnswer } from './plan.js';
+import { openFoes, vetOpen } from './open.js';
+import { averageLevel, foeLabel, foeRandom, partyLevels, pickLevel } from './foes.js';
+import { DICE_VERSION, FLOW_VERSION, claimKey, prepare } from './resolve.js';
 import { readSheet } from './read.js';
 import { SOUL_LABEL, soulShortOf } from './soul.js';
+
+// The query that names a level's rank (LV-C: `rpg.rank { level }` → `{ name } | null`); without it a level has no rank.
+const RANK_QUERY = 'rpg.rank';
+const averageOf = sheet => averageLevel(partyLevels(sheet));
 
 // (The query the roll record is read through: index.js ROLLS_QUERY, named here too so this file need not import its parent.)
 const ROLLS_QUERY = 'rpg.rolls';
@@ -35,14 +42,16 @@ export const PRECALL_HEAD = [
     `act <who> | stat: ${STATS.map(stat => stat.toUpperCase()).join('|')} | target: <foe> | edge: <-3 to +3 and a short reason>?`,
     'foe <foe> | target: <who> | defend: <stat> | skill: <skill>?',
     'foe <foe> | hold',
+    'foe <name> | new | count: <1-12> | level: <1-99>? | rank: <name>?',
     'check <who> | skill: <skill> | stat: <stat>? | difficulty: easy|normal|hard|very hard',
     'check <who> | stat: <stat> | difficulty: easy|normal|hard|very hard',
     'none',
     'Rules:',
     '- Roll only what is uncertain. Talk, questions, plans and safe actions: answer none.',
     '- In a fight, give every party member who is not Down an act (companions act on their own) and every foe a target or hold.',
+    '- When the reader starts a fight against foes not listed, list them as new (only foes the reader\'s message or the scene names; never invent), then plan the fight as usual. Give a new foe a level, or a rank, only when the story says how strong it is; otherwise leave both out and code picks one near the party.',
     '- Use only the names listed. A skill brings its own stat and what it uses, so write no stat for a skill the character has; for a skill they lack, or with no skill, write the stat.',
-    '- A foe line may name a skill of the defender, only when one plausibly fits defending (a parry, a dodge, a shield, a counter-draw); otherwise write no skill. It brings its own stat.',
+    '- When a defender has a skill that fits defending (a dodge, a step, a parry, a shield, an evasion, a ward), name it on the foe line. It brings its own stat.',
     '- pace: careful when the reader moves slowly or carefully, all when they fight it out, else normal.',
     '- An edge is a small bonus or penalty the situation earns (an ambush +2, a trap -2).',
     '- Outside a fight a risky attempt (sneaking, persuading, climbing, lying) is a check with a difficulty.',
@@ -56,15 +65,17 @@ export const PRECALL_HEAD_STANDARD = [
     'act <who> | skill: <skill>? | type: physical|magic|social|check | target: <foe, or an ally> | edge: <-3 to +3 and a short reason>? | area? | support: easy|normal|hard?',
     'foe <foe> | target: <who> | skill: <skill>? | magic?',
     'foe <foe> | hold',
+    'foe <name> | new | count: <1-12> | level: <1-99>? | rank: <name>?',
     `check <who> | skill: <skill>? | type: social|check | fit: ${STATS.map(stat => stat.toUpperCase()).join('|')}? | difficulty: easy|normal|hard|very hard`,
     'none',
     'Rules:',
     '- Roll only what is uncertain. Talk, questions, plans and safe actions: answer none.',
     '- In a fight, give every party member who is not Down an act (companions act on their own) and every foe a target or hold.',
+    '- When the reader starts a fight against foes not listed, list them as new (only foes the reader\'s message or the scene names; never invent), then plan the fight as usual. Give a new foe a level, or a rank, only when the story says how strong it is; otherwise leave both out and code picks one near the party.',
     '- Use only the names listed. A skill brings its own stat and what it uses: write no stat.',
     '- type: physical (blades, force), magic (spells, a skill that uses Mana), social (talk, bluff), check (the rest). area: hits every foe. support: heals or helps an ally. magic on a foe line: a spell.',
     '- fit: the stat a check leans on (STR climb, AGI sneak, DEX locks, INT lore, VIT endure).',
-    '- A foe line may name a defender\'s skill only when it plausibly fits defending (a parry, a dodge, a shield); otherwise no skill.',
+    '- Name a defender\'s fitting skill on the foe line (a dodge, a step, a parry, a shield, an evasion, a ward).',
     '- pace: careful when the reader moves slowly or carefully, all when they fight it out, else normal.',
     '- An edge is a small bonus or penalty the situation earns (an ambush +2, a trap -2).',
     '- Outside a fight a risky attempt (sneaking, persuading, climbing, lying) is a check with a difficulty.',
@@ -74,7 +85,7 @@ const word = (list, at) => (Number.isInteger(at) && at >= 0 && at < list.length 
 
 /** The party and foes in a few short lines for the pre-call. */
 // A value the pack hides (`hidden` on an entry, review 160) still counts for the dice but is left out of these lines.
-export function sheetText(sheet, { standard = false } = {}) {
+export function sheetText(sheet, { standard = false, rankAt = null } = {}) {
     // The Standard formula's bars are blocks: the narrator-facing word is the block count spread over the bar's size (names.js stageWord).
     // (A bar is read as the block itself holds it: a block of the Standard formula says its size and the value is blocks left; a Classic block's
     // value is the stage itself, whichever formula the chat plays, so the word is never worked out from a size the block does not have.)
@@ -89,14 +100,15 @@ export function sheetText(sheet, { standard = false } = {}) {
         };
         const skills = entry.skills.length ? entry.skills.map(skillText).join(', ') : 'none';
         const down = entry.alive === false || (entry.health === 0 && shown('health')) ? ' DOWN' : '';
-        const head = [shown('soul') ? `${soulShortOf(entry.soulLabel ?? SOUL_LABEL, 'class')} ${entry.soul >= 1 && entry.soul <= CLASS_NAMES.length && entry.soulWord ? entry.soulWord : word(CLASS_NAMES, entry.soul - 1)}` : ''].filter(Boolean).join('');
+        // (A block with a Level field: "Astra (Lv 14)". An earlier block keeps its Soul Class.)
+        const head = entry.levelled ? (shown('level') ? `Lv ${entry.level}` : '') : [shown('soul') ? `${soulShortOf(entry.soulLabel ?? SOUL_LABEL, 'class')} ${entry.soul >= 1 && entry.soul <= CLASS_NAMES.length && entry.soulWord ? entry.soulWord : word(CLASS_NAMES, entry.soul - 1)}` : ''].filter(Boolean).join('');
         const bars = [['health', 'Health', STAGES.health], ['mana', 'Mana', STAGES.mana], ['stamina', 'Stamina', STAGES.stamina]]
             .filter(([key]) => shown(key)).map(([key, label, words]) => `${label} ${barWord(key, words, entry)}`).join(', ');
         return `${entry.who}${head || down ? ` (${head}${down})` : ''}: ${[stats, bars].filter(Boolean).join('; ')}; skills: ${skills}`;
     });
     const foes = sheet.foes.filter(foe => foe.filled).map(foe => {
         const shown = part => !(foe.hidden ?? []).includes(part);
-        const about = [shown('class') ? `class ${word(CLASS_NAMES, foe.class - 1)}` : '', shown('hurt') ? (foe.size ? stageWord(STAGES.health, foe.hurt, foe.size) : word(STAGES.health, foe.hurt)) : ''].filter(Boolean).join(', ');
+        const about = [(foe.levelled ? shown('level') : shown('class')) ? foeLabel(foe.level, rankAt) : '', shown('hurt') ? (foe.size ? stageWord(STAGES.health, foe.hurt, foe.size) : word(STAGES.health, foe.hurt)) : ''].filter(Boolean).join(', ');
         return `${foe.slot}. ${foe.name}${foe.count > 1 && shown('count') ? ` x${foe.count}` : ''}${about ? ` (${about})` : ''}`;
     });
     return `Party:\n${party.join('\n')}\nFoes: ${foes.length ? `\n${foes.join('\n')}` : 'none'}`;
@@ -106,9 +118,9 @@ export function sheetText(sheet, { standard = false } = {}) {
  * The pre-call's prompt: the static head, the reader's own instructions when they wrote any (`note`, Settings → RPG; after the
  * fixed part, which they cannot change), the sheet, the end of the last reply, then the reader's message.
  */
-export function precallPrompt({ sheet, message, excerpt = '', note = '', standard = false }) {
+export function precallPrompt({ sheet, message, excerpt = '', note = '', standard = false, rankAt = null }) {
     const tail = String(excerpt ?? '').trim(), extra = String(note ?? '').trim();
-    return `${standard ? PRECALL_HEAD_STANDARD : PRECALL_HEAD}${extra ? `\n\n${NOTE_LABEL} ${extra}` : ''}\n\n${sheetText(sheet, { standard })}\n${tail ? `\nThe last reply ended:\n"""\n${tail.slice(-EXCERPT_LIMIT)}\n"""\n` : ''}\nThe reader's message:\n"""\n${clip(message, MESSAGE_LIMIT)}\n"""`;
+    return `${standard ? PRECALL_HEAD_STANDARD : PRECALL_HEAD}${extra ? `\n\n${NOTE_LABEL} ${extra}` : ''}\n\n${sheetText(sheet, { standard, rankAt })}\n${tail ? `\nThe last reply ended:\n"""\n${tail.slice(-EXCERPT_LIMIT)}\n"""\n` : ''}\nThe reader's message:\n"""\n${clip(message, MESSAGE_LIMIT)}\n"""`;
 }
 
 // How far back a fight's turn order is looked for, in messages.
@@ -148,26 +160,46 @@ export function createPrecall({ callModel, chat, chatId, hold, problem = null, m
     const skip = (sheet, message) => {
         try { problem?.({ module: moduleId, code: 'ROLLS_SKIPPED', quiet: true, message: `Rolls skipped for this reply: ${message} Swipe to try again.` }); } catch { /* the Problems list is optional */ }
         // While a fight is on the narrator is told to keep it undecided; outside one there is nothing to hold back.
-        return sheet.foes.some(foe => foe.filled) ? { lines: [NO_ROLLS_LINE] } : null;
+        if (sheet.foes.some(foe => foe.filled)) return { lines: [NO_ROLLS_LINE] };
+        return noFight(sheet);
     };
+    // No foe is filled in and nothing was rolled: if a fight starts in this reply, the narrator sets the Foes line and stops at the first clash.
+    const noFight = sheet => (sheet.foes.length && !sheet.foes.some(foe => foe.filled) ? { lines: [OPEN_FIGHT_LINE] } : null);
 
     async function plan(view, sheet, message, excerpt, rules) {
         const values = readSettings(view, moduleId);
         const standard = isStandard(rules);
-        const prompt = precallPrompt({ sheet, message, excerpt, note: plannerNoteOf(values), standard });
+        // The ranks a pack names (`rpg.rank`, `{ level }` → `{ name } | null`), when something answers it: the foes' lines say "Rank E · Lv 14", a new foe's rank has a band.
+        const rankAt = level => { try { return view.query?.(RANK_QUERY, { level }) ?? null; } catch { return null; } };
+        const prompt = precallPrompt({ sheet, message, excerpt, note: plannerNoteOf(values), standard, rankAt });
         let answer;
         try {
             answer = await withTimeout(() => callModel(prompt, { maxTokens: ANSWER_TOKENS, profile: String(values[SETTING.profile] ?? ''), helper: 'rolls' }), timeoutMs, timer);
         } catch (error) {
             return { failed: error?.code === 'TIMEOUT' ? 'the planning call timed out.' : `the planning call failed (${String(error?.message ?? error).slice(0, 120)}).` };
         }
-        const parsed = parsePlanAnswer(answer, sheet, { formula: standard ? 'standard' : 'classic' });
+        // Foes the planner lists as new (open.js): the ones the reader's message or the reply before names are put on a copy of the Foes block, and the
+        // plan is read against that copy, so its lines may target them. They are added for real only when the plan is rolled (resolve.js).
+        const wanted = openLinesOf(answer);
+        let open = [], looked = sheet;
+        if (wanted.length && view.state?.domains?.dataModules) {
+            const vetted = vetOpen(wanted, sheet, [message, excerpt], { rankAt }).open;
+            // (The foes are put on the copy at a provisional level, only so the plan can be read against them; the level they are rolled at is drawn from the reply's seed.)
+            const domain = structuredClone(view.state.domains.dataModules);
+            const placed = openFoes(domain, vetted.map((entry, at) => ({ name: entry.name, count: entry.count, level: pickLevel(entry, averageOf(sheet), foeRandom(0, at)) })));
+            if (placed.length) {
+                const kept = new Set(placed.map(entry => entry.name));
+                open = vetted.filter(entry => kept.has(entry.name));
+                looked = readSheet({ domains: { dataModules: domain } });
+            }
+        }
+        const parsed = parsePlanAnswer(answer, looked, { formula: standard ? 'standard' : 'classic' });
         if (parsed.error) return { failed: `the answer could not be read (${parsed.error}).` };
         if (parsed.none) return { plan: null, tokens: estimateTokens(prompt) };
         // A plan that names nothing this sheet can roll is the same as no plan.
-        const ready = prepare(parsed.plan, sheet, rules);
+        const ready = prepare(parsed.plan, looked, rules);
         if (!ready.acts.length && !ready.foes.length && !ready.checks.length) return { plan: null, tokens: estimateTokens(prompt) };
-        return { plan: parsed.plan, tokens: estimateTokens(prompt) };
+        return { plan: open.length ? { ...parsed.plan, open } : parsed.plan, tokens: estimateTokens(prompt) };
     }
 
     async function beforeGenerate(view, info = {}) {
@@ -211,7 +243,10 @@ export function createPrecall({ callModel, chat, chatId, hold, problem = null, m
         // A Standard fight keeps its turn order across replies: the nearest earlier reply's order goes on in the payload (resolve.js), so a swipe of
         // this reply rolls this reply's dice again and keeps the order the fight began with.
         const order = isStandard(rules) && planned.plan ? carriedOrder(view, index) : null;
-        return planned.plan ? { commands: [{ type: RESOLVE, payload: { key, plan: planned.plan, rules, dice: DICE_VERSION, ...(order ? { order } : {}) } }] } : null;
+        // Gear in fights (gear.js): while the switch is on the roll carries only the version mark (and the reader's name as `lead`); `rpg.resolve` works out what each member has on and carries
+        // from the state before the roll, so a change before it (a reply deleted or edited) changes its gear.
+        const gear = planned.plan && gearIsOn(sheet, (name, args) => view.query?.(name, args)) ? gearMarkOf({ v: GEAR_VERSION, lead: String(last.name ?? '') }) : null;
+        return planned.plan ? { commands: [{ type: RESOLVE, payload: { key, plan: planned.plan, rules, dice: DICE_VERSION, flow: FLOW_VERSION, lv: LV_VERSION, practice: practiceOf(readSettings(view, moduleId)[PRACTICE_SETTING]) ?? PRACTICE.perUse, ...(order ? { order } : {}), ...(gear ? { gear } : {}) } }] } : noFight(sheet);
     }
 
     // The reply is captured: its plan has been used, so the hold is let go (best effort; a new generation clears it anyway). Whether

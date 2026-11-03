@@ -8,6 +8,8 @@ import { headReply } from './commands.js';
 import { KEY as RECORD_KEY, isCarrier, recordFault } from './persist.js';
 import { cutAt } from '../text.js';
 import { MODEL_CALL_ERRORS, MODEL_CALL_TEXT, profileName } from './model-call.js';
+import { RESOLVE as RPG_RESOLVE } from './lean-rpg/names.js';
+import { receiptCue, entriesWithCue } from './lean-rpg/cue.js';
 
 // sdk.check comes from check.js (SB-commands); the sdk still loads without it.
 const checkModule = await import('./check.js').catch(() => null);
@@ -201,13 +203,17 @@ export function createSettings({ root, registry, save = () => {} }) {
  * tools.reply ({ index, sid } or null, the `reply` option): the reply the state is the head of, as a
  * command's ctx.reply (commands.js).
  */
+// A roll's receipt keeps no cue text (stage 51: it is rebuilt from the record); a reader of the receipts (Story Director's chronicle) is given the text in
+// `summary`, computed here and not stored, so the day facts of a roll are still there.
+const withCue = entriesWithCue;
+
 export function runQuery(registry, state, name, args, { receipts = () => [], reply = null, pendingProofs = null } = {}) {
     const query = registry.query(name);
     if (!query) throw new Error(`Story Suite: no module answers the query "${name}".`);
     const tools = Object.freeze({
         reply,
         query: (other, otherArgs) => runQuery(registry, state, other, otherArgs, { receipts, reply, pendingProofs }),
-        receipts: () => receipts() ?? [],
+        receipts: () => withCue(receipts() ?? []),
         // The proof a Re-read has planned but not stored (evidence.js), for story.evidence; none otherwise.
         ...(typeof pendingProofs === 'function' ? { pendingProofs } : {}),
     });
@@ -239,6 +245,8 @@ export function makeView({ store, registry, settings, chat = [], active = null, 
         settings,
         feature: id => featureOn(registry, id),
         chat: Object.freeze({ length: messages.length, lastUser: String(lastUser?.mes ?? '') }),
+        // The state before the reply this view stands for (the one its lines start from), or null: asked by a step that compares the reply with it (the RPG's fight XP).
+        before: () => { try { return Number.isInteger(reply?.index) ? store.before?.(reply.index) ?? null : null; } catch { return null; } },
     });
 }
 
@@ -455,7 +463,7 @@ export function preflight({ store, registry, chat = () => [], apiVersion = 2 }, 
  * Returns { sdk, events, markReady }:
  * `sdk.ready` resolves to the sdk once the host calls markReady().
  */
-export function createSdk({ store, bus, registry, settings, events = createEvents(), chat = () => [], check = checkModule, onRegister = null, rewind = null, substitute = text => String(text ?? ''), dialog = null, dialogCurrent = null, reread = null, callModel = null, timeline = null }) {
+export function createSdk({ store, bus, registry, settings, events = createEvents(), chat = () => [], check = checkModule, onRegister = null, rewind = null, substitute = text => String(text ?? ''), dialog = null, dialogCurrent = null, reread = null, callModel = null, timeline = null, seed = null }) {
     let markReady;
     const ready = new Promise(resolve => { markReady = () => resolve(sdk); });
     const refused = message => ({ ok: false, code: 'REFUSED', message });
@@ -477,6 +485,10 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
     // not whether a change was announced: a view may have announced it already. A quiet host costs a scan.
     const settle = () => {
         timeline?.settle();
+        // A chat with a message but no state yet (Story Block has not heard of the chat, turn.seed): the state starts first.
+        if (typeof seed === 'function' && !store.head?.()) {
+            try { seed(); } catch (error) { console.warn('[Story Suite] the chat\'s state could not be started', error); }
+        }
         announceModules(registry, events);
         if (registry.restore?.().state === 'pending' || store.headIndex?.() < 0) return null;
         const head = store.head?.();
@@ -536,7 +548,7 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
         commit: async token => saved(committed(await bus.commit(token))),
         query: (name, args) => { timeline?.settle(); return runQuery(registry, store.head(), name, args, { receipts: () => store.receipts?.() ?? [], reply: headReply(store) }); },
         /** The stored receipts on the current line of history, in chat order: [{ index, receipt }]. */
-        receipts: () => store.receipts?.() ?? [],
+        receipts: () => withCue(store.receipts?.() ?? []),
         /**
          * Return in time (MODULES §F17): a SillyTavern branch of the chat at carrier `index`, without
          * that carrier's receipts from `beforeRev` on, opened as the current chat. → Promise<{ ok, … }>.
