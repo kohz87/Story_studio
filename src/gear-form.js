@@ -3,13 +3,15 @@
 // at most two stats. A piece that is none of those is left as it is; Studio only refuses what it would write.
 import { el, button, field, safeLabel } from './dom.js';
 import { RARITIES } from '../vendor/story-block/src/v2/packs/limits.js';
+import { GEAR } from '../vendor/story-block/src/v2/domains/gear.js';
 
 export const GEAR_SLOTS = Object.freeze([
     ['head', 'Head'], ['body', 'Body'], ['cloak', 'Cloak'], ['feet', 'Feet'], ['weapon', 'Weapon'], ['off-hand', 'Off-hand'], ['accessory', 'Accessory'],
 ]);
-export const GEAR_STATS = Object.freeze(['STR', 'VIT', 'AGI', 'DEX', 'INT', 'LUK', 'CHA']);
-export const GEAR_BUDGET = Object.freeze({ common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 });
-export const GEAR_MAX_STATS = 2;
+// The slot list above is only the order and labels of the menu; the words must be Story Block's (tests/gear-form.test.js).
+export const GEAR_STATS = GEAR.stats;
+export const GEAR_BUDGET = GEAR.budget;
+export const GEAR_MAX_STATS = GEAR.maxStats;
 export const GEAR_KEYS = Object.freeze(['slot', 'rarity', 'stats']);
 
 const isStats = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0
+
+- Items: Slot, Rarity with its stat budget, up to two stat bonuses (Story Block 2.18.0 gear); synced to Story Block 2.18.0; Ersveil 2.6.0 example.
+
 ## 0.6.0
 
 - **Stat formula** is the first card of Pack settings: choose which formula the story plays on, **Reader's choice**
