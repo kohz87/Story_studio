@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Reset card from pack** now says so when the browser refuses to clear the saved card draft ("Only the card draft could not be cleared in this browser…"), as the other card-draft failures already did; before, it said nothing.
+
 ## 0.8.0
 
 - **Character card.** The Narrator card page and its rail item are now **Character card**, and **Build a card…** on
