@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.0
+
+- **Signature skills on the Cast form.** A **Signature skills · n of 8** section sits after "Before they are met" and
+  before Secrets: one card per skill (name up to 40, what it does up to 120, stat, rank, uses stamina or mana), move
+  up and down for the slot order, Remove, and **+ Add skill** (off at the limit). Story Block's wording shows under the
+  control (a name used twice by one person, more than the limit, a bad stat, uses or rank). The Cast list shows a
+  "3 skills" tag and Check / export counts them. They are written as `cast[].skills` and read back from a pack, a .zip
+  and the saved draft. Story Block's own checker judges them (the stopgap check Studio carried meanwhile is gone); the
+  limit is Story Block's `CAST_LIMITS.skills` (8). The stat is saved in lowercase (`int`) and shown in capitals.
+- **Screens in a shared tab.** The Screen builder has **Show in tab** (its own tab, a tab another screen of the pack names, or a new
+  shared tab with its id), **Tab title** (only for a screen in a tab) and **Order**, for the `tab`, `tabTitle` and `order` fields of a pack
+  screen. The checker is Story Block's: tab ids are lowercase letters, digits and `-`, a title is 1 to 24 characters and needs a tab, the
+  order is a number. Export and import keep them.
+  When a screen joins a tab another screen already titles, the Tab title field is hidden (Story Block keeps the first title given).
+- **Vendored Story Block 2.22.0.** The vendored Story Block and the authoring kit are synced to Story Block 2.22.0 (commit c57512e). Suite: Story Block 2.22.0, NPC State Delta 1.10.0, Story Director 2.10.0.
+- **Reset card from pack** now says so when the browser refuses to clear the saved card draft ("Only the card draft could not be cleared in this browser…"), as the other card-draft failures already did; before, it said nothing.
+
 ## 0.8.0
 
 - **Character card.** The Narrator card page and its rail item are now **Character card**, and **Build a card…** on

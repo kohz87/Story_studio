@@ -178,7 +178,11 @@ export function mountStudio(root) {
         const started = Date.now();
         saveCardDraft(win, id, touched ? ctx.card : null).then(ok => {
             if (ok) clearMirror(started);
-            if (!ok && touched && !destroyed) ctx.notify('Only the card draft could not be kept in this browser: it will be lost on reload. The pack itself is saved. Download the card to keep it.');
+            if (ok || destroyed) return;
+            // A draft that could not be written will be lost on reload; one that could not be deleted (Reset) may come back.
+            ctx.notify(touched
+                ? 'Only the card draft could not be kept in this browser: it will be lost on reload. The pack itself is saved. Download the card to keep it.'
+                : 'Only the card draft could not be cleared in this browser: the old draft may come back on reload. The pack itself is saved.');
         });
     };
 

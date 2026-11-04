@@ -225,6 +225,8 @@ export function renderPresentation(ctx) {
     const put = (key, value) => { state.draft[key] = value; refresh(); };
     const fields = state.field === 'screens' ? SCREEN_FIELDS : ['id', 'title', 'icon', 'theme', 'root'];
     const templates = new Map();
+    // The title another screen already gives a tab: Story Block keeps the first one given, so a second is never used.
+    const titleOf = tab => (Array.isArray(pack.screens) ? pack.screens : []).find((screen, at) => at !== state.index && screen?.tab === tab && typeof screen.tabTitle === 'string')?.tabTitle;
     for (const key of fields) {
         const section = el(doc, 'div', '', { class: 'stack' });
         editor.append(section);
@@ -240,6 +242,31 @@ export function renderPresentation(ctx) {
                 mounts.append(field(doc, name, input));
             }
             section.append(mounts);
+        } else if (state.field === 'screens' && key === 'tab') {
+            // The tabs the pack's other screens already name; a screen may join one, or start a new one.
+            const others = (Array.isArray(pack.screens) ? pack.screens : []).filter((_, at) => at !== state.index);
+            const known = [...new Set(others.map(screen => screen?.tab).filter(tab => typeof tab === 'string' && tab))];
+            const own = typeof state.draft.tab === 'string' && state.draft.tab;
+            const fresh = state.newTabFor === state.draft || (own && !known.includes(state.draft.tab)) || (state.draft.tab !== undefined && !own);
+            select(doc, section, 'Show in tab', [['', 'Its own tab'], ...known.map(tab => [`t:${tab}`, titleOf(tab) ? `${safeLabel(titleOf(tab))} (${tab})` : tab]), ['new', 'A new shared tab…']],
+                fresh ? 'new' : own ? `t:${state.draft.tab}` : '', value => {
+                    if (value === '') { delete state.draft.tab; delete state.draft.tabTitle; delete state.newTabFor; }
+                    else if (value === 'new') { delete state.draft.tab; state.newTabFor = state.draft; }
+                    else { state.draft.tab = value.slice(2); delete state.newTabFor; if (titleOf(state.draft.tab) !== undefined) delete state.draft.tabTitle; }
+                    ctx.render();
+                }).id = 'screen-tab';
+            if (fresh) templates.set(key, control(doc, section, 'Tab id', state.draft.tab, value => { if (value === '') delete state.draft.tab; else state.draft.tab = value; refresh(); }, { id: 'screen-tab-id' }));
+        } else if (state.field === 'screens' && key === 'tabTitle') {
+            // Only a screen in a tab has a tab title (Story Block refuses one without).
+            if (state.draft.tab === undefined && state.draft.tabTitle === undefined && state.newTabFor !== state.draft) { section.remove(); continue; }
+            // A tab another screen already titles keeps that title: nothing to type here.
+            if (state.draft.tabTitle === undefined && state.newTabFor !== state.draft && titleOf(state.draft.tab) !== undefined) { section.remove(); continue; }
+            control(doc, section, 'Tab title', state.draft.tabTitle, value => { if (value === '') delete state.draft.tabTitle; else state.draft.tabTitle = value; refresh(); }, { id: 'screen-tabTitle' });
+        } else if (state.field === 'screens' && key === 'order') {
+            const input = el(doc, 'input', '', { id: 'screen-order', type: 'number', step: 'any', 'aria-label': 'Order' });
+            input.value = state.draft.order === undefined ? '' : String(state.draft.order);
+            input.addEventListener('input', () => { if (input.value === '') delete state.draft.order; else state.draft.order = Number(input.value); refresh(); });
+            section.append(field(doc, 'Order', input));
         } else {
             const json = ['layout', 'theme', 'data', 'steps', 'root'].includes(key);
             const input = control(doc, section, `${key}${json ? ' JSON' : ''}`, state.draft[key], value => { put(key, value); if (['root', 'layout'].includes(key)) redrawLayout(); }, { json, multiline: ['template', 'css'].includes(key), id: `screen-${key}` });

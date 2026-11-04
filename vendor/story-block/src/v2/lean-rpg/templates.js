@@ -5,6 +5,7 @@
 // use: `names` and `prompt: false` on fields, and the `replyEnd` and `cards` lists. The Skills block's rank and practice
 // are `edit: false` (they only move through play); SKILL_SETS are the New character wizard's built-in skill sets.
 import { CREATION, LEVEL, STATS, STAGES, USES } from './names.js';
+import { SIGNATURE_FIELD, SKILL_SLOTS_MAX } from '../skill-slots.js';
 import { STANDARD_NUMBERS } from './formula.js';
 
 const names = (words, first = 0) => Object.fromEntries(words.map((word, index) => [String(index + first), word]));
@@ -13,7 +14,7 @@ const MANA = names(STAGES.mana);
 const STAMINA = names(STAGES.stamina);
 const SOUL = names(['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'], 1);
 const RANK = names(['Novice', 'Adept', 'Expert', 'Master']);
-const SKILLS = [1, 2, 3, 4, 5];
+const SKILLS = Array.from({ length: SKILL_SLOTS_MAX }, (_, at) => at + 1);
 const SLOTS = [1, 2, 3, 4];
 
 const text = (label, max = CREATION.skillName) => ({ type: 'text', max, default: '', label });
@@ -85,7 +86,7 @@ const character = {
 
 const skills = {
     slug: 'skills', name: 'Skills', role: 'skills', schema: 1, stateVersion: 1, scope: 'chat',
-    prompt: 'Up to five skills for one character. Each has a description, the stat it rolls with, what it uses (stamina or mana), a rank (Novice, Adept, Expert, Master) and practice from 0 to 100. The narrator names a skill with a learn line (name, what it does, stat, uses) and adds practice. At 100 practice the rank rises by one and practice starts again at 0; a Master stays at 100.',
+    prompt: 'Five skills for one character, a sixth at Lv 20, a seventh at 40 and an eighth at 60. Each has a description, the stat it rolls with, what it uses (stamina or mana), a rank (Novice, Adept, Expert, Master) and practice from 0 to 100. The narrator names a skill with a learn line (name, what it does, stat, uses) and adds practice. At 100 practice the rank rises by one and practice starts again at 0; a Master stays at 100.',
     show: { tab: true, card: false, tabName: 'Skills', icon: 'ph-book-open' },
     state: {
         who: text('Name'),
@@ -97,6 +98,8 @@ const skills = {
             [`rank${n}`, int(`Rank ${n}`, 0, 3, 0, { names: RANK, edit: false })],
             [`practice${n}`, int(`Practice ${n}`, 0, 100, 0, { edit: false })],
         ])),
+        // (a bit for each slot a pack's cast member brought, names.js signatureAt: the story never renames or replaces those; the reader cannot type it and the narrator is not told it)
+        [SIGNATURE_FIELD]: int('Signature skills', 0, 2 ** SKILL_SLOTS_MAX - 1, 0, { edit: false, prompt: false }),
     },
     kinds: Object.fromEntries(SKILLS.flatMap(n => [
         [`learn-${n}`, { op: '~', labels: { name: { type: 'text', max: CREATION.skillName }, about: { type: 'text', max: CREATION.skillAbout }, stat: { type: 'enum', values: [...STATS] }, uses: { type: 'enum', values: [...USES] } },
@@ -115,9 +118,26 @@ const skills = {
 // skillRoute), so what reaches this condition is a free slot.
 const standardSkills = {
     ...skills,
+    // (Shorter text than Classic's, whose definition and hash stay as they were; a chat that already pinned the Standard Skills block keeps the text it was made with.)
+    prompt: 'Five skills for one character (a sixth at Lv 20, a seventh at 40, an eighth at 60): what it does, its stat, what it uses (stamina or mana), a rank (Novice, Adept, Expert, Master) and practice 0 to 100. The narrator names a skill with a learn line and adds practice; 100 practice raises the rank.',
     kinds: Object.fromEntries(Object.entries(skills.kinds).map(([name, kind]) => [name, /^learn-/u.test(name)
         ? { ...kind, when: ['eq', get(`skill${name.slice(6)}`), ''], refusal: 'That slot holds a skill; use a free slot.' } : kind])),
 };
+
+// The Skills templates as 2.21 made them (five slots, no `sig`, the earlier text): frozen, derived from today's by taking the later slots and the signature mark out, so
+// a Re-read of a join made before the extra slots builds the block that reply made (same fields, same pin) and not today's. Used only with `legacy` (join.js).
+const FIVE = [1, 2, 3, 4, 5];
+const upTo5 = key => !/^(skill|about|stat|uses|rank|practice)[6-9]$/u.test(key) && key !== SIGNATURE_FIELD;
+const frozenSkills = (from, prompt) => ({
+    ...from, prompt,
+    state: Object.fromEntries(Object.entries(from.state).filter(([key]) => upTo5(key))),
+    kinds: Object.fromEntries(Object.entries(from.kinds).filter(([name]) => FIVE.includes(Number(name.slice(name.lastIndexOf('-') + 1))))),
+    rules: from.rules.filter(rule => FIVE.includes(Number(rule.id.slice(rule.id.lastIndexOf('-') + 1)))),
+});
+const skillsV1 = frozenSkills(skills, 'Up to five skills for one character. Each has a description, the stat it rolls with, what it uses (stamina or mana), a rank (Novice, Adept, Expert, Master) and practice from 0 to 100. The narrator names a skill with a learn line (name, what it does, stat, uses) and adds practice. At 100 practice the rank rises by one and practice starts again at 0; a Master stays at 100.');
+const standardSkillsV1 = frozenSkills(standardSkills, 'Up to five skills for one character: what it does, its stat, what it uses (stamina or mana), a rank (Novice, Adept, Expert, Master) and practice 0 to 100. The narrator names a skill with a learn line and adds practice; 100 practice raises the rank.');
+/** The Skills template of the formula as 2.21 had it (a join made before the extra slots, read again). */
+export const skillsV1For = formula => structuredClone(formula === 'classic' ? skillsV1 : standardSkillsV1);
 
 const foes = {
     slug: 'foes', name: 'Foes', role: 'foes', schema: 1, stateVersion: 1, scope: 'chat',
@@ -186,7 +206,7 @@ const sizeRule = (id, key, sizeKey, size) => ({ id, when: ['ne', get(sizeKey), s
 
 const standardCharacter = {
     slug: 'character', name: 'Character', role: 'character', schema: 1, stateVersion: 2, scope: 'chat',
-    prompt: 'One character: who they are, health, stamina and mana (words, shown as bars of blocks that grow with VIT, AGI and INT), seven stats from 1 to 20, unspent points, Level 1 to 99 and XP to 100. The narrator sets health, mana, stamina and XP by words; the story cannot kill a character outright: they die only when they were already Down before a reply and are still Down at its end. The reader sets stats and points. XP at 100 raises the Level by one, up to the Level cap, and every third Level gives a point to spend on stats.',
+    prompt: 'One character: who they are, health, stamina and mana (words, shown as bars), seven stats 1 to 20, points, Level 1 to 99 and XP to 100. The narrator sets health, mana, stamina and XP by words. The story cannot kill them outright: they die only when Down before a reply and still Down at its end. The reader sets stats and points; XP at 100 raises the Level, and every third Level gives a point.',
     show: character.show,
     state: {
         who: text('Name'),
@@ -224,7 +244,7 @@ const standardCharacter = {
 
 const standardFoes = {
     slug: 'foes', name: 'Foes', role: 'foes', schema: 1, stateVersion: 2, scope: 'chat',
-    prompt: 'Up to four foe groups in the current fight. A group is one slot: its name, how many it has (count 0 means the slot is empty), its level from 1 to 99 and its health (words: a group of a higher level has more blocks of health). The narrator sets a slot when a group arrives, hurts it as the fight goes and clears it when the group is down, gone, fled, captured or has yielded.',
+    prompt: 'Up to four foe groups in the fight, one slot each: name, count (0 = empty slot), its level from 1 to 99 and health (words). The narrator sets a slot when a group arrives, hurts it as the fight goes and clears it when the group is down, gone, fled, captured or yielded.',
     show: foes.show,
     state: Object.fromEntries(SLOTS.flatMap(n => [
         [`foe${n}`, text(`Foe ${n}`)],
@@ -251,11 +271,11 @@ const standardFoes = {
 export const COMBAT_PROMPT_STANDARD = [
     '[COMBAT SYSTEM]',
     'No Plot Armor: combat follows physical reality and the lore. Size, skill, numbers, reach, armor, terrain, preparation and Level all matter. Against a stronger foe, {{user}} loses unless a believable edge exists: ambush, terrain, numbers, poison, preparation.',
-    'Exchanges: a fight is told exchange by exchange, each with clear cause, cost and consequence, in the order things happen. Most fights are short; never skip the moment that decides it.',
+    'Exchanges: tell a fight exchange by exchange, each with clear cause, cost and consequence, in order. Most fights are short; never skip the moment that decides it.',
     'Weight & Risk: every strike, miss, wound and hesitation carries impact. Injury, fatigue, fear and pain carry into the next exchange and the next scene.',
     'Believable Outcomes: fights end when logic demands it: death, surrender, retreat, capture or collapse. Victory must be earned; survival must be justified.',
-    'Rolls: attacks, spells, defence, talk and checks each pair a main stat with half of a second one. Health, stamina and mana are rows of blocks: a hit takes one, a Decisive hit two, and a foe of a higher Level has more. Tell the rolled result; code moves the bars for hits, heals, skill costs: never set those.',
-    'XP guide: code gives XP for a won fight; write none for it. Other deeds 5 to 40. Code practises rolled skills.',
+    'Rolls: tell the rolled result as given; code moves the bars for hits, heals, skill costs: never set those.',
+    'XP guide: code gives XP for a won fight and practises rolled skills; write none for them. Other deeds 5 to 40.',
 ].join('\n');
 
 const standardCombat = { ...combat, stateVersion: 2, prompt: COMBAT_PROMPT_STANDARD };
@@ -267,6 +287,22 @@ export const STANDARD_TEMPLATES = Object.freeze([
     { name: 'Foes', definition: standardFoes },
     { name: 'Combat rules', definition: standardCombat },
 ]);
+
+/**
+ * The additive upgrade of a Skills block made before the extra skill slots (five slots, no `sig`): the same definition with the fields, kinds and rules of the slots
+ * and the signature mark it lacks added from today's template (Standard's learn guard when the block has it). Nothing is removed, renamed or changed, and the text
+ * (`prompt`) stays as it was. → the extended definition, or null when it lacks nothing (or is not a Skills block). Pure.
+ */
+export function grownSkills(definition) {
+    if (definition?.role !== 'skills' || typeof definition.state !== 'object' || typeof definition.kinds !== 'object') return null;
+    const base = definition.kinds['learn-1']?.when ? standardSkills : skills;
+    const state = { ...definition.state }, kinds = { ...definition.kinds }, rules = [...(definition.rules ?? [])];
+    let changed = false;
+    for (const [key, schema] of Object.entries(base.state)) if (!Object.hasOwn(state, key)) { state[key] = structuredClone(schema); changed = true; }
+    for (const [name, kind] of Object.entries(base.kinds)) if (!Object.hasOwn(kinds, name)) { kinds[name] = structuredClone(kind); changed = true; }
+    for (const rule of base.rules) if (!rules.some(other => other.id === rule.id)) { rules.push(structuredClone(rule)); changed = true; }
+    return changed ? { ...definition, state, kinds, rules } : null;
+}
 
 /** The templates a chat's formula makes blocks from: 'classic' the originals, anything else Standard's. */
 export const templatesFor = formula => (formula === 'classic' ? LEAN_RPG_TEMPLATES : STANDARD_TEMPLATES);

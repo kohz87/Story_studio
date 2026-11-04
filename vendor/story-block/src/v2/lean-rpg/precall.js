@@ -15,10 +15,12 @@ import { CLASS_NAMES, LEAN_RPG_FEATURE, LV_VERSION, PRACTICE, PRACTICE_SETTING, 
 import { isStandard, packRulesOf, plannerNoteOf, rulesFromSettings } from './rules.js';
 import { NO_ROLLS_LINE, OPEN_FIGHT_LINE } from './cue.js';
 import { openLinesOf, parsePlanAnswer } from './plan.js';
-import { openFoes, vetOpen } from './open.js';
+import { openFoes, vetOpen, FIX_VERSION } from './open.js';
 import { averageLevel, foeLabel, foeRandom, partyLevels, pickLevel } from './foes.js';
 import { DICE_VERSION, FLOW_VERSION, claimKey, prepare } from './resolve.js';
+import { dropOf } from './ambush.js';
 import { readSheet } from './read.js';
+import { plannerWanted } from './gate.js';
 import { SOUL_LABEL, soulShortOf } from './soul.js';
 
 // The query that names a level's rank (LV-C: `rpg.rank { level }` → `{ name } | null`); without it a level has no rank.
@@ -33,52 +35,62 @@ export const NOTE_LABEL = 'Reader\'s instructions:';
 export const ANSWER_TOKENS = 250;
 export const MESSAGE_LIMIT = 800;
 export const EXCERPT_LIMIT = 600;
+/** The most of a skill's own description the planner is shown. */
+export const ABOUT_LIMIT = 70;
+
+const STAT_LIST = STATS.map(stat => stat.toUpperCase()).join('|');
+const DIFFICULTY = 'difficulty: easy|normal|hard|very hard';
+const EDGE = 'edge: <-3 to +3, reason>?';
+const THEN_ELSE = 'then: <skill>? | else: <skill>? | guard: <skill>?';
+// (Prompt diet: one line shape per kind and one short line per rule. The shapes are what plan.js reads; the words around them only tell the model when to use them.)
+const OPENING = 'Plan dice for one message of an interactive story. Reply with these lines only:';
+const SHARED_RULES = [
+    '- Roll only what is uncertain; talk and safe actions: none.',
+    '- In a fight each party member not Down acts (companions alone), each foe targets or holds.',
+    '- A foe the message or scene names but the list lacks: new (never invent); level or rank only if the story says.',
+];
+const TAIL_RULES = [
+    '- Defending with a skill (evade, dodge, parry, block): guard: that skill on the act; else leave it out.',
+    '- Skills ordered "A, then B": skill: A, then: B (B from round 2).',
+    '- pace: careful if the reader is careful, all if they fight it out. edge: trap -2.',
+    '- A skill used before a fight to get the drop (hide, sneak, lure, distract, slip behind; judge by its description) is a check with that skill and ambush, in the same plan as the attack. No ambush edge without one.',
+    '- Outside a fight a risky attempt (sneak, persuade, climb) is a check.',
+];
+const FOE_NEW = 'foe <name> | new | count: <1-12> | level: <1-99>? | rank: <name>?';
 
 // The same text for every message of every chat, first in the prompt, so a provider's prompt cache can keep it.
 export const PRECALL_HEAD = [
-    'You plan the dice for one message in an interactive story. Answer with these fixed lines only, no other words:',
-    'pace: careful | normal | all',
-    `act <who> | skill: <skill> | stat: ${STATS.map(stat => stat.toUpperCase()).join('|')}? | target: <foe> | edge: <-3 to +3 and a short reason>?`,
-    `act <who> | stat: ${STATS.map(stat => stat.toUpperCase()).join('|')} | target: <foe> | edge: <-3 to +3 and a short reason>?`,
+    OPENING,
+    'pace: careful|normal|all',
+    `act <who> | skill: <skill>? | stat: ${STAT_LIST}? | target: <foe> | ${EDGE} | ${THEN_ELSE}`,
     'foe <foe> | target: <who> | defend: <stat> | skill: <skill>?',
     'foe <foe> | hold',
-    'foe <name> | new | count: <1-12> | level: <1-99>? | rank: <name>?',
-    'check <who> | skill: <skill> | stat: <stat>? | difficulty: easy|normal|hard|very hard',
-    'check <who> | stat: <stat> | difficulty: easy|normal|hard|very hard',
+    FOE_NEW,
+    `check <who> | skill: <skill>? | stat: <stat>? | ${DIFFICULTY} | ambush?`,
     'none',
     'Rules:',
-    '- Roll only what is uncertain. Talk, questions, plans and safe actions: answer none.',
-    '- In a fight, give every party member who is not Down an act (companions act on their own) and every foe a target or hold.',
-    '- When the reader starts a fight against foes not listed, list them as new (only foes the reader\'s message or the scene names; never invent), then plan the fight as usual. Give a new foe a level, or a rank, only when the story says how strong it is; otherwise leave both out and code picks one near the party.',
-    '- Use only the names listed. A skill brings its own stat and what it uses, so write no stat for a skill the character has; for a skill they lack, or with no skill, write the stat.',
-    '- When a defender has a skill that fits defending (a dodge, a step, a parry, a shield, an evasion, a ward), name it on the foe line. It brings its own stat.',
-    '- pace: careful when the reader moves slowly or carefully, all when they fight it out, else normal.',
-    '- An edge is a small bonus or penalty the situation earns (an ambush +2, a trap -2).',
-    '- Outside a fight a risky attempt (sneaking, persuading, climbing, lying) is a check with a difficulty.',
+    ...SHARED_RULES,
+    '- Use listed names only. A skill brings its stat: give a stat only for a skill the character lacks, or none.',
+    ...TAIL_RULES,
 ].join('\n');
 
-// The same for the Standard formula (formula.js): the roll type decides the stat, so a line asks for a type, not a stat; the planner is told only
-// what it must write. Classic keeps PRECALL_HEAD above, word for word.
+// The same for the Standard formula (formula.js): the roll type decides the stat, so a line asks for a type, not a stat. Classic keeps PRECALL_HEAD above.
 export const PRECALL_HEAD_STANDARD = [
-    'You plan the dice for one message in an interactive story. Answer with these fixed lines only, no other words:',
-    'pace: careful | normal | all',
-    'act <who> | skill: <skill>? | type: physical|magic|social|check | target: <foe, or an ally> | edge: <-3 to +3 and a short reason>? | area? | support: easy|normal|hard?',
+    OPENING,
+    'pace: careful|normal|all',
+    `act <who> | skill: <skill>? | type: physical|magic|social|check | target: <foe or ally> | ${EDGE} | area? | support: easy|normal|hard? | ${THEN_ELSE}`,
     'foe <foe> | target: <who> | skill: <skill>? | magic?',
     'foe <foe> | hold',
-    'foe <name> | new | count: <1-12> | level: <1-99>? | rank: <name>?',
-    `check <who> | skill: <skill>? | type: social|check | fit: ${STATS.map(stat => stat.toUpperCase()).join('|')}? | difficulty: easy|normal|hard|very hard`,
+    FOE_NEW,
+    `check <who> | skill: <skill>? | type: social|check | fit: ${STAT_LIST}? | ${DIFFICULTY} | ambush?`,
     'none',
     'Rules:',
-    '- Roll only what is uncertain. Talk, questions, plans and safe actions: answer none.',
-    '- In a fight, give every party member who is not Down an act (companions act on their own) and every foe a target or hold.',
-    '- When the reader starts a fight against foes not listed, list them as new (only foes the reader\'s message or the scene names; never invent), then plan the fight as usual. Give a new foe a level, or a rank, only when the story says how strong it is; otherwise leave both out and code picks one near the party.',
-    '- Use only the names listed. A skill brings its own stat and what it uses: write no stat.',
-    '- type: physical (blades, force), magic (spells, a skill that uses Mana), social (talk, bluff), check (the rest). area: hits every foe. support: heals or helps an ally. magic on a foe line: a spell.',
-    '- fit: the stat a check leans on (STR climb, AGI sneak, DEX locks, INT lore, VIT endure).',
-    '- Name a defender\'s fitting skill on the foe line (a dodge, a step, a parry, a shield, an evasion, a ward).',
-    '- pace: careful when the reader moves slowly or carefully, all when they fight it out, else normal.',
-    '- An edge is a small bonus or penalty the situation earns (an ambush +2, a trap -2).',
-    '- Outside a fight a risky attempt (sneaking, persuading, climbing, lying) is a check with a difficulty.',
+    ...SHARED_RULES,
+    '- Use listed names only. A skill brings its own stat; leave the stat out.',
+    '- type: physical (blades), magic (spells, mana), social (talk, bluff), check (rest). area: all foes. support: heals or helps. magic on a foe: a spell.',
+    '- fit: the stat a check leans on (STR climb, AGI sneak, INT lore).',
+    '- else: the skill to use when the first runs out of Mana or Stamina.',
+    ...TAIL_RULES,
 ].join('\n');
 
 const word = (list, at) => (Number.isInteger(at) && at >= 0 && at < list.length ? list[at] : '?');
@@ -96,7 +108,10 @@ export function sheetText(sheet, { standard = false, rankAt = null } = {}) {
         const skillText = skill => {
             const open = part => !(skill.hidden ?? []).includes(part);
             const parts = [open('rank') ? word(RANK_NAMES, skill.rank) : '', skill.stat && open('stat') ? skill.stat.toUpperCase() : '', skill.uses === 'mana' && open('uses') ? 'mana' : ''].filter(Boolean);
-            return parts.length ? `${skill.name} (${parts.join(', ')})` : skill.name;
+            // What the skill does, cut short: the planner judges from it whether a skill sets up a fight (an ambush check).
+            const about = skill.about && open('about') ? clip(skill.about.replace(/\s+/g, ' ').trim(), ABOUT_LIMIT) : '';
+            const inside = [parts.join(', '), about].filter(Boolean).join(': ');
+            return inside ? `${skill.name} (${inside})` : skill.name;
         };
         const skills = entry.skills.length ? entry.skills.map(skillText).join(', ') : 'none';
         const down = entry.alive === false || (entry.health === 0 && shown('health')) ? ' DOWN' : '';
@@ -106,7 +121,8 @@ export function sheetText(sheet, { standard = false, rankAt = null } = {}) {
             .filter(([key]) => shown(key)).map(([key, label, words]) => `${label} ${barWord(key, words, entry)}`).join(', ');
         return `${entry.who}${head || down ? ` (${head}${down})` : ''}: ${[stats, bars].filter(Boolean).join('; ')}; skills: ${skills}`;
     });
-    const foes = sheet.foes.filter(foe => foe.filled).map(foe => {
+    // (Down groups are beaten and left out: the planner lists a new group of that name as new, and it takes the slot, open.js)
+    const foes = sheet.foes.filter(foe => foe.filled && foe.hurt > 0).map(foe => {
         const shown = part => !(foe.hidden ?? []).includes(part);
         const about = [(foe.levelled ? shown('level') : shown('class')) ? foeLabel(foe.level, rankAt) : '', shown('hurt') ? (foe.size ? stageWord(STAGES.health, foe.hurt, foe.size) : word(STAGES.health, foe.hurt)) : ''].filter(Boolean).join(', ');
         return `${foe.slot}. ${foe.name}${foe.count > 1 && shown('count') ? ` x${foe.count}` : ''}${about ? ` (${about})` : ''}`;
@@ -125,6 +141,17 @@ export function precallPrompt({ sheet, message, excerpt = '', note = '', standar
 
 // How far back a fight's turn order is looked for, in messages.
 const ORDER_LOOKBACK = 12;
+
+/**
+ * The drop a successful ambush check gave in the reply right before this one, when that reply's roll had no fight to use it in (ambush.js): read from that
+ * reply's own receipt, so a replay and a swipe see the same. It goes on in the payload and is spent on this roll's acts, once; if this reply has no roll
+ * the next one looks at a reply without a drop, so it is gone.
+ */
+export function carriedDrop(view, index) {
+    let found = null;
+    try { found = view.query?.(ROLLS_QUERY, { index: index - 1 }) ?? null; } catch { found = null; }
+    return dropOf(found?.result);
+}
 
 /**
  * The turn order of the fight this reply goes on with: the order recorded by the nearest earlier reply that has rolls (a roll with no order,
@@ -160,11 +187,12 @@ export function createPrecall({ callModel, chat, chatId, hold, problem = null, m
     const skip = (sheet, message) => {
         try { problem?.({ module: moduleId, code: 'ROLLS_SKIPPED', quiet: true, message: `Rolls skipped for this reply: ${message} Swipe to try again.` }); } catch { /* the Problems list is optional */ }
         // While a fight is on the narrator is told to keep it undecided; outside one there is nothing to hold back.
-        if (sheet.foes.some(foe => foe.filled)) return { lines: [NO_ROLLS_LINE] };
+        if (sheet.foes.some(foe => foe.filled && foe.hurt > 0)) return { lines: [NO_ROLLS_LINE] };
         return noFight(sheet);
     };
     // No foe is filled in and nothing was rolled: if a fight starts in this reply, the narrator sets the Foes line and stops at the first clash.
-    const noFight = sheet => (sheet.foes.length && !sheet.foes.some(foe => foe.filled) ? { lines: [OPEN_FIGHT_LINE] } : null);
+    // (a block of Down groups only is a won fight: no fight is on)
+    const noFight = sheet => (sheet.foes.length && !sheet.foes.some(foe => foe.filled && foe.hurt > 0) ? { lines: [OPEN_FIGHT_LINE] } : null);
 
     async function plan(view, sheet, message, excerpt, rules) {
         const values = readSettings(view, moduleId);
@@ -232,7 +260,13 @@ export function createPrecall({ callModel, chat, chatId, hold, problem = null, m
         const held = info?.again === true ? hold.peek(where, key) : null;
         let planned;
         if (held) planned = { plan: held.plan };
-        else {
+        else if (!plannerWanted(sheet, text, messages[index - 1] && !messages[index - 1].is_user ? stripBlock(String(messages[index - 1].mes ?? '')) : '')) {
+            // (The planner gate, gate.js: a quiet message with no fight open asks nothing. The decision depends only on the sheet and the message, so a
+            // swipe or a retry reaches the same one; it is held like an answer of "none".)
+            hold.clear();
+            hold.put(where, key, null);
+            planned = { plan: null };
+        } else {
             hold.clear();
             const before = messages[index - 1];
             const excerpt = before && !before.is_user ? stripBlock(String(before.mes ?? '')) : '';
@@ -245,8 +279,9 @@ export function createPrecall({ callModel, chat, chatId, hold, problem = null, m
         const order = isStandard(rules) && planned.plan ? carriedOrder(view, index) : null;
         // Gear in fights (gear.js): while the switch is on the roll carries only the version mark (and the reader's name as `lead`); `rpg.resolve` works out what each member has on and carries
         // from the state before the roll, so a change before it (a reply deleted or edited) changes its gear.
+        const drop = planned.plan ? carriedDrop(view, index) : null;
         const gear = planned.plan && gearIsOn(sheet, (name, args) => view.query?.(name, args)) ? gearMarkOf({ v: GEAR_VERSION, lead: String(last.name ?? '') }) : null;
-        return planned.plan ? { commands: [{ type: RESOLVE, payload: { key, plan: planned.plan, rules, dice: DICE_VERSION, flow: FLOW_VERSION, lv: LV_VERSION, practice: practiceOf(readSettings(view, moduleId)[PRACTICE_SETTING]) ?? PRACTICE.perUse, ...(order ? { order } : {}), ...(gear ? { gear } : {}) } }] } : noFight(sheet);
+        return planned.plan ? { commands: [{ type: RESOLVE, payload: { key, plan: planned.plan, rules, dice: DICE_VERSION, flow: FLOW_VERSION, fix: FIX_VERSION, lv: LV_VERSION, practice: practiceOf(readSettings(view, moduleId)[PRACTICE_SETTING]) ?? PRACTICE.perUse, ...(order ? { order } : {}), ...(drop ? { ambush: drop } : {}), ...(gear ? { gear } : {}) } }] } : noFight(sheet);
     }
 
     // The reply is captured: its plan has been used, so the hold is let go (best effort; a new generation clears it anyway). Whether

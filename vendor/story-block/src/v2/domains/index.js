@@ -60,9 +60,14 @@ export const CORE_MODULE_ID = 'story-block';
 const SCREEN_TABS = Object.freeze(['inventory', 'scene']);
 export const CORE_BUDGET = 400;
 
+// Whether this reply answers the reader's first message of the chat (the greeting is the narrator's): the one reply that asks for the look.
+// Read from the chat itself, so a swipe, a regenerate or a rebuilt state gives the same answer.
+const firstReader = view => (Number.isInteger(view?.chat?.readers) ? view.chat.readers <= 1 : true);
+
 // One line for the static prompt part: no names, counts or coins, so it is byte-identical every reply.
+// (The coin rule is said once, in the coin kind's grammar line; the wallet line and this one do not repeat it.)
 export const CORE_STATIC = 'Code keeps the inventory, the wallet, the place and who is present: use or pay only what the '
-    + 'lists below hold, and write a change line for every item or coin gained, used or lost and every arrival, departure or move.';
+    + 'lists below hold, and write a change line for every item gained, used or lost and every arrival, departure or move.';
 
 /** The `~ you` grammar line: wearing and condition, and a rank under the pack's own word for it (`label`) when a pack gives one. */
 export function youGrammar(label = '') {
@@ -161,7 +166,7 @@ export const CORE_SETTINGS = Object.freeze({
  * tabs }), for a host that merges parts. `hooks(name) → fn[]` in module-id order (the registry's
  * `hooks`); `settings()` → this module's settings. Without them no hooks run and the currency is gold.
  */
-export function createCorePart({ hooks = () => [], settings = () => ({}), hookEntries = null, problem = null, economy = () => null, youRank = () => null, query = null, rpgOn = () => false, gearOn = () => false, persona = () => '' } = {}) {
+export function createCorePart({ hooks = () => [], settings = () => ({}), hookEntries = null, problem = null, economy = () => null, youRank = () => null, query = null, rpgOn = () => false, gearOn = () => false, persona = () => '', readers = () => null, greetingOnly = () => null, chatEmpty = () => false } = {}) {
     const hookList = name => {
         const fns = hooks(name);
         return Array.isArray(fns) ? fns.filter(fn => typeof fn === 'function') : [];
@@ -178,6 +183,12 @@ export function createCorePart({ hooks = () => [], settings = () => ({}), hookEn
         settings: () => settings() ?? {},
         // Whether `story-block.gear` is on (off without a host that says so): the gear queries answer null while it is off.
         gearOn: () => { try { return gearOn() === true; } catch { return false; } },
+        // How many messages the reader has sent on the line of history (null: not known): the starting kit is open while it is 0.
+        readers: () => { try { const n = readers(); return Number.isInteger(n) ? n : null; } catch { return null; } },
+        // Whether the line of history is still only the opening greeting (null: not known): with `readers` 0, the starting kit is open only then.
+        greetingOnly: () => { try { const v = greetingOnly(); return typeof v === 'boolean' ? v : null; } catch { return null; } },
+        // Whether the chat has no message at all (no greeting): the kit reads closed and "+ Add item" says why.
+        chatEmpty: () => { try { return chatEmpty() === true; } catch { return false; } },
         // The reader's persona name: what the gear screens call the party's own wearer when no party module names one.
         persona: () => { try { return String(persona() ?? ''); } catch { return ''; } },
         // The enabled pack's money scale ({ scale } or null) for inventory.economy.
@@ -217,7 +228,7 @@ export function createCorePart({ hooks = () => [], settings = () => ({}), hookEn
             tail(view) {
                 const chars = CORE_BUDGET * 4;
                 const mounts = featureOn(view, MOUNTS_FEATURE) ? mountsTail(view?.state) : null;
-                const scene = [...sceneTail(view?.state, { weather: featureOn(view, CORE_FEATURE.weather), you: featureOn(view, CORE_FEATURE.you), rankLabel: featureOn(view, CORE_FEATURE.you) ? youRankLabel(view) : '' }), ...(mounts ? [mounts] : [])];
+                const scene = [...sceneTail(view?.state, { weather: featureOn(view, CORE_FEATURE.weather), you: featureOn(view, CORE_FEATURE.you), rankLabel: featureOn(view, CORE_FEATURE.you) ? youRankLabel(view) : '', askLook: firstReader(view) }), ...(mounts ? [mounts] : [])];
                 // The encumbered condition, when the carry module reports it (one short line).
                 // Asked through the query, which a host with Features answers with null while it is off.
                 let found = null;
@@ -370,7 +381,7 @@ export function headMoved(tools, headIndex) {
  * `assist`: the assist part (pre-roll classifier, after-reply extractor; both off by default).
  */
 export function createCoreModule({ hooks = () => [], settings = () => ({}), version = '2.0.0-alpha.1', packs = livePacks, command, query, assist = null, hookEntries = null, problem = null, extras = null, timeline = () => null, dataModules = {}, leanRpg = {} } = {}) {
-    const core = createCorePart({ hooks, settings, hookEntries, problem, query, rpgOn: () => { try { return extras?.rpgOn?.() === true; } catch { return false; } }, gearOn: () => { try { return extras?.gearOn?.() === true; } catch { return false; } }, persona: () => extras?.persona?.() ?? '', economy: () => (typeof packs.economy === 'function' ? packs.economy() : null), youRank: () => youRankOf(typeof packs.packs?.packs === 'function' ? packs.packs.packs() : []) });
+    const core = createCorePart({ hooks, settings, hookEntries, problem, query, rpgOn: () => { try { return extras?.rpgOn?.() === true; } catch { return false; } }, gearOn: () => { try { return extras?.gearOn?.() === true; } catch { return false; } }, persona: () => extras?.persona?.() ?? '', readers: () => extras?.readers?.() ?? null, greetingOnly: () => extras?.greetingOnly?.() ?? null, chatEmpty: () => extras?.chatEmpty?.() === true, economy: () => (typeof packs.economy === 'function' ? packs.economy() : null), youRank: () => youRankOf(typeof packs.packs?.packs === 'function' ? packs.packs.packs() : []) });
     // The reader's cap on Inner chatter lines a reply (1 to 10; 3 unless set).
     const chatterCapNow = () => { try { return chatterCap(settings()?.chatterMax); } catch { return chatterCap(); } };
     const events = createEventsPart({
@@ -379,7 +390,7 @@ export function createCoreModule({ hooks = () => [], settings = () => ({}), vers
     });
     const dataPart = createDataModulesPart({ packs: packs.packs, settings: () => settings(), ...dataModules });
     // The RPG's pre-call and rolls (`leanRpg`: the runtime's queued model call, the chat and its metadata; src/v2/lean-rpg/).
-    const rpg = createLazyRpgPart({ ...leanRpg, problem });
+    const rpg = createLazyRpgPart({ ...leanRpg, problem, persona: () => extras?.persona?.() ?? '', rosterOn: () => { try { return extras?.rpgOn?.() === true && extras?.gearOn?.() === true; } catch { return false; } } });
     const merged = mergeParts([core, packs.part, events, assist ?? createAssistPart({ settings: () => settings() }), createTimelinePart({ timeline }), dataPart, rpg]);
     const timelineGuard = merged.hooks.replayGuard;
     // One host-owned hook for the host's guarded blocks, by predicate: data modules (`dm.*`), the RPG's rolls
@@ -426,7 +437,7 @@ export function createCoreModule({ hooks = () => [], settings = () => ({}), vers
             },
         },
         context: {
-            static: () => merged.statics.map(fn => fn()).filter(text => typeof text === 'string' && text.trim()).join('\n'),
+            static: hint => merged.statics.map(fn => fn(hint)).filter(text => typeof text === 'string' && text.trim()).join('\n'),
             tail(view) {
                 const lines = [];
                 const optional = [];

@@ -123,13 +123,15 @@ export function zipPortraits(model) {
     return { files: kept.map(name => ({ name, picture: held.get(name) })), missing, unused: [...held.keys()].filter(name => !kept.includes(name)) };
 }
 
-/** What the list card says: [{ text }] chips for secrets, drawn to and portrait size. */
+/** What the list card says: [{ text }] chips for secrets, drawn to, signature skills and portrait size. */
 export function cardTags(model, person) {
     const tags = [];
     const secrets = Array.isArray(person.secrets) ? person.secrets.length : 0;
     if (secrets) tags.push(`${secrets} ${secrets === 1 ? 'secret' : 'secrets'}`);
     const drawn = Array.isArray(person.drawnTo) ? person.drawnTo.length : 0;
     if (drawn) tags.push(`drawn to ${drawn}`);
+    const skills = Array.isArray(person.skills) ? person.skills.length : 0;
+    if (skills) tags.push(`${skills} ${skills === 1 ? 'skill' : 'skills'}`);
     const picture = pictureOf(model, person);
     if (picture) tags.push(`portrait ${kb(picture.bytes.length)} KB`);
     else if (typeof person.portrait === 'string') tags.push('portrait missing');
@@ -186,6 +188,8 @@ export function castCheck(model) {
             : { level: 'ok', text: 'Starting places exist in this pack.' });
     const secrets = people.reduce((sum, person) => sum + (Array.isArray(person.secrets) ? person.secrets.length : 0), 0);
     if (secrets) lines.push({ level: 'ok', text: `Secrets: ${secrets}, each opens at a meter or on a story event.` });
+    const skilled = people.filter(person => Array.isArray(person.skills) && person.skills.length);
+    if (skilled.length) lines.push({ level: 'ok', text: `Signature skills: ${skilled.reduce((sum, person) => sum + person.skills.length, 0)} for ${skilled.length} ${skilled.length === 1 ? 'person' : 'people'}, each filled into a skill slot when they join.` });
     for (const person of people) if (!person.voice) lines.push({ level: 'warn', text: `${person.name} has no voice written — the narrator will invent one at the first meeting.` });
     return lines;
 }

@@ -60,6 +60,10 @@ export const NO_LONGER_DONE = 'NO_LONGER_DONE';
 const HOST_BRANCH = ['domains', HOST_DOMAIN];
 const touchesHostDomain = op => !op || typeof op !== 'object' || reachesBranch(op.path, HOST_BRANCH) || reachesBranch(op.from, HOST_BRANCH);
 const hostBlock = (module, type) => module === 'story-block' && typeof type === 'string' && type.startsWith('savepoint.');
+// The reader's own chat-block click (Story Block's data-module setup: define, redefine, remove, pin, attach, migrate, Add to party; cause `ui`)
+// is an action on the reply, not the reply's story: a Re-read of that reply keeps it, as it keeps the reader's other actions (a swipe or a delete still takes it).
+const readerSetup = (span, receipts) => span?.guard?.owner === 'story-block' && String(span.guard.predicate?.kind ?? '').startsWith('dm.')
+    && receipts.length > 0 && receipts.every(receipt => receipt?.cause === 'ui');
 
 const isObject = value => !!value && typeof value === 'object' && !Array.isArray(value);
 const utf8 = new TextEncoder();
@@ -109,7 +113,7 @@ export function createStore({
     chat, save, now = null, apply = applyOps, onSaveError = null, timers = globalThis,
     checkpointEvery = CHECKPOINT_EVERY, checkpointBytes = CHECKPOINT_BYTES, recordId = newRecordId, validate = null,
     chatId = () => undefined, place = () => null, rescue = null, scratch = null, receiptKeep = RECEIPT_KEEP,
-    confirm = null, memo = null, metadata = () => null,
+    confirm = null, memo = null, metadata = () => null, marked = () => false,
 } = {}) {
     if (typeof chat !== 'function') throw new TypeError('createStore needs a chat() function.');
     if (typeof apply !== 'function') throw new TypeError('createStore needs an apply(state, ops) function.');
@@ -1549,6 +1553,7 @@ export function createStore({
         if (KEPT_ASIDE.has(rawKind(there))) throw new Error(`The story record on this reply ${WHY[rawKind(there)](there)}; it is kept as it is and not written over.`);
         const sid = sidFor(message);
         const record = { v: 2, sid, ops: [], receipts: [], narrated: [], spans: [], source: sourceFor(arr, message, sid) };
+        if (marked()) record.mv = 1;   // (the reply mark's version, only while hand-set gear is on: a chat that never used it keeps its bytes; runtime.js greetingOnly)
         if (index === lastCarrier(arr)) settleBehind(arr, index);
         if (needsCheckpoint(arr, index)) {
             const base = before === undefined ? stateBefore(arr, index) : before;
@@ -2222,8 +2227,8 @@ export function createStore({
             for (const [n, { ops: block, span: was }] of blocks.entries()) {
                 const receipt = paired ? keptReceipts[n] : null;
                 // A reply-bound block goes when its reply is read again, its receipt with it (as a delete or a swipe takes it);
-                // what was built on it is replayed below without it.
-                if (was.guard?.replyBound === true) {
+                // what was built on it is replayed below without it. The reader's own chat-block setup stays (readerSetup).
+                if (was.guard?.replyBound === true && !readerSetup(was, paired ? (receipt ? [receipt] : []) : receiptsFor({ receipts: keptReceipts }, block))) {
                     if (!paired) for (const gone of receiptsFor({ receipts: keptReceipts }, block)) keptReceipts.splice(keptReceipts.indexOf(gone), 1);
                     continue;
                 }
@@ -2346,7 +2351,8 @@ export function createStore({
             return { changed: true, planned: walked.planned, removed: walked.removed };
         },
 
-        setNarrated(index, ids) {
+        // `reply`: the record is of a received message Story Block captured (never a greeting): it is marked `reply: true`.
+        setNarrated(index, ids, { reply = false } = {}) {
             if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string')) {
                 throw new TypeError('Narrated receipts must be a list of receipt IDs.');
             }
@@ -2356,7 +2362,25 @@ export function createStore({
             const atHead = index === head.key.index;
             const { message, record, fresh } = take(arr, index, atHead ? head.state : undefined);
             const rev = fresh ? revOf(atHead ? head.state : stateBefore(arr, index)) : record.rev;
-            write(message, { ...record, narrated: [...new Set(ids)], ...(rev === undefined ? {} : { rev }) });
+            write(message, { ...record, narrated: [...new Set(ids)], ...(rev === undefined ? {} : { rev }), ...(reply && marked() ? { mv: 1, reply: true } : {}) });
+            saver.touch();
+            if (atHead) retain(arr, head.state, head.problems);
+        },
+
+        /**
+         * Marks the reply at `index` as captured under the rule that skill practice comes only from rolls: `practiceRule: 'rolls'` on its record, kept
+         * with the reply (a Re-read, an edit, a rebuild and a reload keep it). Only replies with a story practice line get it (turn.js); an older reply
+         * has none and keeps its practice lines. Not a replay input.
+         */
+        setPracticeRule(index) {
+            writable();
+            const arr = list();
+            const head = current();
+            const atHead = index === head.key.index;
+            const { message, record, fresh } = take(arr, index, atHead ? head.state : undefined);
+            if (record.practiceRule === 'rolls') return;
+            const rev = fresh ? revOf(atHead ? head.state : stateBefore(arr, index)) : record.rev;
+            write(message, { ...record, practiceRule: 'rolls', ...(rev === undefined ? {} : { rev }) });
             saver.touch();
             if (atHead) retain(arr, head.state, head.problems);
         },

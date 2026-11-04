@@ -12,7 +12,9 @@ const frozen = list => Object.freeze([...list]);
 export const HINTS_SOURCE = live ? 'Story Block descriptors' : 'DATA_MODULES.md draft (provisional until Story Block exports descriptors)';
 
 export const SCOPES = frozen(pick(live?.scope, ['chat', 'character']));
-export const FIELD_TYPES = frozen(live ? Object.keys(live.fields) : ['int', 'bool', 'enum', 'text', 'map']);
+// Story Block 2.22.0 adds the `entries` type; Studio has no form for it yet, so the field-type pickers do not offer it (an existing one is kept as written).
+const NO_FORM_YET = ['entries'];
+export const FIELD_TYPES = frozen(live ? Object.keys(live.fields).filter(type => !NO_FORM_YET.includes(type)) : ['int', 'bool', 'enum', 'text', 'map']);
 export const SCALAR_TYPES = frozen(FIELD_TYPES.filter(type => type !== 'map'));
 export const LABEL_TYPES = frozen(live ? Object.keys(live.labels) : ['int', 'enum']);
 // `?` asks code to decide a check, which is v1.1; the forms offer the four ops a v1 kind can use.
