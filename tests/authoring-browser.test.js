@@ -118,7 +118,7 @@ test('blank card names visibly refuse JSON and PNG downloads until corrected', {
         page.on('download', file => downloads.push(file.suggestedFilename()));
         for (const name of ['', ' \t\u00a0\u2003']) {
             await page.locator('#card-name').fill(name);
-            assert.equal(await page.locator('#card-preview').textContent(), 'export-error: Card name must not be empty');
+            await page.waitForFunction(() => document.getElementById('card-preview').textContent === 'export-error: Card name must not be empty');
             await navigate(page, 'Lorebook');
             await navigate(page, 'Character card');
             assert.equal(await page.locator('#card-name').inputValue(), name, 'Invalid drafts remain editable after navigation');
@@ -130,7 +130,7 @@ test('blank card names visibly refuse JSON and PNG downloads until corrected', {
             }
         }
         await page.locator('#card-name').fill('A named narrator');
-        assert.equal(JSON.parse(await page.locator('#card-preview').textContent()).data.name, 'A named narrator');
+        await page.waitForFunction(() => { try { return JSON.parse(document.getElementById('card-preview').textContent).data.name === 'A named narrator'; } catch { return false; } });
         const json = await download(page, 'Download card JSON');
         assert.equal(JSON.parse(json.bytes).data.name, 'A named narrator');
         const png = await download(page, 'Download card PNG');

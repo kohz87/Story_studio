@@ -39,12 +39,13 @@ function pictureUrl(bytes) {
 }
 
 /** The card JSON for the preview: the same card, with long entry text cut short so a book of lore does not fill the page. */
-function previewText(json) {
-    const card = JSON.parse(json);
-    for (const entry of card.data.character_book?.entries ?? []) {
-        if (typeof entry.content === 'string' && entry.content.length > 200) entry.content = `${entry.content.slice(0, 200)}… [${entry.content.length - 200} more characters]`;
+function previewText(built) {
+    const data = { ...built.card.data };
+    if (data.character_book) {
+        data.character_book = { ...data.character_book, entries: data.character_book.entries.map(entry => typeof entry.content === 'string' && entry.content.length > 200
+            ? { ...entry, content: `${entry.content.slice(0, 200)}… [${entry.content.length - 200} more characters]` } : entry) };
     }
-    return JSON.stringify(card, null, 2);
+    return JSON.stringify({ ...built.card, data }, null, 2);
 }
 
 export function renderCharacterCard(ctx) {
@@ -87,9 +88,14 @@ export function renderCharacterCard(ctx) {
         next.include = { ...card.include, statusBar: next.include.statusBar, settings: read.found.settings ? true : card.include.settings, ownLore: true };
         if (!read.found.settings) next.settings = card.settings;
         ctx.setCard(next);
-        if (read.image) ctx.setCardImage(read.image);
+        // The picture of a PNG card goes through the same limits as a picture the writer picks.
+        let imageNote = '';
+        if (read.image) {
+            try { ctx.setCardImage(await cardImageFrom(read.image, ctx.cardTools)); } catch (err) { imageNote = `; its picture was not used (${err.message})`; }
+            if (ctx.authoring !== state || token !== state.pickSeq) return;
+        }
         const lore = next.ownLore.length;
-        state.pickNote = { error: false, text: `Read ${next.fields.name || 'the card'} (${read.spec === 'chara_card_v3' ? 'V3' : read.spec === 'chara_card_v2' ? 'V2' : 'V1'} card)${lore ? `; its ${lore} lorebook ${lore === 1 ? 'entry is' : 'entries are'} kept as Card’s own lore` : ''}${read.notes.length ? `; ${read.notes.join('; ')}` : ''}.` };
+        state.pickNote = { error: false, text: `Read ${next.fields.name || 'the card'} (${read.spec === 'chara_card_v3' ? 'V3' : read.spec === 'chara_card_v2' ? 'V2' : 'V1'} card)${lore ? `; its ${lore} lorebook ${lore === 1 ? 'entry is' : 'entries are'} kept as Card’s own lore` : ''}${read.notes.length ? `; ${read.notes.join('; ')}` : ''}${imageNote}.` };
         ctx.render();
     });
     const actions = el(doc, 'div', '', { class: 'row cc-actions' });
@@ -137,11 +143,10 @@ export function renderCharacterCard(ctx) {
     const portraitsReady = () => portraitState.sig === portraitSignature(model) && portraitState.status === 'done' ? portraitState.result : null;
 
     const refreshPreview = () => {
-        try { preview.textContent = previewText(buildCard(model, card, { portraits: portraitsReady() }).json); }
+        try { preview.textContent = previewText(buildCard(model, card, { portraits: portraitsReady() })); }
         catch (err) { preview.textContent = `export-error: ${err.message}`; }
     };
     const refreshSizes = () => {
-        sizeTimer = null;
         let sizes = null;
         try { sizes = cardSizes(model, card, { portraits: portraitsReady(), image: ctx.cardImage }); } catch { /* the preview says why */ }
         for (const [part, cell] of sizeCells) {
@@ -157,13 +162,12 @@ export function renderCharacterCard(ctx) {
         totals.png.dataset.bytes = sizes ? String(sizes.png) : '';
         if (sizes) totals.data.title = `Card text and fields ${sizeText(sizes.base)}`;
     };
-    const refresh = () => { refreshPreview(); refreshSizes(); };
-    // Typing is saved and previewed at once; the sizes (the heavy part) follow a moment later.
+    const refresh = () => { sizeTimer = null; refreshPreview(); refreshSizes(); };
+    // Typing only marks the draft: the save, the preview and the sizes (the heavy parts) follow when the writer pauses.
     const edited = () => {
-        save();
-        refreshPreview();
+        ctx.saveCard();
         if (sizeTimer !== null) win.clearTimeout(sizeTimer);
-        sizeTimer = win.setTimeout(refreshSizes, 120);
+        sizeTimer = win.setTimeout(refresh, 150);
     };
 
     const shrinkNow = () => {

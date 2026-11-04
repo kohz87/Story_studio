@@ -148,3 +148,80 @@ test('the checklist sizes add up to the total, and unticking a part takes its si
         assert.ok(sizes.total - after.total >= sizes.rows[1] - 40);
     });
 });
+
+const cardJson = (extra = {}) => JSON.stringify({ spec: 'chara_card_v2', spec_version: '2.0', data: { name: 'Big', description: 'd', ...extra } });
+
+test('a huge picked card never stops the pack’s own save: a rename survives a reload', { timeout: 120000 }, async () => {
+    await withPage(async page => {
+        await open(page);
+        await go(page, 'Character card');
+        const lore = Array.from({ length: 8 }, (_, at) => ({ keys: [`k${at}`], content: 'x'.repeat(700 * 1024), comment: `c${at}`, enabled: true }));
+        await page.setInputFiles('#card-file', { name: 'big.json', mimeType: 'application/json', buffer: Buffer.from(cardJson({ character_book: { entries: lore } })) }, { timeout: 60000 });
+        await page.locator('#card-pick-note').waitFor();
+        await page.locator('#pack-name').fill('Renamed after a big card');
+        await page.locator('#pack-name').press('Tab');
+        await page.waitForTimeout(800);
+        await page.reload();
+        await page.locator('.studio').waitFor();
+        assert.equal(await page.locator('#pack-name').inputValue(), 'Renamed after a big card');
+        await go(page, 'Character card');
+        await page.waitForFunction(() => document.getElementById('card-name').value === 'Big');
+    });
+});
+
+test('opening the same pack again keeps its card draft; another pack starts with none', { timeout: 60000 }, async () => {
+    await withPage(async page => {
+        await open(page);
+        await go(page, 'Character card');
+        await page.locator('#card-name').fill('Still mine');
+        await open(page);
+        await go(page, 'Character card');
+        assert.equal(await page.locator('#card-name').inputValue(), 'Still mine');
+        await page.setInputFiles('#pack-file', { name: 'other.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ id: 'other', version: '1.0.0', name: 'Another pack', requires: { storyBlock: '^2' }, content: {} })) });
+        await page.waitForFunction(() => document.getElementById('pack-name').value === 'Another pack');
+        await go(page, 'Character card');
+        assert.equal(await page.locator('#card-name').inputValue(), 'Another pack — Narrator');
+    });
+});
+
+test('a picked PNG card’s picture goes through the card picture limits (drawn to 1200 px or less)', { timeout: 60000 }, async () => {
+    await withPage(async page => {
+        await open(page);
+        await go(page, 'Character card');
+        const wide = Buffer.from(pngBytes(1500, 40, 2));
+        const { exportCardPng } = await import('../src/card-png.js');
+        const card = Buffer.from(exportCardPng(cardJson(), new Uint8Array(wide)));
+        await page.setInputFiles('#card-file', { name: 'wide.png', mimeType: 'image/png', buffer: card });
+        await page.waitForFunction(() => document.getElementById('card-image')?.alt === 'Card image');
+        const png = await download(page, 'Download card PNG');
+        assert.ok(png.bytes.readUInt32BE(16) <= 1200, `width ${png.bytes.readUInt32BE(16)}`);
+    });
+});
+
+test('a card picture the browser will not keep says so, and the pack is still saved', { timeout: 60000 }, async () => {
+    await withPage(async page => {
+        await open(page);
+        await go(page, 'Character card');
+        await page.evaluate(() => { indexedDB.open = () => { throw new Error('no storage'); }; });
+        await page.setInputFiles('#card-image-file', { name: 'face.png', mimeType: 'image/png', buffer: Buffer.from(pngBytes(60, 90, 3)) });
+        await page.waitForFunction(() => /Only the card picture could not be kept/.test(document.querySelector('.notice').textContent));
+        assert.notEqual(await page.evaluate(() => localStorage.getItem('story-studio-draft')), null);
+    });
+});
+
+test('typing in a card field costs under 30 ms a keystroke on a large pack', { timeout: 60000 }, async () => {
+    await withPage(async page => {
+        const { readFileSync } = await import('node:fs');
+        await page.setInputFiles('#pack-file', { name: 'pack.json', mimeType: 'application/json', buffer: readFileSync(new globalThis.URL('./fixtures/ersveil-open-world.json', import.meta.url)) });
+        await page.waitForFunction(() => document.getElementById('pack-name').value.length > 0);
+        await go(page, 'Character card');
+        await page.waitForFunction(() => document.getElementById('card-total').dataset.bytes);
+        const average = await page.evaluate(() => {
+            const input = document.getElementById('card-first_mes');
+            const start = performance.now();
+            for (let n = 0; n < 20; n++) { input.value += 'x'; input.dispatchEvent(new Event('input', { bubbles: true })); }
+            return (performance.now() - start) / 20;
+        });
+        assert.ok(average < 30, `${average} ms a keystroke`);
+    });
+});

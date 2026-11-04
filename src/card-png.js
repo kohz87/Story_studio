@@ -97,7 +97,7 @@ export function readCardPng(png) {
         try {
             const binary = atob(new TextDecoder('latin1').decode(found.data.subarray(keyword.length + 1)).replace(/\s+/g, ''));
             return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(binary, character => character.charCodeAt(0)));
-        } catch { return null; }
+        } catch { continue; }
     }
     return null;
 }

@@ -7,8 +7,8 @@ import { KINDS, RAIL_KINDS, LABELS, records, identity, localId } from './records
 import { renderScreen } from './screens/index.js';
 import { downloadPack, downloadZip } from './export.js';
 import { readDraft, writeDraft, MAX_PACK_BYTES } from './session.js';
-import { saveHeld, loadHeld, saveCardImage, loadCardImage } from './portrait-store.js';
-import { emptyCard } from './card.js';
+import { saveHeld, loadHeld, saveCardImage, loadCardImage, saveCardDraft, loadCardDraft } from './portrait-store.js';
+import { emptyCard, sanitizeCard, cardTouched } from './card.js';
 import { isZipFile, readPackZip } from '../vendor/story-block/src/v2/packs/bundle.js';
 import { ZIP_LIMITS, PORTRAIT_LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 import { imageSize, sniffImage, kb } from './cast/portrait.js';
@@ -158,10 +158,21 @@ export function mountStudio(root) {
         saveHeld(win, held);
     };
 
+    let cardTimer = null;
+    const writeCard = () => {
+        cardTimer = null;
+        const id = history.current?.document?.id;
+        if (destroyed || typeof id !== 'string') return;
+        const touched = cardTouched(ctx.card);
+        saveCardDraft(win, id, touched ? ctx.card : null).then(ok => {
+            if (!ok && touched && !destroyed) ctx.notify('Only the card draft could not be kept in this browser: it will be lost on reload. The pack itself is saved. Download the card to keep it.');
+        });
+    };
+
     const ctx = {
         doc, win, root, app, main, inspector: inspectorBody, overlays, selection, file, authoring: {}, filters: {},
         // The Character card page's draft (saved with the pack) and its picture (PNG bytes, kept in IndexedDB beside it).
-        card: restored?.card ?? emptyCard(), cardImage: null,
+        card: emptyCard(), cardImage: null,
         get model() { return history.current; },
         get history() { return history; },
         get dirty() {
@@ -196,33 +207,45 @@ export function mountStudio(root) {
                 }
             }
             // Whether the browser kept the project: a screen that adds work only a save holds (drafts) checks it.
-            if (history.current?.document) ctx.saved = writeDraft(win, history.current, ctx.dirty, ctx.card, ctx.cardImage);
+            if (history.current?.document) ctx.saved = writeDraft(win, history.current, ctx.dirty);
             keepPortraits();
             return true;
         },
         notify(message) { notice.textContent = message; },
-        // Saves the card page's draft with the pack. Resolves false (and says so) when the browser would not keep it.
+        // The card page's draft is kept in the browser's IndexedDB apart from the project's own save, a moment after the last edit
+        // (flushCard writes it now). When the browser will not keep it, only the card draft is unsaved, and the notice says so.
         saveCard() {
             if (destroyed || !history.current?.document) return false;
-            ctx.saved = writeDraft(win, history.current, ctx.dirty, ctx.card, ctx.cardImage);
-            if (!ctx.saved) ctx.notify('The browser would not keep the card edits: they will be lost on reload. Download the card to keep them.');
-            return ctx.saved;
+            if (cardTimer !== null) win.clearTimeout(cardTimer);
+            cardTimer = win.setTimeout(writeCard, 250);
+            return true;
+        },
+        flushCard() {
+            if (cardTimer === null) return;
+            win.clearTimeout(cardTimer);
+            writeCard();
         },
         // The card picture: PNG bytes, or null for today's cover.
         setCardImage(bytes) {
             if (destroyed) return false;
             ctx.cardImage = bytes ?? null;
-            saveCardImage(win, ctx.cardImage);
-            return ctx.saveCard();
+            const id = history.current?.document?.id;
+            saveCardImage(win, id, ctx.cardImage).then(ok => {
+                if (!ok && ctx.cardImage && !destroyed) ctx.notify('Only the card picture could not be kept in this browser: it will be lost on reload. The pack itself is saved.');
+            });
+            return true;
         },
-        // A new draft (a card was picked, or Reset): the old one is replaced as a whole.
+        // A new draft (a card was picked, or Reset): the old one is replaced as a whole and kept at once.
         setCard(card) {
             if (destroyed) return false;
             ctx.card = card;
-            return ctx.saveCard();
+            if (cardTimer !== null) win.clearTimeout(cardTimer);
+            writeCard();
+            return true;
         },
         select(kind, id = null, form = null) {
             if (destroyed) return;
+            ctx.flushCard();
             selection.kind = kind; selection.id = id; selection.form = form;
             partsOpen = false;
             ctx.render();
@@ -259,7 +282,7 @@ export function mountStudio(root) {
             if (!destroyed && history.current?.validation?.ok) {
                 lastBaselineJson = JSON.stringify(history.current.document);
                 lastBaselinePortraits = portraitSignature(history.current);
-                writeDraft(win, history.current, false, ctx.card, ctx.cardImage);
+                writeDraft(win, history.current, false);
             }
         },
         loadText(textOrObject, portraits) {
@@ -280,8 +303,9 @@ export function mountStudio(root) {
                 history = createHistory(model);
                 ctx.authoring = {};
                 ctx.filters = {};
-                ctx.card = emptyCard();
-                ctx.cardImage = null;
+                // The same pack opened again keeps its card draft; another pack starts with none.
+                const samePack = previous.history.current?.document?.id === model.document.id;
+                if (!samePack) { ctx.card = emptyCard(); ctx.cardImage = null; }
                 selection.kind = 'places';
                 selection.id = null;
                 selection.form = null;
@@ -304,8 +328,8 @@ export function mountStudio(root) {
                     ctx.render();
                     return null;
                 }
-                writeDraft(win, model, false, ctx.card, null);
-                saveCardImage(win, null);
+                writeDraft(win, model, false);
+                if (!samePack) { saveCardDraft(win, model.document.id, null); saveCardImage(win, model.document.id, null); }
                 keepPortraits();
                 return model;
             }
@@ -437,6 +461,7 @@ export function mountStudio(root) {
             media?.removeEventListener?.('change', setTheme);
             stack?.removeEventListener?.('change', syncParts);
             columns.destroy();
+            win?.removeEventListener?.('pagehide', ctx.flushCard);
             win?.removeEventListener?.('beforeunload', onBeforeUnload);
             win?.removeEventListener?.('keydown', onKeyDown);
             win?.removeEventListener?.('dragover', onDragOver);
@@ -446,6 +471,7 @@ export function mountStudio(root) {
         },
     };
 
+    win?.addEventListener?.('pagehide', ctx.flushCard);
     media?.addEventListener?.('change', setTheme);
     setTheme();
     ctx.render();
@@ -460,12 +486,17 @@ export function mountStudio(root) {
             ctx.render();
         });
     }
-    // ...and so does the card's picture.
-    if (restored?.cardImage) {
-        const start = history.current;
-        loadCardImage(win).then(bytes => {
-            if (destroyed || !bytes || history.current?.document?.id !== start?.document?.id || ctx.cardImage) return;
-            ctx.cardImage = bytes;
+    // ...and so do the card page's draft and picture, kept apart from the project.
+    if (restored?.model?.document) {
+        const start = history.current?.document?.id;
+        loadCardDraft(win).then(record => {
+            if (destroyed || !record || record.packId !== start || history.current?.document?.id !== start || cardTouched(ctx.card)) return;
+            ctx.card = sanitizeCard(record.draft);
+            if (selection.kind === 'card') ctx.render();
+        });
+        loadCardImage(win).then(record => {
+            if (destroyed || !record || record.packId !== start || history.current?.document?.id !== start || ctx.cardImage) return;
+            ctx.cardImage = record.bytes;
             if (selection.kind === 'card') ctx.render();
         });
     }

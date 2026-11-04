@@ -69,7 +69,7 @@ export function sanitizeCard(raw) {
         card.note.role = NOTE_ROLES.includes(raw.note.role) ? raw.note.role : 'system';
     }
     if (typeof raw.talkativeness === 'string') card.talkativeness = raw.talkativeness.slice(0, 20);
-    if (isObject(raw.extras)) card.extras = JSON.parse(JSON.stringify(raw.extras));
+    if (isObject(raw.extras)) { card.extras = JSON.parse(JSON.stringify(raw.extras)); delete card.extras.world; delete card.extras.fav; }
     if (Array.isArray(raw.ownLore)) card.ownLore = raw.ownLore.filter(isObject).slice(0, MAX_LORE_ENTRIES);
     if (isObject(raw.include)) for (const key of Object.keys(card.include)) if (typeof raw.include[key] === 'boolean') card.include[key] = raw.include[key];
     if (isObject(raw.settings)) {
@@ -144,6 +144,9 @@ export function readCard(source) {
     card.talkativeness = talk !== null && talk >= 0 && talk <= 1 ? String(talk) : '';
     delete extensions.depth_prompt;
     delete extensions.talkativeness;
+    // A linked world and the favourite mark belong to the card's old home: the lorebook is embedded, and a link would win over it.
+    delete extensions.world;
+    delete extensions.fav;
     const notes = [];
     const found = { statusBar: false, settings: false };
     if (Array.isArray(extensions.regex_scripts)) {
@@ -160,7 +163,9 @@ export function readCard(source) {
         if (!isObject(entry) || typeof entry.content !== 'string') continue;
         if (OWN_TAG.test(text(entry.comment)) || OWN_TAG.test(text(entry.name))) {
             if (/\[\s*storysuite\s*:\s*settings\s*\]/i.test(text(entry.comment) + text(entry.name))) {
-                const rows = readSettingsEntry(entry.content);
+                const read = readSettingsEntry(entry.content);
+            const rows = read?.rows;
+            if (read) notes.push(...read.left);
                 if (rows) { card.settings = rows; card.include.settings = true; found.settings = true; }
             }
             continue;
@@ -174,6 +179,7 @@ export function readCard(source) {
 
 /** A settings entry's text → the draft's settings rows (only the keys it holds are ticked), or null. */
 function readSettingsEntry(content) {
+    const left = [];
     try {
         const fenced = /^```[a-z]*\s*\n([\s\S]*?)\n?```\s*$/i.exec(content.trim());
         const data = parseJson(fenced ? fenced[1] : content);
@@ -181,18 +187,28 @@ function readSettingsEntry(content) {
         const rows = emptyCard().settings;
         for (const row of SETTING_ROWS) {
             rows[row.id].on = false;
-            if (Object.hasOwn(data.settings, row.key) && settingRowValid(row, data.settings[row.key])) {
+            if (!Object.hasOwn(data.settings, row.key)) continue;
+            const value = data.settings[row.key];
+            if (settingRowValid(row, value)) {
                 rows[row.id].on = true;
-                rows[row.id].value = data.settings[row.key];
+                rows[row.id].value = value;
+            } else {
+                // Said, not dropped silently: the pick note lists what was left out.
+                const shown = `${row.label} ${typeof value === 'number' ? `${value}${row.unit ?? ''}` : JSON.stringify(value)}`;
+                left.push(row.kind === 'number' && typeof value === 'number' && Number.isInteger(value) && value >= row.min && value <= row.max
+                    ? `${shown} is not a step of ${row.step}; left out` : `${shown} is not a value this setting takes; left out`);
             }
         }
-        return rows;
+        return { rows, left };
     } catch { return null; }
 }
 
 // --- Writing a card ---------------------------------------------------------------------------------------------------------------
 
 const utf8 = text => new TextEncoder().encode(text).length;
+// What a rebuild would compute again and again while the writer types: kept per pack snapshot, picture or shrink result.
+const packText = new WeakMap(), loreEntries = new WeakMap(), uris = new WeakMap(), portraitText = new WeakMap();
+const cached = (table, key, make) => { if (!table.has(key)) table.set(key, make()); return table.get(key); };
 export const jsonBytes = value => utf8(JSON.stringify(value));
 
 /** The text fields as the card holds them now: the pack's, changed by what was written. */
@@ -230,9 +246,11 @@ function suiteEntry(tag, pack, content, id) {
 }
 
 const dataUri = (bytes, type) => {
-    let binary = '';
-    for (let at = 0; at < bytes.length; at += 0x8000) binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
-    return `data:${PORTRAIT_TYPES[type] ?? 'image/webp'};base64,${btoa(binary)}`;
+    return cached(uris, bytes, () => {
+        let binary = '';
+        for (let at = 0; at < bytes.length; at += 0x8000) binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+        return `data:${PORTRAIT_TYPES[type] ?? 'image/webp'};base64,${btoa(binary)}`;
+    });
 };
 
 /**
@@ -291,24 +309,27 @@ export function buildCard(model, card, { portraits = null, only = PARTS } = {}) 
     const parts = [];
     const entries = [];
     const generated = new Set();
+    const byPart = {};
     const add = (part, make) => {
         if (!included.has(part)) return;
         const made = make();
         if (!made) return;
         parts.push(part);
+        byPart[part] = made;
         if (part !== 'ownLore') for (const entry of made) generated.add(entry);
         entries.push(...made);
     };
     // A pack with problems cannot go in: the page shows the part as unavailable, and it is left out here.
-    add('pack', () => model.validation?.ok ? [suiteEntry(TAGS.pack, pack, exportPack(model), 0)] : null);
+    add('pack', () => model.validation?.ok ? [suiteEntry(TAGS.pack, pack, cached(packText, model, () => exportPack(model)), 0)] : null);
     add('lore', () => {
-        const lore = Object.values(worldInfo(pack).entries);
-        return lore.length ? lore.map(entry => v2Entry(entry, 0)) : null;
+        // Cached per pack snapshot; the entries are copied, because each build numbers its own.
+        const lore = cached(loreEntries, pack, () => Object.values(worldInfo(pack).entries).map(entry => v2Entry(entry, 0)));
+        return lore.length ? lore.map(entry => ({ ...entry, extensions: { ...entry.extensions } })) : null;
     });
-    add('portraits', () => portraits?.files.length ? [suiteEntry(TAGS.portraits, pack, JSON.stringify({
+    add('portraits', () => portraits?.files.length ? [suiteEntry(TAGS.portraits, pack, cached(portraitText, portraits, () => JSON.stringify({
         v: 1, pack: pack.id, version: pack.version,
         files: Object.fromEntries(portraits.files.map(file => [file.name, dataUri(file.bytes, file.type)])),
-    }), 0)] : null);
+    })), 0)] : null);
     if (included.has('statusBar')) {
         parts.push('statusBar');
         const kept = Array.isArray(extensions.regex_scripts) ? extensions.regex_scripts.filter(script => !(isObject(script) && script.id === STATUS_BAR.id)) : [];
@@ -323,6 +344,8 @@ export function buildCard(model, card, { portraits = null, only = PARTS } = {}) 
         entry.id = at;
         if (generated.has(entry)) entry.extensions.display_index = at;
     });
+    // With a lorebook embedded, a linked world would win over it in SillyTavern.
+    if (entries.length) delete extensions.world;
     const data = {
         name: fields.name, description: fields.description, personality: fields.personality, scenario: fields.scenario, first_mes: fields.first_mes,
         mes_example: fields.mes_example, creator_notes: fields.creator_notes, system_prompt: fields.system_prompt,
@@ -331,30 +354,23 @@ export function buildCard(model, card, { portraits = null, only = PARTS } = {}) 
         tags: [...card.tags], creator: fields.creator, character_version: fields.character_version, extensions,
     };
     const value = { spec: 'chara_card_v2', spec_version: '2.0', data };
-    return { card: value, json: JSON.stringify(value) + '\n', parts };
+    return { card: value, json: JSON.stringify(value) + '\n', parts, entries: byPart };
 }
 
 /**
- * What each part adds, in bytes of the card's JSON, plus the whole: `{ rows: { part: bytes }, base, total, png }`.
- * A part's size is what the card grows by when it goes in, counted in the checklist's order, so base + the rows = total exactly.
- * `png` is the size of the card PNG for `image` (PNG bytes; the default cover when null): the card as base64 plus the picture.
+ * What each part adds to the card, in bytes of its JSON, plus the whole: `{ rows: { part: bytes }, base, total, png, parts }`.
+ * A part's size is its entries as they sit in the card (each with its comma); the status bar's is its script. `base` is the rest (the
+ * fields and the wrappers), so base + the rows = total exactly. `png` is the size of the card PNG for `image` (PNG bytes; the default
+ * cover when null): the card as base64 plus the picture. The card is built once.
  */
 export function cardSizes(model, card, { portraits = null, image = null } = {}) {
-    const bytes = only => utf8(buildCard(model, card, { portraits, only }).json);
-    const rows = {};
-    const sequence = [];
-    let before = bytes([]);
-    const base = before;
     const full = buildCard(model, card, { portraits });
-    for (const part of PARTS) {
-        if (!full.parts.includes(part)) continue;
-        sequence.push(part);
-        const now = bytes(sequence);
-        rows[part] = now - before;
-        before = now;
+    const rows = {};
+    for (const part of full.parts) {
+        rows[part] = part === 'statusBar' ? jsonBytes(STATUS_BAR) + 1 : full.entries[part].reduce((sum, entry) => sum + jsonBytes(entry) + 1, 0);
     }
     const total = utf8(full.json);
-    return { rows, base, total, png: exportCardPng(full.json, image).length, parts: full.parts };
+    return { rows, base: total - Object.values(rows).reduce((a, b) => a + b, 0), total, png: exportCardPng(full.json, image).length, parts: full.parts };
 }
 
 export { STATUS_BAR };

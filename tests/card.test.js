@@ -4,9 +4,9 @@ import { readFileSync } from 'node:fs';
 import { openPack, withPortraits } from '../src/model.js';
 import { namedPortraits } from '../src/cast/data.js';
 import { worldInfo } from '../src/lorebook.js';
-import { exportCardPng, readCardPng, pngChunks } from '../src/card-png.js';
+import { exportCardPng, readCardPng, pngChunks, crc32 } from '../src/card-png.js';
 import { writeDraft, readDraft } from '../src/session.js';
-import { emptyCard, buildCard, cardSizes, readCard, shrinkPortraits, sanitizeCard, settingValues, PARTS, PORTRAIT_ENTRY_LIMITS, STATUS_BAR, SETTING_ROWS } from '../src/card.js';
+import { emptyCard, buildCard, cardSizes, readCard, shrinkPortraits, sanitizeCard, settingRowValid, settingValues, PARTS, PORTRAIT_ENTRY_LIMITS, STATUS_BAR, SETTING_ROWS } from '../src/card.js';
 import { pngBytes } from './helpers/images.js';
 import { castPack } from './fixtures/cast.js';
 
@@ -129,8 +129,8 @@ test('only ticked settings are written', () => {
     card.settings.portraits = { on: true, value: 'hybrid' };
     const entry = JSON.parse(entryTagged(buildCard(model, card), '[storysuite:settings]')[0].content);
     assert.deepEqual(entry, { v: 1, settings: { 'story-block.rpgXpRate': 150, 'npc-state-delta.portraitPromptFormat': 'hybrid' } });
-    card.settings.xp = { on: true, value: 151 };
-    assert.deepEqual(settingValues(card), { 'npc-state-delta.portraitPromptFormat': 'hybrid' }, 'a value off the step is not written');
+    card.settings.xp = { on: true, value: 301 };
+    assert.deepEqual(settingValues(card), { 'npc-state-delta.portraitPromptFormat': 'hybrid' }, 'a value outside 50 to 300 is not written');
     card.include.settings = false;
     assert.equal(entryTagged(buildCard(model, card), '[storysuite:settings]').length, 0);
 });
@@ -158,6 +158,9 @@ test('sizes add up: the base and each part make the total, and the PNG holds the
     assert.equal(sizes.base + Object.values(sizes.rows).reduce((a, b) => a + b, 0), sizes.total);
     assert.equal(sizes.total, Buffer.byteLength(buildCard(withHeld(2), card, { portraits }).json));
     assert.ok(Object.values(sizes.rows).every(bytes => bytes > 0));
+    const built = buildCard(withHeld(2), card, { portraits });
+    assert.equal(sizes.rows.lore, built.entries.lore.reduce((sum, entry) => sum + Buffer.byteLength(JSON.stringify(entry)) + 1, 0), 'a row is its entries as they sit in the card');
+    assert.equal(sizes.rows.portraits, Buffer.byteLength(JSON.stringify(built.entries.portraits[0])) + 1);
     assert.equal(sizes.png, exportCardPng(buildCard(withHeld(2), card, { portraits }).json, picture).length);
     assert.ok(sizes.png > Math.ceil(sizes.total / 3) * 4 + picture.length);
 });
@@ -171,25 +174,63 @@ test('blank names and a bad talkativeness refuse the card', () => {
     assert.throws(() => buildCard(model, card), /Talkativeness/);
 });
 
-test('drafts are saved with the pack and survive a reload', () => {
+test('the project save no longer holds the card draft, so its size can never stop the pack from saving', () => {
     const store = new Map();
     const win = { localStorage: { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, String(value)) } };
-    const card = emptyCard();
-    card.fields.name = 'Kept';
-    card.greetings = ['Hi'];
-    card.settings.scan = { on: true, value: 9 };
-    assert.equal(writeDraft(win, model, false, card, true), true);
-    const back = readDraft(win);
-    assert.equal(back.card.fields.name, 'Kept');
-    assert.deepEqual(back.card.greetings, ['Hi']);
-    assert.deepEqual(back.card.settings.scan, { on: true, value: 9 });
-    assert.equal(back.cardImage, true);
-    const other = openPack({ id: 'other', version: '1.0.0', name: 'Other', requires: { storyBlock: '^2' }, content: {} });
-    writeDraft(win, other, false, null, false);
-    assert.equal(readDraft(win).card, null);
-    writeDraft(win, model, false, emptyCard(), false);
-    assert.equal(readDraft(win).card, null, 'an untouched draft is not saved');
+    assert.equal(writeDraft(win, model, false), true);
+    assert.equal(readDraft(win).model.document.id, model.document.id);
+    assert.equal(store.get('story-studio-draft').includes('"card"'), false);
     assert.deepEqual(sanitizeCard({ fields: { name: 5 }, talkativeness: 3, settings: { xp: { on: 'x', value: 'y' } } }), emptyCard());
+});
+
+test('a picked card’s linked world and favourite mark are not carried; a built card with a book has no linked world', () => {
+    const read = readCard(JSON.stringify({ spec: 'chara_card_v2', spec_version: '2.0', data: { name: 'Old', extensions: { world: 'Old World', fav: true, keep: 1 } } }));
+    assert.deepEqual(read.card.extras, { keep: 1 });
+    const card = emptyCard();
+    card.extras = { world: 'Linked', fav: true, keep: 1 };
+    assert.equal(buildCard(model, card).card.data.extensions.world, undefined, 'the embedded book wins');
+    assert.equal(buildCard(model, card).card.data.extensions.keep, 1);
+    assert.deepEqual(sanitizeCard({ extras: { world: 'x', fav: true, a: 1 } }).extras, { a: 1 });
+});
+
+test('a ccv3 chunk that will not decode falls back to the chara chunk', () => {
+    const png = exportCardPng('{"name":"Fallback"}');
+    const text = new TextEncoder().encode('ccv3\0@@not base64@@');
+    const withBad = insertText(png, text);
+    assert.equal(readCardPng(withBad), '{"name":"Fallback"}');
+});
+function insertText(png, data) {
+    const out = [];
+    const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+    let at = 8;
+    out.push(png.subarray(0, 8));
+    while (at < png.length) {
+        const length = view.getUint32(at);
+        const type = String.fromCharCode(...png.subarray(at + 4, at + 8));
+        if (type === 'IEND') {
+            const body = new Uint8Array(4 + data.length);
+            body.set(new TextEncoder().encode('tEXt')); body.set(data, 4);
+            const head = new Uint8Array(4); new DataView(head.buffer).setUint32(0, data.length);
+            const tail = new Uint8Array(4); new DataView(tail.buffer).setUint32(0, crc32(body));
+            out.push(head, body, tail);
+        }
+        out.push(png.subarray(at, at + 12 + length));
+        at += 12 + length;
+    }
+    return Uint8Array.from(out.flatMap(part => [...part]));
+}
+
+test('the XP rate is a step of 25 from 50 to 300, and a picked card’s other value is named, not dropped silently', () => {
+    const row = SETTING_ROWS.find(item => item.id === 'xp');
+    assert.equal(row.step, 25);
+    for (const value of [50, 125, 300]) assert.equal(settingRowValid(row, value), true, String(value));
+    for (const value of [49, 120, 301, 100.5, '100']) assert.equal(settingRowValid(row, value), false, String(value));
+    const entry = value => JSON.stringify({ spec: 'chara_card_v2', spec_version: '2.0', data: { name: 'X', character_book: { entries: [
+        { keys: [], comment: '[storysuite:settings] X', enabled: false, content: JSON.stringify({ v: 1, settings: { 'story-block.rpgXpRate': value, 'story-block.rpg': true } }) }] } } });
+    const read = readCard(entry(120));
+    assert.deepEqual(read.notes, ['XP rate 120% is not a step of 25; left out']);
+    assert.deepEqual(settingValues(read.card), { 'story-block.rpg': true });
+    assert.deepEqual(readCard(entry(150)).notes, []);
 });
 
 test('the card picture: a PNG is kept, JPEG and WebP go through the browser tool, anything else is refused', async () => {
