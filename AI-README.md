@@ -5,7 +5,7 @@ Rules for changing code are in [AGENTS.md](AGENTS.md).
 
 ## Purpose
 
-- Story Studio 0.7.0 is an offline, single-file pack editor and creator kit for the Story Suite (SillyTavern extensions).
+- Story Studio 0.8.0 is an offline, single-file pack editor and creator kit for the Story Suite (SillyTavern extensions).
 - It opens, edits, checks and exports world packs (`pack.json`, or a `.zip` with portraits). It is not an extension and not a reader.
 
 ## Suite map
@@ -15,7 +15,7 @@ Rules for changing code are in [AGENTS.md](AGENTS.md).
 | Story Block | 2.16.1 | The hub. State, packs and their checker, the reader's screens, the `<Changes>` line grammar, the module SDK. Install first. |
 | Story Director | 2.9.1 | Clock, map and trips, quests and hooks, world events (the chronicle). Needs Story Block. |
 | NPC State Delta | 1.7.1 | Dossiers: meters, stages, secrets, portraits. Needs Story Block. Optional. |
-| Story Studio | 0.7.0 | This repo. Writes and checks packs. Standalone page. |
+| Story Studio | 0.8.0 | This repo. Writes and checks packs. Standalone page. |
 
 - Data flows one way: Studio writes a pack file; Story Block imports it (Settings, Tabs & Packs); Story Director and NPC State Delta read what Story Block holds. Nothing flows back to Studio.
 - Studio uses Story Block only through `vendor/story-block/` (Story Block 2.18.0, commit 233b131). The pack checker is Story Block's own `validatePack`, so Studio and the game cannot disagree on what a valid pack is.
@@ -44,7 +44,7 @@ Rules for changing code are in [AGENTS.md](AGENTS.md).
 - **Cast**: `content.cast`, up to 64 hand-written people, each a prepared dossier for NPC State Delta, living off-screen until met (Story Director).
 - **Secret**: a hidden note of a cast person, opening at a meter value (`meter` + `at`), on a story event (`when`), or both (whichever first).
 - **Portrait**: an image file beside `pack.json`, named by a person's `portrait`; not part of the JSON.
-- **Narrator card**: a Character Card V2 (JSON or PNG) built from the pack.
+- **Character card**: a Character Card V2 (JSON or PNG) built from the pack, with the pack, lore, portraits, status bar and recommended settings put in it.
 - **Lorebook**: a SillyTavern World Info file built from the pack's records.
 - **Data module**: a closed JSON definition in `content.dataModules`. Story Block checks and runs it; Studio authors it.
 - **Code module**: a generated starter extension (zip) that registers with Story Block as a v2 module.
@@ -65,7 +65,7 @@ Rules for changing code are in [AGENTS.md](AGENTS.md).
 - **Screen builder**: Screens and Layouts; all ten screen fields; live preview; Apply screen / Apply layout validate the whole candidate pack.
 - **Data modules**: forms from Story Block's descriptors, expression editor, Simulator on the real runtime, Apply module (one undo step).
 - **Code module**: one form (18 inputs), live file list, Download zip. Works with or without a pack open and never changes the pack.
-- **Narrator card**: edit fields, Download card JSON / PNG, Reset card from pack.
+- **Character card**: edit every card field, Pick a card…, Change… / Remove the image, tick what goes in the card, Download card PNG / JSON, Reset card from pack. Saved with the pack.
 - **Lorebook**: per-record preview, Download World Info JSON. **Import lorebook**: entries become drafts to Accept or Skip.
 - **Check / export**: status, counts, Cast check, Problems, file name, fingerprint, what is inside, the zip listing, Export .zip / Export pack.json only (cast packs) or Export pack file.
 - **Theme** button and draggable dividers (screens wider than 1100 px): per-browser conveniences.
@@ -89,7 +89,7 @@ Studio has no settings screen. Its choices:
 Studio itself sends nothing to any model. What it writes for a model to read later:
 
 - **Event `cue`** (up to 500 characters): told to the narrator once, when the event happens.
-- **Narrator card**: `description` (includes the `<Changes>` instruction and its examples), `personality` (tone notes), `scenario` (start place and time), `first_mes`. Chosen by the creator and imported through SillyTavern's character importer.
+- **Character card**: `description` (includes the `<Changes>` instruction and its examples), `personality` (tone notes), `scenario` (start place and time), `first_mes`. Chosen by the creator and imported through SillyTavern's character importer.
 - **Lorebook**: one World Info entry per place, faction, NPC / creature and item; keyword activation, order 100, before the character, probability 100%, whole-word matching, no recursion.
 - **The AI-helper prompt**: text the creator copies to a chat of their own. Built from the calendar and start, regions, lore names, existing events, the answer format, the idea (up to 2,000 characters) and the place list; held to 24,000 characters (cuts, in order: place list, events, lore names, regions, calendar months; never the format, rules or idea).
 - **Never sent**: keys, tokens, chats, personas, the pack to any server. There are no network requests. A secret's preview shows a blank bar and the meter rule; an event's words are never shown there.
@@ -177,10 +177,10 @@ Studio registers no commands or queries (it is not a module). What it names, for
 
 Studio has no per-chat state. Everything lives in the browser that opened the page.
 
-- `localStorage` `story-studio-draft`: `{ version: 1, document, sourceText, dirty, drafts? }`, written after each edit. A reload restores the pack from it. Capped at six times the pack limit.
+- `localStorage` `story-studio-draft`: `{ version: 1, document, sourceText, dirty, drafts?, card? }` (`card`: `{ packId, draft, image }`, the Character card page's draft; its picture is in IndexedDB), written after each edit. A reload restores the pack from it. Capped at six times the pack limit.
 - IndexedDB store `portraits`: the cast's pictures, so a reload brings them back. Without IndexedDB only the pictures are lost.
 - `localStorage` `story-studio-theme`, `story-studio-columns`.
-- Session only (lost on reload): narrator card edits, code module form, lorebook review queue and decisions, screen and data-module form drafts before Apply.
+- Session only (lost on reload): code module form, lorebook review queue and decisions, screen and data-module form drafts before Apply.
 - Every storage call is wrapped; the page works with storage blocked.
 - A pack opened and not changed exports byte for byte. Exporting marks the pack saved.
 
@@ -196,7 +196,7 @@ Studio has no per-chat state. Everything lives in the browser that opened the pa
 | `src/cast/` | Cast data and checks, portrait fitting, zip writer. |
 | `src/data-modules/` | Adapter to Story Block's data-module checker, forms, expression editor, simulator. |
 | `src/code-module/` | Starter-module generator: inputs, templates, zip writer, generated assets. |
-| `src/narrator.js`, `src/card-png.js`, `src/lorebook.js` | Narrator card and World Info export and import. |
+| `src/narrator.js`, `src/card.js`, `src/card-png.js`, `src/card-image.js`, `src/lorebook.js`, `src/screens/character-card.js` | Character card (fields, checklist, PNG/JSON writer and reader) and World Info export and import. `vendor/story-block-examples/` holds the copied status-bar script. |
 | `src/session.js`, `src/portrait-store.js`, `src/export.js` | Saved project, portrait storage, downloads. |
 | `src/assets/` | Icons and empty-state drawings (SVG); see `docs/ASSETS.md`. |
 | `vendor/story-block/` | Synchronized Story Block runtime and checker. Do not edit. |
@@ -210,7 +210,7 @@ Code rules (from `AGENTS.md`): plain ES modules, DOM only through `createElement
 
 ## Limits & known follow-ups
 
-- Narrator card, Code module and lorebook review drafts disappear on reload.
+- Code module and lorebook review drafts disappear on reload.
 - Lorebook review decisions stay "accepted" after Undo removes the accepted record.
 - Switching presentation records discards unapplied form drafts.
 - Packs cannot supply per-module settings defaults (Story Block's importer has no field for them).
@@ -223,6 +223,6 @@ Code rules (from `AGENTS.md`): plain ES modules, DOM only through `createElement
 
 ## Version
 
-- Story Studio 0.7.0 (`package.json`, `CHANGELOG.md`). Vendored Story Block 2.18.0 (commit 233b131); authoring kit stamped with the same commit.
-- Suite today: Story Block 2.16.1, Story Director 2.9.1, NPC State Delta 1.7.1, Story Studio 0.7.0.
+- Story Studio 0.8.0 (`package.json`, `CHANGELOG.md`). Vendored Story Block 2.18.0 (commit 233b131); authoring kit stamped with the same commit.
+- Suite today: Story Block 2.16.1, Story Director 2.9.1, NPC State Delta 1.7.1, Story Studio 0.8.0.
 - Licence: AGPL-3.0-only. Phosphor Icons (MIT) are bundled; the notice is in `src/credits.txt` and the built page.

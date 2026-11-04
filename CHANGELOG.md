@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.8.0
+
+- **Character card.** The Narrator card page and its rail item are now **Character card**, and **Build a card…** on
+  Check / export (quiet, under the two exports) jumps there. The page holds every card field: name, description, tone
+  notes, start place and time, first message, alternate greetings (add and remove), example messages, system prompt,
+  post-history instructions, Character's Note (`extensions.depth_prompt`: text, depth, role), talkativeness
+  (`extensions.talkativeness`, 0 to 1), tags, creator, character version and creator notes. More is collapsed on a phone.
+- **Saved with the pack.** Card drafts are kept in the browser with the pack and survive a reload (the card picture is
+  kept in IndexedDB beside it); they no longer vanish with the session.
+- **Pick a card…** reads V1, V2 and V3 JSON and PNG cards (`ccv3` first, else `chara`, tEXt) into every field. The
+  card's own lorebook entries are kept as **Card's own lore**; a card Studio wrote comes back without its generated
+  entries. **Change…** and **Remove** set the card image (PNG, JPEG or WebP, written as the PNG image).
+- **Put in the card** checklist with real sizes and a total (the PNG total includes base64 and the picture): the
+  pack (a disabled `[storysuite:pack]` entry), the lore (enabled `character_book` entries, the same ones the Lorebook
+  page builds), the portraits (a disabled `[storysuite:portraits]` entry; each picture shrunk in the browser to about
+  40 KB webp; at most 24 files, 200 KB each, 3 MB), a status bar (`extensions.regex_scripts`, copied from Story Block's
+  `examples/cards/status-bar`, see `vendor/story-block-examples/SOURCE.md`) and recommended settings (a disabled
+  `[storysuite:settings]` entry; RPG, Gear, XP rate, NSD portrait prompt and NSD scan every are editable and only
+  ticked rows are written).
+- **Download card PNG** (primary) and **Download card JSON** sit under the checklist. The JSON is now compact (one line)
+  and both files hold the same text; the output is deterministic. Downloads are named `<id>-card.png` / `<id>-card.json`
+  (were `<id>-narrator.*`).
+- Fixed in passing: the AI-README version line; the `node_modules` symlink that was tracked in git (it pointed outside
+  the repository) is removed from the index and `.gitignore` now ignores `node_modules` without the trailing slash.
+
 ## 0.7.0
 
 - Items: Slot, Rarity with its stat budget, up to two stat bonuses (Story Block 2.18.0 gear); synced to Story Block 2.18.0; Ersveil 2.6.0 example.

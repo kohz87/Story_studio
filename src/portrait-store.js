@@ -47,3 +47,41 @@ export async function loadHeld(win) {
         return held;
     } catch { return null; }
 }
+
+const IMAGE_KEY = 'card-image';
+const DRAFT_KEY = 'card-draft';
+
+// The Character card page's draft and picture are kept here, apart from the project's own save (session.js), so a large card can
+// never stop the pack from being saved. Each resolves true when stored; `null` forgets it.
+
+/** Keeps the card picture (PNG bytes) of the pack `packId`. */
+export async function saveCardImage(win, packId, bytes) {
+    try {
+        await run(win, 'readwrite', store => (bytes ? store.put({ packId, bytes }, IMAGE_KEY) : store.delete(IMAGE_KEY)));
+        return true;
+    } catch { return false; }
+}
+
+/** The card picture kept, `{ packId, bytes }`, or null. */
+export async function loadCardImage(win) {
+    try {
+        const record = await run(win, 'readonly', store => store.get(IMAGE_KEY));
+        return typeof record?.packId === 'string' && record.bytes instanceof Uint8Array ? record : null;
+    } catch { return null; }
+}
+
+/** Keeps the card draft (a JSON-safe object) of the pack `packId`. */
+export async function saveCardDraft(win, packId, draft) {
+    try {
+        await run(win, 'readwrite', store => (draft ? store.put({ packId, draft, at: Date.now() }, DRAFT_KEY) : store.delete(DRAFT_KEY)));
+        return true;
+    } catch { return false; }
+}
+
+/** The card draft kept, `{ packId, draft }`, or null. */
+export async function loadCardDraft(win) {
+    try {
+        const record = await run(win, 'readonly', store => store.get(DRAFT_KEY));
+        return typeof record?.packId === 'string' && record.draft && typeof record.draft === 'object' ? { ...record, at: Number(record.at) || 0 } : null;
+    } catch { return null; }
+}

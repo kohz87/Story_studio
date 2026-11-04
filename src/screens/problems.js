@@ -306,6 +306,8 @@ export function renderCheck(ctx) {
     }, { id: 'export-btn', class: `${hasCast ? '' : 'primary '}btn-export ${ok ? (hasCast ? 'btn-export-quiet' : 'btn-export-active') : 'btn-export-disabled'}`, 'aria-disabled': ok ? 'false' : 'true' });
     if (!ok) { expBtn.disabled = true; expBtn.title = 'Fix the problems first'; }
     bottom.append(expBtn);
+    // The card is built on its own page: this only jumps there, in the same quiet style as the exports above it.
+    bottom.append(button(doc, 'Build a card…', () => ctx.select('card'), { id: 'build-card', class: 'btn-export btn-export-quiet' }));
     right.append(bottom);
 
     root.append(left, right);

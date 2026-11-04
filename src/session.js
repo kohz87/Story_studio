@@ -28,6 +28,7 @@ export function readDraft(win) {
     }
 }
 
+/** Keeps the project in the browser. The Character card page's draft is not in it (portrait-store.js): the project's save never depends on the card. */
 export function writeDraft(win, model, dirty) {
     if (!model?.document) return false;
     try {

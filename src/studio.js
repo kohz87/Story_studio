@@ -7,7 +7,8 @@ import { KINDS, RAIL_KINDS, LABELS, records, identity, localId } from './records
 import { renderScreen } from './screens/index.js';
 import { downloadPack, downloadZip } from './export.js';
 import { readDraft, writeDraft, MAX_PACK_BYTES } from './session.js';
-import { saveHeld, loadHeld } from './portrait-store.js';
+import { saveHeld, loadHeld, saveCardImage, loadCardImage, saveCardDraft, loadCardDraft } from './portrait-store.js';
+import { emptyCard, sanitizeCard, cardTouched } from './card.js';
 import { isZipFile, readPackZip } from '../vendor/story-block/src/v2/packs/bundle.js';
 import { ZIP_LIMITS, PORTRAIT_LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 import { imageSize, sniffImage, kb } from './cast/portrait.js';
@@ -17,7 +18,7 @@ import { createColumns } from './columns.js';
 import { saveFailed } from './timeline/drafts.js';
 
 // The screens below the record kinds in the rail, in order.
-const SCREENS = [['defaults', 'Settings defaults'], ['presentation', 'Screen builder'], ['data-modules', 'Data modules'], ['code-module', 'Code module'], ['narrator', 'Narrator card'], ['lorebook', 'Lorebook'], ['lore-import', 'Import lorebook']];
+const SCREENS = [['defaults', 'Settings defaults'], ['presentation', 'Screen builder'], ['data-modules', 'Data modules'], ['code-module', 'Code module'], ['card', 'Character card'], ['lorebook', 'Lorebook'], ['lore-import', 'Import lorebook']];
 const SCREEN_LABELS = { ...Object.fromEntries(SCREENS), settings: 'Pack settings', check: 'Check / export' };
 
 export function mountStudio(root) {
@@ -157,8 +158,34 @@ export function mountStudio(root) {
         saveHeld(win, held);
     };
 
+    let cardTimer = null;
+    const CARD_MIRROR = 'story-studio-card-pending';
+    // The mirror is only for a save that did not land: it goes once a save has, once the draft is replaced, and when the pack changes.
+    // `upTo` leaves a mirror written after that moment (a newer edit) alone.
+    const clearMirror = (upTo = Infinity) => {
+        try {
+            const mirror = JSON.parse(win.sessionStorage.getItem(CARD_MIRROR));
+            if (!mirror || !(Number(mirror.at) > upTo)) win.sessionStorage.removeItem(CARD_MIRROR);
+        } catch { /* No mirror. */ }
+    };
+    const onPageHide = () => { ctx.unloading = true; ctx.flushForUnload(); ctx.unloading = false; };
+    const onHidden = () => { if (doc.visibilityState === 'hidden') ctx.flushForUnload(); };
+    const writeCard = () => {
+        cardTimer = null;
+        const id = history.current?.document?.id;
+        if (destroyed || typeof id !== 'string') return;
+        const touched = cardTouched(ctx.card);
+        const started = Date.now();
+        saveCardDraft(win, id, touched ? ctx.card : null).then(ok => {
+            if (ok) clearMirror(started);
+            if (!ok && touched && !destroyed) ctx.notify('Only the card draft could not be kept in this browser: it will be lost on reload. The pack itself is saved. Download the card to keep it.');
+        });
+    };
+
     const ctx = {
         doc, win, root, app, main, inspector: inspectorBody, overlays, selection, file, authoring: {}, filters: {},
+        // The Character card page's draft (saved with the pack) and its picture (PNG bytes, kept in IndexedDB beside it).
+        card: emptyCard(), cardImage: null,
         get model() { return history.current; },
         get history() { return history; },
         get dirty() {
@@ -198,8 +225,49 @@ export function mountStudio(root) {
             return true;
         },
         notify(message) { notice.textContent = message; },
+        // The card page's draft is kept in the browser's IndexedDB apart from the project's own save, a moment after the last edit
+        // (flushCard writes it now). When the browser will not keep it, only the card draft is unsaved, and the notice says so.
+        saveCard() {
+            if (destroyed || !history.current?.document) return false;
+            if (cardTimer !== null) win.clearTimeout(cardTimer);
+            cardTimer = win.setTimeout(writeCard, 250);
+            return true;
+        },
+        // The page is going away (or hidden): an edit still waiting for its save is mirrored in sessionStorage first, because the
+        // IndexedDB write may not finish; the next load prefers the mirror when it is newer.
+        flushForUnload() {
+            if (cardTimer !== null && !destroyed && typeof history.current?.document?.id === 'string' && (doc.visibilityState === undefined || doc.visibilityState === 'hidden' || ctx.unloading)) {
+                try { win.sessionStorage.setItem(CARD_MIRROR, JSON.stringify({ packId: history.current.document.id, at: Date.now(), draft: ctx.card })); } catch { /* A mirror is a convenience. */ }
+            }
+            ctx.flushCard();
+        },
+        flushCard() {
+            if (cardTimer === null) return;
+            win.clearTimeout(cardTimer);
+            writeCard();
+        },
+        // The card picture: PNG bytes, or null for today's cover.
+        setCardImage(bytes) {
+            if (destroyed) return false;
+            ctx.cardImage = bytes ?? null;
+            const id = history.current?.document?.id;
+            saveCardImage(win, id, ctx.cardImage).then(ok => {
+                if (!ok && ctx.cardImage && !destroyed) ctx.notify('Only the card picture could not be kept in this browser: it will be lost on reload. The pack itself is saved.');
+            });
+            return true;
+        },
+        // A new draft (a card was picked, or Reset): the old one is replaced as a whole and kept at once.
+        setCard(card) {
+            if (destroyed) return false;
+            ctx.card = card;
+            if (cardTimer !== null) win.clearTimeout(cardTimer);
+            clearMirror();
+            writeCard();
+            return true;
+        },
         select(kind, id = null, form = null) {
             if (destroyed) return;
+            ctx.flushCard();
             selection.kind = kind; selection.id = id; selection.form = form;
             partsOpen = false;
             ctx.render();
@@ -253,10 +321,13 @@ export function mountStudio(root) {
                 };
             }
             if (model?.document) {
-                const previous = { history, selection: { ...selection }, baseline: lastBaselineJson, held: lastBaselinePortraits, filename: ctx.filename, authoring: ctx.authoring, filters: ctx.filters };
+                const previous = { history, selection: { ...selection }, baseline: lastBaselineJson, held: lastBaselinePortraits, filename: ctx.filename, authoring: ctx.authoring, filters: ctx.filters, card: ctx.card, cardImage: ctx.cardImage };
                 history = createHistory(model);
                 ctx.authoring = {};
                 ctx.filters = {};
+                // The same pack opened again keeps its card draft; another pack starts with none.
+                const samePack = previous.history.current?.document?.id === model.document.id;
+                if (!samePack) { ctx.card = emptyCard(); ctx.cardImage = null; }
                 selection.kind = 'places';
                 selection.id = null;
                 selection.form = null;
@@ -274,10 +345,13 @@ export function mountStudio(root) {
                     ctx.filename = previous.filename;
                     ctx.authoring = previous.authoring;
                     ctx.filters = previous.filters;
+                    ctx.card = previous.card;
+                    ctx.cardImage = previous.cardImage;
                     ctx.render();
                     return null;
                 }
                 writeDraft(win, model, false);
+                if (!samePack) { clearMirror(); saveCardDraft(win, model.document.id, null); saveCardImage(win, model.document.id, null); }
                 keepPortraits();
                 return model;
             }
@@ -398,7 +472,7 @@ export function mountStudio(root) {
             ctx.previewCleanup?.();
             ctx.previewCleanup = null;
             main.replaceChildren(); inspectorBody.replaceChildren();
-            inspector.hidden = !model?.document || ['check', 'defaults', 'presentation', 'data-modules', 'code-module', 'narrator', 'lorebook', 'lore-import'].includes(selection.kind);
+            inspector.hidden = !model?.document || ['check', 'defaults', 'presentation', 'data-modules', 'code-module', 'card', 'lorebook', 'lore-import'].includes(selection.kind);
             columns.refresh();
             renderScreen(ctx);
         },
@@ -409,6 +483,8 @@ export function mountStudio(root) {
             media?.removeEventListener?.('change', setTheme);
             stack?.removeEventListener?.('change', syncParts);
             columns.destroy();
+            win?.removeEventListener?.('pagehide', onPageHide);
+            doc.removeEventListener?.('visibilitychange', onHidden);
             win?.removeEventListener?.('beforeunload', onBeforeUnload);
             win?.removeEventListener?.('keydown', onKeyDown);
             win?.removeEventListener?.('dragover', onDragOver);
@@ -418,6 +494,8 @@ export function mountStudio(root) {
         },
     };
 
+    win?.addEventListener?.('pagehide', onPageHide);
+    doc.addEventListener?.('visibilitychange', onHidden);
     media?.addEventListener?.('change', setTheme);
     setTheme();
     ctx.render();
@@ -430,6 +508,25 @@ export function mountStudio(root) {
             lastKept = portraitsOf(history.current);
             lastBaselinePortraits = portraitSignature(history.current);
             ctx.render();
+        });
+    }
+    // ...and so do the card page's draft and picture, kept apart from the project.
+    if (restored?.model?.document) {
+        const start = history.current?.document?.id;
+        let mirror = null;
+        try { mirror = JSON.parse(win.sessionStorage.getItem(CARD_MIRROR)); win.sessionStorage.removeItem(CARD_MIRROR); } catch { /* No mirror. */ }
+        loadCardDraft(win).then(record => {
+            const newer = mirror && mirror.packId === start && mirror.draft && typeof mirror.draft === 'object' && Number(mirror.at) >= (record?.at ?? 0);
+            if (destroyed || history.current?.document?.id !== start || cardTouched(ctx.card)) return;
+            if (!newer && (!record || record.packId !== start)) return;
+            ctx.card = sanitizeCard(newer ? mirror.draft : record.draft);
+            if (newer) writeCard();
+            if (selection.kind === 'card') ctx.render();
+        });
+        loadCardImage(win).then(record => {
+            if (destroyed || !record || record.packId !== start || history.current?.document?.id !== start || ctx.cardImage) return;
+            ctx.cardImage = record.bytes;
+            if (selection.kind === 'card') ctx.render();
         });
     }
     return ctx;

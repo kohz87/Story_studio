@@ -5,7 +5,8 @@ import { renderRecords } from './records.js';
 import { renderTimeline } from './timeline.js';
 import { renderCheck } from './problems.js';
 import { KINDS } from '../records.js';
-import { renderNarrator, renderLorebook, renderLoreImport } from './authoring.js';
+import { renderLorebook, renderLoreImport } from './authoring.js';
+import { renderCharacterCard } from './character-card.js';
 import { renderDataModules } from './dm/index.js';
 import { DRAFT_WITH_AI } from '../draft-hint.js';
 import { renderCodeModule } from './code-module.js';
@@ -16,7 +17,7 @@ export function renderScreen(ctx) {
         renderCodeModule(ctx);
         return;
     }
-    const authoring = { presentation: renderPresentation, defaults: renderSettingsDefaults, narrator: renderNarrator, lorebook: renderLorebook, 'lore-import': renderLoreImport, 'data-modules': renderDataModules };
+    const authoring = { presentation: renderPresentation, defaults: renderSettingsDefaults, card: renderCharacterCard, lorebook: renderLorebook, 'lore-import': renderLoreImport, 'data-modules': renderDataModules };
     if (Object.hasOwn(authoring, ctx.selection.kind) && ctx.model?.document) {
         authoring[ctx.selection.kind](ctx);
         return;
