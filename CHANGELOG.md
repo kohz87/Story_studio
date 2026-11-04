@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Signature skills on the Cast form.** A **Signature skills · n of 5** section sits after "Before they are met" and
+  before Secrets: one card per skill (name up to 40, what it does up to 120, stat, rank, uses stamina or mana), move
+  up and down for the slot order, Remove, and **+ Add skill** (off at the limit). Story Block's wording shows under the
+  control (a name used twice by one person, more than the limit, a bad stat, uses or rank). The Cast list shows a
+  "3 skills" tag and Check / export counts them. They are written as `cast[].skills` and read back from a pack, a .zip
+  and the saved draft. Until the vendored Story Block carries its own check, Studio reads these rules itself
+  (`src/cast/skills.js`, stepped aside once `cast` knows `skills`); the limit is one constant that follows Story Block's.
+
 ## 0.8.0
 
 - **Character card.** The Narrator card page and its rail item are now **Character card**, and **Build a card…** on

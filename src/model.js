@@ -5,6 +5,7 @@ import { lastingProblems } from './timeline/lasting.js';
 import { LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 import { foldKey } from '../vendor/story-block/src/text.js';
 import { identity } from './identity.js';
+import { VENDOR_CHECKS_SKILLS, castSkillsProblems } from './cast/skills.js';
 
 const MAX_DEPTH = LIMITS.depth;
 const MAX_ARRAY = LIMITS.array;
@@ -557,9 +558,64 @@ export function indexReferences(document) {
 }
 
 // The host owns acceptance, including the envelope's looser text rules and ordinary packs.
-function checkPack(input) {
+function checkPlain(input) {
     try { return validatePack(input); }
     catch { return { ok: false, errors: [{ code: 'NOT_PLAIN', path: '', message: 'Cannot read pack data' }] }; }
+}
+
+const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+/** The authored object of a pack given as text or as an object, or null when it cannot be read safely. */
+function authored(input) {
+    try {
+        if (typeof input === 'string') {
+            if (new TextEncoder().encode(input).length > MAX_BYTES) return null;
+            return JSON.parse(input.replace(/^\uFEFF/, ''));
+        }
+        return input;
+    } catch { return null; }
+}
+
+/**
+ * Story Block's verdict, with the signature skills of the cast (`cast[].skills`) read by Studio while the vendored Story Block does not
+ * know them: the checker sees the pack without them, Studio's own rules (cast/skills.js) judge them, and the authored copy keeps them in
+ * the place they were written. A vendored checker that reads them makes all of this step aside.
+ */
+function checkPack(input) {
+    const plain = () => checkPlain(input);
+    if (VENDOR_CHECKS_SKILLS) return plain();
+    let document, cast;
+    try {
+        document = authored(input);
+        cast = document?.content?.cast;
+        if (!isRecord(document) || !Array.isArray(cast) || !cast.some(person => isRecord(person) && 'skills' in person)) return plain();
+    } catch { return plain(); }
+    let stripped, problems;
+    try {
+        stripped = { ...document, content: { ...document.content, cast: cast.map(person => {
+            if (!isRecord(person) || !('skills' in person)) return person;
+            const { skills, ...rest } = person;
+            return rest;
+        }) } };
+        problems = castSkillsProblems(document);
+    } catch { return plain(); }
+    const checked = checkPlain(stripped);
+    const errors = [...(checked.errors ?? []), ...problems];
+    if (!checked.ok) return { ...checked, ok: false, errors };
+    if (problems.length) return { ok: false, errors };
+    // The authored copy gets the skills back, each person's keys in the order they were written.
+    const raw = { ...checked.raw, content: { ...checked.raw.content, cast: checked.raw.content.cast.map((person, at) => {
+        const given = cast[at];
+        if (!isRecord(given) || !('skills' in given)) return person;
+        const out = {};
+        for (const key of Object.keys(given)) {
+            if (key === 'skills') out.skills = JSON.parse(JSON.stringify(given.skills));
+            else if (key in person) out[key] = person[key];
+        }
+        for (const key of Object.keys(person)) if (!(key in out)) out[key] = person[key];
+        return out;
+    }) } };
+    return { ...checked, raw };
 }
 
 const isObjectLike = value => value !== null && typeof value === 'object';

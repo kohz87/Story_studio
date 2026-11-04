@@ -434,3 +434,76 @@ test('the story event beside a meter secret keeps the target size, labels and co
         });
     }
 });
+
+const SKILLED = () => {
+    const cast = castEntries();
+    cast[0].skills = [
+        { name: 'Long Watch Cleave', about: 'A two-handed sweep with the greataxe that clears the line.', stat: 'STR', uses: 'stamina', rank: 'expert' },
+        { name: 'Beacon Call', about: 'A blast on the carved horn that rallies the party.', stat: 'CHA', uses: 'stamina', rank: 'adept' },
+        { name: 'Hold the Line', about: 'Plants a boot and takes the blow meant for another.', stat: 'VIT', uses: 'stamina', rank: 'master' },
+    ];
+    return JSON.stringify(castPack({ cast }));
+};
+const skillCards = page => page.locator('fieldset[data-cf=skills] .cf-secret');
+
+test('signature skills: the section opens with its cards, the list tag counts them, a skill is added and edited through the controls and goes out in the pack', async () => {
+    await withPage({}, async page => {
+        await load(page, SKILLED());
+        await navigate(page, 'Cast');
+        assert.match(await page.locator('.record-card', { hasText: 'Fenna' }).innerText(), /3 skills/);
+        await page.locator('.record-card', { hasText: 'Fenna' }).click();
+        const legends = await page.locator('.inspector legend').allInnerTexts();
+        assert.deepEqual(legends.slice(-3).map(text => text.trim()), ['Before they are met', 'Signature skills · 3 of 5', 'Secrets · 3 of 8']);
+        assert.equal(await skillCards(page).count(), 3);
+        assert.equal(await page.getByLabel('Skill 2 name', { exact: true }).inputValue(), 'Beacon Call');
+        assert.equal(await page.getByLabel('Skill 3 rank', { exact: true }).inputValue(), 'master');
+        await page.getByRole('button', { name: '+ Add skill' }).click();
+        await page.getByLabel('Skill 4 name', { exact: true }).fill('Spark');
+        await page.getByLabel('Skill 4 name', { exact: true }).press('Tab');
+        await page.getByLabel('Skill 4 what it does', { exact: true }).fill('A small burst of magic.');
+        await page.getByLabel('Skill 4 what it does', { exact: true }).press('Tab');
+        await page.getByLabel('Skill 4 stat', { exact: true }).selectOption('INT');
+        await page.getByLabel('Skill 4 rank', { exact: true }).selectOption('novice');
+        await page.getByRole('group', { name: 'Skill 4 uses' }).getByRole('button', { name: 'Mana' }).click();
+        assert.equal(await page.locator('.topbar').getByRole('button', { name: /^Problems/ }).innerText(), 'Problems (0)');
+        await page.getByRole('button', { name: 'Undo' }).click();
+        await page.getByRole('button', { name: 'Redo' }).click();
+        await navigate(page, 'Check / export');
+        const plain = await downloaded(page, '#export-btn');
+        const skills = JSON.parse(new TextDecoder().decode(plain.bytes)).content.cast[0].skills;
+        assert.equal(skills.length, 4);
+        assert.deepEqual(skills[3], { name: 'Spark', about: 'A small burst of magic.', stat: 'INT', uses: 'mana', rank: 'novice' });
+        assert.match((await page.locator('.cf-list li').allInnerTexts()).find(line => line.startsWith('Signature skills')), /^Signature skills: 4 for 1 person/);
+    });
+});
+
+test('signature skills: a repeated name shows the checker’s line under it and in Problems, at desktop and phone width, with no overflow and 44 px targets', async () => {
+    for (const [width, height] of [[1440, 900], [390, 844]]) {
+        await withPage({ width, height }, async page => {
+            const cast = castEntries();
+            cast[0].skills = [
+                { name: 'Beacon Call', about: 'A blast on the carved horn.', stat: 'CHA', uses: 'stamina', rank: 'adept' },
+                { name: 'Hold the Line', about: 'Takes the blow meant for another.', stat: 'VIT', uses: 'stamina', rank: 'master' },
+                { name: 'beacon call', about: 'Again.', stat: 'STR', uses: 'mana', rank: 'novice' },
+            ];
+            await load(page, JSON.stringify(castPack({ cast })));
+            await openPerson(page, 'Fenna');
+            const third = skillCards(page).nth(2);
+            await third.scrollIntoViewIfNeeded();
+            assert.match(await third.locator('.cf-error').innerText(), /^Cast "Fenna": skills\[2\]\.name repeats "beacon call"; a person names each skill once\.$/);
+            assert.equal(await third.getByLabel('Skill 3 name', { exact: true }).getAttribute('aria-invalid'), 'true');
+            assert.match(await page.locator('.topbar').getByRole('button', { name: /^Problems/ }).innerText(), /^Problems \(1\)$/);
+            const boxes = await skillCards(page).evaluateAll(nodes => nodes.map(node => {
+                const card = node.getBoundingClientRect();
+                const inputs = [...node.querySelectorAll('input')].map(input => input.getBoundingClientRect());
+                return { left: card.left, right: card.right, inputsLeft: inputs.map(box => box.left), inputsRight: inputs.map(box => box.right) };
+            }));
+            for (const box of boxes) {
+                assert.ok(box.inputsLeft.every(left => Math.abs(left - box.inputsLeft[0]) < 0.5), 'inputs share a left edge');
+                assert.ok(box.inputsRight.every(right => Math.abs(right - box.inputsRight[0]) < 0.5), 'inputs share a right edge');
+                assert.ok(box.inputsRight[0] <= box.right && box.inputsLeft[0] >= box.left);
+            }
+            assert.deepEqual(await findings(page), []);
+        });
+    }
+});
