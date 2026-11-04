@@ -96,7 +96,7 @@ test('the static scan rejects network and code loading with no default-function 
     assert.equal(firstReference(html), null);
 });
 
-// The code module section embeds the vendored Story Block closure, so the page grows with each sync (Story Block 2.14.0 with the cast: 5.1 MB; 2.22.0: 6.09 MB).
+// The code module section embeds the vendored Story Block closure, so the page grows with each sync (Story Block 2.14.0 with the cast: 5.1 MB; 2.22.0: 6.09 MB; 2.22.5: 6.14 MB).
 test('the single-file distribution stays under 6.5 MB (part 5b section 11.1 accepts about 4.6 MB)', () => {
     assert.ok(Buffer.byteLength(html) < 6_500_000, `dist is ${Buffer.byteLength(html)} bytes`);
 });

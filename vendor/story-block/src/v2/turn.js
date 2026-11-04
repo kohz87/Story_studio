@@ -29,7 +29,7 @@ import { CHATTER_MAX, displayLines, readDisplayLine } from './extras.js';
 import { occurrenceOf, operationKey, replacedProofs, reusePlan } from './evidence.js';
 import { hash, readRecord, swipeLoading } from './persist.js';
 import { CAPTURE_PREFIX, HOST_MODULE } from './registry.js';
-import { STATIC_MARKER, assemble, contextNotice, estimateTokens } from './prompt.js';
+import { assemble, contextNotice, estimateTokens } from './prompt.js';
 import { MAX_CHANGE_LINES, ensureModules, makeView } from './sdk.js';
 import { cutAt } from '../text.js';
 import { CORE_FEATURE } from './features.js';
@@ -39,6 +39,11 @@ import { SKILL_SLOTS_MAX } from './skill-slots.js';
 // A story line that practises a skill (`practice-N`, data-modules/part.js): the lines a reply is marked for (see captureEach).
 const PRACTICE_LINE = new RegExp(`\\|\\s*kind\\s*:\\s*practice-[1-${SKILL_SLOTS_MAX}]\\b`, 'iu');
 import { NO_ROLLS_LINE, receiptCue, receiptWithCue } from './lean-rpg/cue.js';
+import {
+    contentText, contextRoom, within, TIMED_OUT, substituteNames, defuseMacros, stripBattleMarker, mapContent,
+    firstLine, quietMark, QUIET_KEEP, QUIET_WAIT_MS, textPattern, restoreMissing,
+} from './turn/text.js';
+export { QUIET_MARK_MIN, QUIET_WAIT_MS, MAX_NAME, stripBattleMarker, contextRoom, defuseMacros, flatName, substituteNames, quietMark, restoreMissing } from './turn/text.js';
 
 export const STATIC_KEY = 'story_suite_static';
 export const TAIL_KEY = 'story_suite_tail_1';
@@ -70,20 +75,6 @@ export const REPLY_BUSY_MAX_MS = 5 * 60_000;
 export const ASSIST_WAIT_MS = 1500;
 // How long the RPG's code (rpg-lazy.js) may take to load before a reply or a chat goes on without it: a stalled import never holds a generation or a chat open.
 export const RPG_LOAD_WAIT_MS = 4000;
-const TIMED_OUT = Symbol('timed out');
-
-// `value`, or TIMED_OUT when it is a promise that has not settled within `ms`.
-async function within(value, ms) {
-    if (!value || typeof value.then !== 'function') return value;
-    let timer;
-    try {
-        return await Promise.race([value, new Promise(resolve => { timer = setTimeout(resolve, ms, TIMED_OUT); })]);
-    } finally {
-        clearTimeout(timer);
-    }
-}
-// A name filled in for {{user}} / {{char}} is one line of at most this many characters.
-export const MAX_NAME = 80;
 // Stripped history texts kept between prompts (each is read again for every later prompt).
 const STRIP_CACHE = 500;
 const HAS_BLOCK = /<changes/i;
@@ -91,135 +82,15 @@ const HAS_BLOCK = /<changes/i;
 // one, and never across another comment's start, so one left open cannot take the rest of the prompt with it.
 const HAS_LEGACY = /<!--\s*(?:STORY_BLOCKS_V1|INVENTORY_BLOCK_V05)/i;
 const LEGACY_IN_PROMPT = /\s*<!--\s*(?:STORY_BLOCKS_V1_CUT|STORY_BLOCKS_V1|INVENTORY_BLOCK_V05)\b(?:(?!<!--)[\s\S])*?-->/gi;
-// The RPG's battle-log marker: a line `[battle]` of its own in a reply (src/v2/lean-rpg/view/battle-log.js draws the panel there).
-// It is for the reader's eyes only, so it leaves the prompt history like the change blocks do: the narrator never sees its own old
-// markers. The line goes with one blank line after it, so no gap is left.
-const BATTLE_MARKER = /^[ \t]*\[battle\][ \t]*(?:\r?\n|$)(?:[ \t]*\r?\n)?/gim;
-const HAS_BATTLE = /\[battle\]/i;
-/** `text` without its `[battle]` marker lines. */
-export function stripBattleMarker(text) {
-    return typeof text === 'string' && HAS_BATTLE.test(text) ? text.replace(BATTLE_MARKER, '') : text;
-}
 
 const defaultNotify = reason => globalThis.toastr?.warning?.(reason, 'Story Suite');
-
-/**
- * The room the prompt has, from the interceptor's `size` and SillyTavern's context `c`: { size (the
- * context size the reader set), reply (the reply's length, or null), room (tokens the prompt may take) }
- * or null. SillyTavern 1.19 hands the interceptor its context size less the reply's length
- * (getMaxContextSize); the API settings tell the context size the reader set and the reply's length, and
- * take the reply off a size that still holds it. Without a size, the settings alone (the settings' prompt
- * size before a reply).
- */
-export function contextRoom(c, size = null) {
-    const n = value => {
-        const x = Number(value);
-        return Number.isFinite(x) && x > 0 ? Math.round(x) : null;
-    };
-    const cc = c?.mainApi === 'openai' ? c?.chatCompletionSettings : null;
-    const full = n(cc ? cc.openai_max_context : c?.maxContext);
-    const reply = n(cc ? cc.openai_max_tokens : c?.amount_gen ?? c?.amountGen);
-    const given = n(size);
-    if (given) {
-        if (full && reply && given === full - reply) return { size: full, reply, room: given };
-        if (full && reply && given === full && reply < full) return { size: full, reply, room: full - reply };
-        return { size: given, reply: null, room: given };
-    }
-    if (full) return { size: full, reply, room: reply && reply < full ? full - reply : full };
-    return null;
-}
 
 // Why the state was rebuilt, as the head event tells it (the public API's `story:rebuilt`; 'edit' is not announced).
 const REBUILD_REASONS = new Set(['delete', 'swipe', 'edit']);
 
 export const normalizeType = type => String(type ?? 'normal').trim().toLowerCase() || 'normal';
-
-/**
- * SillyTavern runs its macros over extension prompts, which would rewrite a `{{user}}` or
- * `<USER>` inside a name the story introduced. A zero-width space keeps them as written.
- */
-export function defuseMacros(text) {
-    return String(text ?? '')
-        .replace(/\{(?=\{)/g, '{​')
-        .replace(/<(USER|BOT|CHAR|CHARIFNOTGROUP|GROUP)>/gi, '<​$1>');
-}
-
-// A persona or character name as it goes into a prompt: one line (no line breaks or other control
-// characters, so it cannot start a [Happened] or <Changes> line of its own), at most MAX_NAME long.
-export function flatName(value) {
-    const flat = String(value ?? '').replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, ' ').replace(/ {2,}/g, ' ').trim();
-    return flat.length > MAX_NAME ? `${cutAt(flat, MAX_NAME - 1).trimEnd()}…` : flat;
-}
-
-/**
- * `{{user}}` and `{{char}}` in the static and tail text become the persona's and the character's
- * names (SillyTavern's substituteParams when the context has it, else name1 / name2), flattened to
- * one short line (flatName); any other macro is left for defuseMacros. Both names are fixed for a
- * chat, so the static text stays byte-identical reply after reply.
- */
-export function substituteNames(text, ctx) {
-    const cache = new Map();
-    const name = macro => {
-        const key = macro.toLowerCase();
-        if (!cache.has(key)) {
-            let value = null;
-            try { value = typeof ctx?.substituteParams === 'function' ? ctx.substituteParams(`{{${key}}}`) : null; } catch { value = null; }
-            if (typeof value !== 'string' || value === `{{${key}}}`) value = key === 'user' ? ctx?.name1 : ctx?.name2;
-            const flat = typeof value === 'string' ? flatName(value) : '';
-            cache.set(key, flat || null);
-        }
-        return cache.get(key);
-    };
-    return String(text ?? '').replace(/\{\{\s*(user|char)\s*\}\}/gi, (whole, macro) => name(macro) ?? whole);
-}
-
-// Message content is a string or, for multimodal prompts, a list of parts.
-function mapContent(content, transform) {
-    if (typeof content === 'string') return transform(content);
-    if (!Array.isArray(content)) return content;
-    return content.map(part => {
-        if (typeof part === 'string') return transform(part);
-        if (part && typeof part === 'object' && typeof part.text === 'string') return { ...part, text: transform(part.text) };
-        return part;
-    });
-}
-function contentText(content) {
-    const texts = [];
-    mapContent(content, text => { texts.push(text); return text; });
-    return texts.join('\n');
-}
-const firstLine = text => String(text ?? '').split('\n').find(line => line.trim())?.trim() ?? '';
+const holdsIn = chat => mark => chat.some(message => contentText(message?.content).includes(mark));
 const isCarrier = message => Boolean(message) && !message.is_user;
-
-/**
- * Chat completion, the story's own prompt: puts back what SillyTavern left out. When the static
- * text is missing (the preset has no Main Prompt) it goes at the start of this reply's part;
- * when that is missing too, both go in as one system message right before the reply (before a
- * trailing assistant message, a Continue's own text). Returns what it did: '' | 'static' | 'both'.
- */
-export function restoreMissing(chat, staticText, tailText) {
-    if (!Array.isArray(chat) || !staticText) return '';
-    const has = text => {
-        const marker = firstLine(text);
-        return marker ? chat.findIndex(message => contentText(message?.content).includes(marker)) : -1;
-    };
-    if (has(STATIC_MARKER) >= 0 || has(staticText) >= 0) return '';
-    const at = tailText ? has(tailText) : -1;
-    if (at >= 0) {
-        const message = chat[at];
-        let done = false;
-        message.content = mapContent(message.content, part => {
-            if (done || !part.includes(firstLine(tailText))) return part;
-            done = true;
-            const index = part.indexOf(firstLine(tailText));
-            return `${part.slice(0, index)}${staticText}\n\n${part.slice(index)}`;
-        });
-        return 'static';
-    }
-    const index = chat.length && chat.at(-1)?.role === 'assistant' ? chat.length - 1 : chat.length;
-    chat.splice(index, 0, { role: 'system', content: [staticText, tailText].filter(Boolean).join('\n\n') });
-    return 'both';
-}
 
 /**
  * Wires one SillyTavern context. `deps`: { ctx, live?() (SillyTavern's live context, for its API settings;
@@ -229,7 +100,7 @@ export function restoreMissing(chat, staticText, tailText) {
  * adds the packs' start, SPEC §2.6), ownPrompt?(eventData) → true for the prompt of Story Suite's own model
  * call on the chat's connection (model-call.js createOwnCalls().owns): never taken for the reply's }.
  * `settings` is createSettings() (settings() → host settings, settings(id) → a module's).
- * Returns { interceptor, install, uninstall, onPromptReady, onTextPromptReady, onMessageReceived,
+ * Returns { interceptor, install, uninstall, onGenerationStarted, onPromptReady, onTextPromptReady, onMessageReceived,
  * onChatChanged, seed, onChatRenamed, onTimelineChanged, onGenerationEnded, preview, report, problems, clearProblems, blocked, blockers, unblock,
  * session, replyBusy, whenIdle }.
  */
@@ -250,6 +121,10 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
     const problemLog = [];
     const blocks = [];
     let lastSize = null;          // the context size the last interceptor call was handed
+    // Quiet generations told by GENERATION_STARTED: { mark, claimed (its interceptor ran, at this time) }, oldest first.
+    let quiets = [];
+    // What the two slots hold now (setPrompts).
+    let slots = { staticText: '', tailText: '' };
     const toldSmall = new Set();  // chats whose reader was told the context is too small
     const liveContext = () => {
         try { return live() ?? ctx; } catch { return ctx; }
@@ -287,6 +162,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         ctx.setExtensionPrompt(key, text, position(place), 0, false, roles().SYSTEM ?? ROLE_SYSTEM);
     }
     function setPrompts(staticText, tailText) {
+        slots = { staticText, tailText };
         setPrompt(STATIC_KEY, staticText, 'static');
         setPrompt(TAIL_KEY, tailText, 'tail');
     }
@@ -595,8 +471,12 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
     async function interceptor(_chat, contextSize, abort, type) {
         const kind = normalizeType(type);
         if (!FOREGROUND.includes(kind)) {
-            // A quiet prompt built while the reply's own is pending must not carry its text; the
-            // reply's prompt gets it back at the quiet prompt's prompt-ready (below).
+            // A quiet generation whose instruction is known is told apart at its own prompt-ready, which loses Story Block's text
+            // there (quietPrompt, below): the slots keep the reply's text for the reply's own prompt, whichever of the two is built first.
+            const known = kind === 'quiet' && claimQuiet();
+            if (known && session && !session.prompted) return;
+            // Any other (an impersonation, a quiet generation with no instruction told): a prompt built while the reply's own is
+            // pending must not carry its text; the reply's prompt gets it back at that prompt's prompt-ready (below).
             // A reply already on its way keeps its session, so it is still captured.
             if (session && !session.prompted) session.background += 1;
             clearPrompts();
@@ -691,10 +571,60 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         return true;
     }
 
+    // Another caller's prompt built while the reply's own is pending (generateRaw: SillyTavern runs no interceptor for it and puts
+    // no extension prompt in it, yet tells its prompt-ready like the reply's): it holds neither of the slots' texts, which the
+    // reply's own prompt always does while they are set. It is left alone and the reply's own prompt is still waited for.
+    function foreignPrompt(holds) {
+        if (!session || session.prompted || session.background > 0) return false;
+        const marks = [session.staticText, session.tailText].map(firstLine).filter(Boolean);
+        return marks.length > 0 && !marks.some(holds);
+    }
+
+    /** GENERATION_STARTED: (type, { quiet_prompt, … }, dryRun). A quiet generation's instruction is remembered (claimQuiet). */
+    function onGenerationStarted(type, params, dryRun) {
+        if (dryRun === true || normalizeType(type) !== 'quiet') return;
+        const mark = quietMark(params?.quiet_prompt);
+        // (A group's generation starts again for its member: the same instruction is remembered once.)
+        if (!mark || quiets.some(entry => !entry.claimed && entry.mark === mark)) return;
+        quiets.push({ mark, claimed: 0 });
+        if (quiets.length > QUIET_KEEP) quiets = quiets.slice(-QUIET_KEEP);
+    }
+    // A quiet generation's interceptor: the oldest started one whose interceptor has not run is this one. True when there was one.
+    function claimQuiet() {
+        const now = Date.now();
+        quiets = quiets.filter(entry => !entry.claimed || now - entry.claimed < QUIET_WAIT_MS);
+        const entry = quiets.find(item => !item.claimed);
+        if (!entry) return false;
+        entry.claimed = now;
+        return true;
+    }
+    // A quiet generation's own prompt (it holds the instruction of one whose interceptor ran): forgotten once found, and true.
+    function quietPrompt(holds) {
+        const now = Date.now();
+        const at = quiets.findIndex(entry => entry.claimed && now - entry.claimed < QUIET_WAIT_MS && holds(entry.mark));
+        if (at < 0) return false;
+        quiets.splice(at, 1);
+        return true;
+    }
+    // Story Block's text as it is in the slots (and the pending reply's), each as a pattern: what a quiet prompt loses.
+    const ownPatterns = () => [...new Set([slots.staticText, slots.tailText, session?.staticText, session?.tailText].filter(Boolean))].map(textPattern).filter(Boolean);
+
     /** CHAT_COMPLETION_PROMPT_READY: { chat, dryRun }. */
     function onPromptReady(eventData) {
         if (!eventData || eventData.dryRun === true || !Array.isArray(eventData.chat) || isOwn(eventData)) return;
         stripHistory(eventData.chat);
+        if (quietPrompt(holdsIn(eventData.chat))) {
+            const patterns = ownPatterns();
+            for (let i = eventData.chat.length - 1; i >= 0; i -= 1) {
+                const message = eventData.chat[i];
+                const content = mapContent(message?.content, text => patterns.reduce((out, pattern) => out.replace(pattern, ''), text));
+                if (content === message?.content || contentText(content) === contentText(message.content)) continue;
+                if (contentText(content).trim()) message.content = content;
+                else eventData.chat.splice(i, 1);
+            }
+            return;
+        }
+        if (foreignPrompt(holdsIn(eventData.chat))) return;
         if (backgroundPrompt() || !session || session.prompted) return;
         session.prompted = true;
         session.restored = restoreMissing(eventData.chat, session.staticText, session.tailText);
@@ -708,6 +638,11 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         eventData.prompt = eventData.prompt.replace(hidden, '');
         if (HAS_LEGACY.test(eventData.prompt)) eventData.prompt = eventData.prompt.replace(LEGACY_IN_PROMPT, '');
         if (battleOn()) eventData.prompt = stripBattleMarker(eventData.prompt);
+        if (quietPrompt(mark => eventData.prompt.includes(mark))) {
+            for (const pattern of ownPatterns()) eventData.prompt = eventData.prompt.replace(pattern, '');
+            return;
+        }
+        if (foreignPrompt(mark => eventData.prompt.includes(mark))) return;
         if (backgroundPrompt() || !session || session.prompted) return;
         session.prompted = true;
         const missing = [session.staticText, session.tailText].filter(text => text && !eventData.prompt.includes(firstLine(text)));
@@ -784,16 +719,17 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         const stored = assistSections(String(chat[from]?.mes ?? '')).next;
         if (!stored.length) return [];
         const safe = parseChanges(stored.join('\n')).lines.filter(line => !refusedWhy(line, null, { late: true }));
-        const keep = new Set(notWritten(safe.map(line => line.raw), own));
+        const keep = new Set(notWritten(safe.map(line => line.raw), own, { late: true }));
         return safe.filter(line => keep.has(line.raw));
     }
 
-    // A reply's own safety-net lines (its <Changes-assist>), parsed, without the ones `own` already holds.
-    function nowLines(mes, own = []) {
+    // A reply's own safety-net lines (its <Changes-assist>), parsed, without the ones `own` already holds, nor
+    // a place, time or weather `block` (the reply's own block lines, raw) set (extractor.js SCENE_KINDS).
+    function nowLines(mes, own = [], block = own) {
         const stored = assistSections(String(mes ?? '')).now;
         if (!stored.length) return [];
         const parsed = parseChanges(stored.join('\n')).lines.filter(line => !refusedWhy(line, null));
-        const keep = new Set(notWritten(parsed.map(line => line.raw), own));
+        const keep = new Set(notWritten(parsed.map(line => line.raw), own, { scene: block }));
         return parsed.filter(line => keep.has(line.raw));
     }
 
@@ -1144,7 +1080,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         // own, as the live capture ran them. Never a new model call.
         const own = lines.map(line => line.raw);
         const late = lateLines(index, own);
-        const extra = assistRoom(index, [...late.map(line => ({ line, mark: LATE })), ...nowLines(mes, [...own, ...late.map(line => line.raw)]).map(line => ({ line, mark: NOW }))], lines.length, problems);
+        const extra = assistRoom(index, [...late.map(line => ({ line, mark: LATE })), ...nowLines(mes, [...own, ...late.map(line => line.raw)], own).map(line => ({ line, mark: NOW }))], lines.length, problems);
         // A module held back (dormant, or a restore is pending) cannot read its lines again, and replacing the
         // reply's story without them would lose what it stored: nothing is replaced while one is involved.
         const waiting = heldInReply(message, [...lines, ...extra.map(item => item.line)]);
@@ -1412,9 +1348,10 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         const heads = changeHeads();
         const mes = String(message.mes ?? '');
         const block = extractBlock(mes, 'Changes', null, { heads });
-        const own = [...(block === null ? [] : parseChanges(block).lines.map(line => line.raw)), ...lateLines(index, []).map(line => line.raw)];
+        const blockLines = block === null ? [] : parseChanges(block).lines.map(line => line.raw);
+        const own = [...blockLines, ...lateLines(index, []).map(line => line.raw)];
         const parsed = parseChanges(String(text ?? '')).lines;
-        const fresh = new Set(notWritten(parsed.map(line => line.raw), own));
+        const fresh = new Set(notWritten(parsed.map(line => line.raw), own, { scene: blockLines }));
         const kept = parsed.filter(line => fresh.has(line.raw) && !refusedWhy(line, null, { late: Boolean(session || replyBusy) }));
         const store1 = mes2 => {
             message.mes = mes2;
@@ -1444,6 +1381,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
     async function onChatChanged() {
         // The old chat's session and prompts go at once, before anything is awaited: a generation started while the RPG's code loads is the new chat's.
         session = null;
+        quiets = [];
         markIdle();
         clearPrompts();
         // The RPG's code, when this chat needs it (the feature is on, or it holds the RPG's records), before anything is replayed (rpg-lazy.js); a stalled
@@ -1557,6 +1495,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             source.on(event, fn);
             listeners.push([event, fn]);
         };
+        on(names.GENERATION_STARTED, onGenerationStarted);
         on(names.CHAT_COMPLETION_PROMPT_READY, onPromptReady);
         on(names.GENERATE_AFTER_COMBINE_PROMPTS, onTextPromptReady);
         on(names.MESSAGE_RECEIVED, onMessageReceived);
@@ -1589,6 +1528,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         interceptor,
         install,
         uninstall,
+        onGenerationStarted,
         onPromptReady,
         onTextPromptReady,
         onMessageReceived,
