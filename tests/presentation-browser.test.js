@@ -140,6 +140,7 @@ for (const width of [1440, 390]) test(`Show in tab, Tab title and Order: pick, j
     assert.equal(await page.locator('#screen-tabTitle').count(), 0, 'no title for a screen with no tab');
     assert.deepEqual(await page.locator('#screen-tab option').allInnerTexts(), ['Its own tab', 'Standing (standing)', 'A new shared tab…']);
     await page.locator('#screen-tab').selectOption('t:standing');
+    assert.equal(await page.locator('#screen-tabTitle').count(), 0, 'no title field for a tab another screen already titles');
     await page.locator('#screen-order').fill('3');
     await shot('joined');
     await page.getByRole('button', { name: 'Apply screen', exact: true }).click();
@@ -188,4 +189,21 @@ test('Ersveil stays byte-faithful across defaults refusals, presentation apply/u
     assert.equal(await exported(page), source);
     await page.reload();
     assert.equal(await exported(page), source);
+}));
+
+test('Tab title is hidden when joining a tab another screen titles, and shown when no other screen titles it', async () => pageTest(1440, async page => {
+    const pack = base();
+    pack.screens.push({ id: 'second', title: 'Second', mounts: ['tab'], tab: 'standing', tabTitle: 'Standing', template: '<p>Two</p>' });
+    pack.screens.push({ id: 'third', title: 'Third', mounts: ['tab'], tab: 'bare', template: '<p>Three</p>' });
+    await upload(page, pack); await nav(page, 'Screen builder');
+    await page.locator('#screen-tab').selectOption('t:standing');
+    assert.equal(await page.locator('#screen-tabTitle').count(), 0, 'joining Standing (standing)');
+    await page.locator('#screen-tab').selectOption('t:bare');
+    assert.equal(await page.locator('#screen-tabTitle').count(), 1, 'a tab nobody titles can be titled here');
+    await page.locator('#screen-tabTitle').fill('Bare');
+    await page.locator('#screen-tab').selectOption('t:standing');
+    assert.equal(await page.locator('#screen-tabTitle').count(), 0);
+    await page.getByRole('button', { name: 'Apply screen', exact: true }).click();
+    const out = JSON.parse(await exported(page));
+    assert.deepEqual([out.screens[0].tab, out.screens[0].tabTitle], ['standing', undefined], 'the typed title is dropped with the field');
 }));
