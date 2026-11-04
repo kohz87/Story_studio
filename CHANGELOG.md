@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Screens in a shared tab.** The Screen builder has **Show in tab** (its own tab, a tab another screen of the pack names, or a new
+  shared tab with its id), **Tab title** (only for a screen in a tab) and **Order**, for the `tab`, `tabTitle` and `order` fields of a pack
+  screen. The checker is Story Block's: tab ids are lowercase letters, digits and `-`, a title is 1 to 24 characters and needs a tab, the
+  order is a number. Export and import keep them. Synced the vendored Story Block (and the authoring kit) to 2.20.0 for them.
 - **Reset card from pack** now says so when the browser refuses to clear the saved card draft ("Only the card draft could not be cleared in this browser…"), as the other card-draft failures already did; before, it said nothing.
 
 ## 0.8.0
