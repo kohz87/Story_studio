@@ -160,6 +160,14 @@ export function mountStudio(root) {
 
     let cardTimer = null;
     const CARD_MIRROR = 'story-studio-card-pending';
+    // The mirror is only for a save that did not land: it goes once a save has, once the draft is replaced, and when the pack changes.
+    // `upTo` leaves a mirror written after that moment (a newer edit) alone.
+    const clearMirror = (upTo = Infinity) => {
+        try {
+            const mirror = JSON.parse(win.sessionStorage.getItem(CARD_MIRROR));
+            if (!mirror || !(Number(mirror.at) > upTo)) win.sessionStorage.removeItem(CARD_MIRROR);
+        } catch { /* No mirror. */ }
+    };
     const onPageHide = () => { ctx.unloading = true; ctx.flushForUnload(); ctx.unloading = false; };
     const onHidden = () => { if (doc.visibilityState === 'hidden') ctx.flushForUnload(); };
     const writeCard = () => {
@@ -167,7 +175,9 @@ export function mountStudio(root) {
         const id = history.current?.document?.id;
         if (destroyed || typeof id !== 'string') return;
         const touched = cardTouched(ctx.card);
+        const started = Date.now();
         saveCardDraft(win, id, touched ? ctx.card : null).then(ok => {
+            if (ok) clearMirror(started);
             if (!ok && touched && !destroyed) ctx.notify('Only the card draft could not be kept in this browser: it will be lost on reload. The pack itself is saved. Download the card to keep it.');
         });
     };
@@ -251,6 +261,7 @@ export function mountStudio(root) {
             if (destroyed) return false;
             ctx.card = card;
             if (cardTimer !== null) win.clearTimeout(cardTimer);
+            clearMirror();
             writeCard();
             return true;
         },
@@ -340,7 +351,7 @@ export function mountStudio(root) {
                     return null;
                 }
                 writeDraft(win, model, false);
-                if (!samePack) { saveCardDraft(win, model.document.id, null); saveCardImage(win, model.document.id, null); }
+                if (!samePack) { clearMirror(); saveCardDraft(win, model.document.id, null); saveCardImage(win, model.document.id, null); }
                 keepPortraits();
                 return model;
             }

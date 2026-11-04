@@ -237,3 +237,45 @@ test('an edit made just before a reload is kept (the page mirrors a waiting draf
         await page.waitForFunction(() => document.getElementById('card-name').value === 'Typed a moment before');
     });
 });
+
+const hide = page => page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+});
+
+test('a tab hidden right after typing leaves no stale draft: Reset stays reset after a reload', { timeout: 60000 }, async () => {
+    await withPage(async page => {
+        await open(page);
+        await go(page, 'Character card');
+        await page.locator('#card-name').fill('Old draft');
+        await hide(page);
+        await page.waitForTimeout(600);
+        await page.getByRole('button', { name: 'Reset card from pack', exact: true }).click();
+        await page.waitForTimeout(600);
+        assert.equal(await page.evaluate(() => sessionStorage.getItem('story-studio-card-pending')), null);
+        await page.reload();
+        await page.locator('.studio').waitFor();
+        await go(page, 'Character card');
+        await page.waitForTimeout(500);
+        assert.notEqual(await page.locator('#card-name').inputValue(), 'Old draft');
+    });
+});
+
+test('pack A, pack B, pack A, then a reload gives no old draft of A', { timeout: 60000 }, async () => {
+    await withPage(async page => {
+        await open(page);
+        await go(page, 'Character card');
+        await page.locator('#card-name').fill('A old draft');
+        await hide(page);
+        await page.setInputFiles('#pack-file', { name: 'other.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ id: 'other', version: '1.0.0', name: 'Another pack', requires: { storyBlock: '^2' }, content: {} })) });
+        await page.waitForFunction(() => document.getElementById('pack-name').value === 'Another pack');
+        await open(page);
+        await page.waitForTimeout(600);
+        await page.reload();
+        await page.locator('.studio').waitFor();
+        await go(page, 'Character card');
+        await page.waitForTimeout(500);
+        assert.notEqual(await page.locator('#card-name').inputValue(), 'A old draft');
+    });
+});
