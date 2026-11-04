@@ -1,5 +1,5 @@
 // How a block (or a data module's screen) draws its values, by the shape of the data (BLOCKS-UI, USER 4 Nov):
-//   * a list of records (fields that share a `group`, or an `entries` field read through the block's `roles`): compact cards, a title and a status
+//   * a list of records (an `entries` field read through the block's `roles`): compact cards, a title and a status
 //     chip, the description clamped to 2 lines with More, the current step with an icon; the open ones first, the others under "Finished (n)";
 //   * a map of numbers (a map field of whole numbers, or several number fields): a header, a row with a value and a bar for each key, highest
 //     first; the ones still at their default under "Not known yet (n)"; one pencil column;
@@ -7,32 +7,18 @@
 // Pure DOM building from plain data (createElement and textContent only); the editors are the editable widget's, and every change is one dm.set.
 import { h, iconNode, humanize } from '../view/widgets/dom.js';
 import { editable } from '../view/widgets/editable.js';
-import { dmNameOf, dmObject, dmOwn, DM_RECORD_ROLES } from '../data-modules/schema.js';
+import { defaultTone } from '../data-modules/block-builder.js';
+import { dmNameOf, dmObject, dmOwn } from '../data-modules/schema.js';
 import { ensureLayoutStyles } from '../layout/styles.js';
 import { STRINGS, fill } from '../strings.js';
 
 const V = STRINGS.blocks.view;
 const TONE_CLASS = { accent: 'accent', active: 'accent', done: 'good', good: 'good', failed: 'bad', bad: 'bad', warn: 'warn', neutral: 'neutral' };
-const FAILED = /fail|lost|abandon|dead|cancel|refus|broken/i;
 
-/** The record groups of a state: [{ group, fields: { title, text, step, status }  (the field names) }], in order of first use. */
-export function recordGroupsOf(state) {
-    const out = new Map();
-    for (const [name, schema] of Object.entries(state ?? {})) {
-        if (!dmObject(schema) || typeof schema.group !== 'string' || !DM_RECORD_ROLES.includes(schema.as)) continue;
-        if (!out.has(schema.group)) out.set(schema.group, { group: schema.group, fields: {} });
-        out.get(schema.group).fields[schema.as] = name;
-    }
-    return [...out.values()].filter(entry => entry.fields.title);
-}
-
-/** The tone of a status value: the block's `tones` entry, else the first value of the choice is open and the rest are done (or failed by their word). */
+/** The tone of a status value: the block's `tones` entry, else the editor's default (active, done and failed by their name, any other value neutral and open). */
 export function statusTone(definition, values, value) {
     const given = definition?.tones?.[value];
-    if (['active', 'done', 'failed', 'neutral'].includes(given)) return given;
-    const list = Array.isArray(values) ? values : [];
-    if (!list.length || value === list[0]) return 'active';
-    return FAILED.test(String(value)) ? 'failed' : 'done';
+    return ['active', 'done', 'failed', 'neutral'].includes(given) ? given : defaultTone(value);
 }
 const chipTone = tone => TONE_CLASS[tone] ?? 'neutral';
 const isOpen = tone => tone === 'active' || tone === 'neutral';
@@ -153,30 +139,6 @@ export function drawCards(env, parent, items, { key = 'cards' } = {}) {
     return root;
 }
 
-/** The records of a `group`/`as` quest set in a block's values → cards (each with one pencil that opens a form over its fields). */
-export function drawRecordGroups(env, parent, { definition, module, who, values, groups }) {
-    const items = groups.map(entry => {
-        const state = definition.state, f = entry.fields;
-        const status = f.status ? state[f.status] : null;
-        const value = f.status ? values?.[f.status] ?? status.default : null;
-        const tone = status ? statusTone(definition, status.values, value) : 'active';
-        const specs = ['title', 'text', 'step', 'status'].filter(role => f[role]).map(role => {
-            const schema = state[f[role]];
-            return { role, name: f[role], schema, label: schema.label ?? humanize(f[role]), value: values?.[f[role]] ?? schema.default };
-        });
-        const title = String(values?.[f.title] ?? '') || state[f.title].label || humanize(f.title);
-        const edit = state[f.title].edit === false ? null : {
-            kind: 'fields', bare: false, label: fill(V.editQuest, { name: title }),
-            fields: specs.filter(spec => spec.schema.edit !== false).map(spec => ({ key: spec.name, label: spec.label, value: spec.value,
-                ...(spec.role === 'status' ? { type: 'choice', options: spec.schema.values } : { type: 'text', maxLength: spec.schema.max }) })),
-            plan: changed => ({ steps: Object.entries(changed).map(([field, value]) => ({ command: 'dm.set', payload: { module, field, ...(who ? { who } : {}), value }, keys: [field] })) }),
-        };
-        return { id: entry.group, title, text: f.text ? String(values?.[f.text] ?? '') : '', step: f.step ? String(values?.[f.step] ?? '') : '',
-            tone, statusLabel: f.status ? String(value) : '', edit };
-    });
-    return drawCards(env, parent, items, { key: `${module}:${who ?? ''}:groups` });
-}
-
 // ---- entries (a list of records the block keeps in one field) -------------------------------------------------------------------------
 
 const cap = text => text.charAt(0).toUpperCase() + text.slice(1);
@@ -261,14 +223,16 @@ const signed = (value, min) => (min < 0 && value > 0 ? `+${value}` : String(valu
 
 /**
  * rows: [{ key, name, value, min, max, def, names, payload, label }] (`payload` is the dm.set payload minus value; null = not editable).
- * Rows at their default are folded under "Not known yet (n)"; the others run highest first.
+ * Rows at a default of 0 (or the minimum) are folded under "Not known yet (n)"; the others run highest first.
  */
 export function drawNumberMap(env, parent, { title, rows, memoryKey }) {
     const { doc } = env;
     const section = h(doc, 'section', 'ss-b-map'); parent.appendChild(section);
     section.setAttribute('data-map', memoryKey);
     if (title) section.appendChild(h(doc, 'h4', 'ss-section-label', title));
-    const known = rows.filter(row => row.value !== row.def), rest = rows.filter(row => row.value === row.def);
+    // A row is "not known yet" when it sits at a default that means nothing (0 or the minimum); a default of 40 is a value that is known.
+    const unknown = row => row.value === row.def && (row.def === 0 || row.def === row.min);
+    const known = rows.filter(row => !unknown(row)), rest = rows.filter(unknown);
     section.appendChild(h(doc, 'p', 'ss-b-sub', fill(V.known, { n: known.length, total: rows.length })));
     const box = h(doc, 'div', 'ss-glass ss-b-box'); section.appendChild(box);
     const pencil = (li, row) => {
@@ -364,8 +328,34 @@ export function renderBlockPreview(parent, { definition, values, layout }) {
     const doc = parent.ownerDocument ?? globalThis.document;
     const env = { doc, api: null, handles: [], memory: new Map(), after: () => {} };
     const shown = { ...definition, layout };
-    for (const [field, schema] of Object.entries(definition?.state ?? {})) {
-        if (schema.type === 'entries' && entriesRoles(shown, field)) drawEntries(env, parent, { definition: shown, module: definition.id ?? '', field, list: values?.[field] });
-    }
+    drawShapes(env, parent, { definition: shown, module: definition?.id ?? '', who: null, values: values ?? {}, preview: true });
     return { destroy() { for (const handle of env.handles) handle.destroy?.(); env.handles = []; } };
+}
+
+/** The int fields a `bars` block draws together as one map of numbers (a number with display names stays a row of its own: it is edited as a choice). */
+export const barFields = definition => (definition?.layout === 'bars' ? Object.entries(definition.state ?? {}).filter(([, schema]) => schema.type === 'int' && !schema.names).map(([field]) => field) : []);
+
+/**
+ * The shapes of a block that are not plain rows, for the editor's preview: an entries field with roles is drawn through them in any layout, `bars` adds the maps
+ * of numbers and the int fields together as bars, `fields` the scalar fields as one record card. (The tab draws the same shapes, with editors, in screens/blocks.js.)
+ */
+export function drawShapes(env, parent, { definition, module, who, values, preview = false }) {
+    // (a preview has no editors: a row with no payload and a field with edit off draw no pencil)
+    const rowsOf = args => numberRows(args).map(row => (preview ? { ...row, payload: null } : row));
+    const state = definition?.state ?? {}, layout = definition?.layout ?? 'fields';
+    const title = text => { const spaced = String(text).replace(/[-_]+/g, ' '); return spaced.charAt(0).toUpperCase() + spaced.slice(1); };
+    for (const [field, schema] of Object.entries(state)) if (schema.type === 'entries' && entriesRoles(definition, field)) drawEntries(env, parent, { definition, module, field, list: values?.[field] });
+    if (layout === 'cards') {
+        // (entries only)
+    } else if (layout === 'bars') {
+        for (const [field, schema] of Object.entries(state)) {
+            if (schema.type === 'map' && schema.values?.type === 'int') drawNumberMap(env, parent, { title: title(schema.label ?? field), memoryKey: `${module}:${who ?? ''}:${field}`, rows: rowsOf({ definition, module, who, values, field }) });
+        }
+        const fields = barFields(definition);
+        if (fields.length) drawNumberMap(env, parent, { title: '', memoryKey: `${module}:${who ?? ''}:fields`, rows: rowsOf({ definition, module, who, values, fields }) });
+    } else {
+        const lines = Object.entries(state).filter(([, schema]) => schema.type !== 'entries' && schema.type !== 'map')
+            .map(([field, schema]) => ({ field, label: schema.label ?? title(field), schema: preview ? { ...schema, edit: false } : schema, value: values?.[field] ?? schema.default }));
+        if (lines.length) drawRecordCard(env, parent, { title: '', lines, module, who });
+    }
 }

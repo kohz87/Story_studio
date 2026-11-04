@@ -33,7 +33,11 @@ import { STATIC_MARKER, assemble, contextNotice, estimateTokens } from './prompt
 import { MAX_CHANGE_LINES, ensureModules, makeView } from './sdk.js';
 import { cutAt } from '../text.js';
 import { CORE_FEATURE } from './features.js';
-import { RESOLVE as RPG_RESOLVE } from './lean-rpg/names.js';
+import { LEAN_RPG_FEATURE, RESOLVE as RPG_RESOLVE, practiceFromRollsOnly } from './lean-rpg/names.js';
+import { SKILL_SLOTS_MAX } from './skill-slots.js';
+
+// A story line that practises a skill (`practice-N`, data-modules/part.js): the lines a reply is marked for (see captureEach).
+const PRACTICE_LINE = new RegExp(`\\|\\s*kind\\s*:\\s*practice-[1-${SKILL_SLOTS_MAX}]\\b`, 'iu');
 import { NO_ROLLS_LINE, receiptCue, receiptWithCue } from './lean-rpg/cue.js';
 
 export const STATIC_KEY = 'story_suite_static';
@@ -965,6 +969,13 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         const message = ctx?.chat?.[index];
         // `sid`: the reply's record ID, which stays with the reply when earlier messages are deleted.
         const carrier = { index, swipe: Number.isInteger(message?.swipe_id) ? message.swipe_id : 0, sid: store.carrierSid?.(index) ?? null };
+        // The practice rule recorded with the reply: skill practice comes only from rolls (data-modules/part.js refuses a story practice-N line). A reply
+        // captured live under the rule (the RPG on, Rolls automatic) that has such a line is marked; a Re-read or an edit goes by the mark the reply
+        // already has, so an older reply keeps the practice lines it was told with.
+        if (readRecord(message)?.practiceRule === 'rolls') carrier.practiceRule = 'rolls';
+        else if (base === null && lines.some(line => PRACTICE_LINE.test(line.raw ?? '')) && practiceFromRollsOnly(registry.featureOn?.(LEAN_RPG_FEATURE) === true, settings?.('story-block'))) {
+            try { store.setPracticeRule?.(index); carrier.practiceRule = 'rolls'; } catch { /* an unmarked reply is judged as before */ }
+        }
         // The message right before the reply (system messages aside), and only when it is the reader's: a reply that
         // follows another reply has no message of the reader's to quote (proof, EVIDENCE.md).
         const before = (ctx?.chat ?? []).slice(0, index).findLast(item => !item?.is_system);
@@ -973,6 +984,8 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         // A Re-read (a2-3): the reply as it stands now, for bookkeeping its kept blocks wrote (ctx.standing).
         let standing = null;
         if (base) { try { standing = store.at(index); } catch { standing = null; } }
+        // (and what the reply's own receipts recorded, ctx.standingReceipts: the rows a join or a return seeded)
+        const standingReceipts = base ? (readRecord(message)?.receipts ?? null) : null;
         // `shown`: how many lines of each display kind this reply has shown so far (their cap per reply).
         for (const line of lines) {
             const entry = registry.capture(line.kind);
@@ -1006,7 +1019,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             try {
                 const operation = { type: `${CAPTURE_PREFIX}${entry.kind}`, payload: { ...line, kind: entry.kind, word: line.kind } };
                 const taking = plan ? occurrenceFor(plan, operation.type, operation.payload) : null;
-                const run = opts => bus.run(operation.type, operation.payload, { cause: 'story', state, capture: entry, carrier: plan ? { ...carrier, ...(taking.span && (plan.preserveSources || occurrenceOf(taking.span) === null) ? { ordinal: taking.span.source.ordinal } : {}), pending: plan.pending, opsBefore: plan.blocks.reduce((sum, piece) => sum + (Number.isInteger(piece.n) ? piece.n : 0), 0) } : carrier, chat, standing, ...(plan ? { planned: plan.blocks.flatMap(piece => piece.block?.evidence ?? []), replacing: plan.replacing, reusing: taking.span, ...(Number.isInteger(taking.value) ? { occurrence: taking.value } : {}) } : {}), ...(seed === undefined ? {} : { seed }), ...opts });
+                const run = opts => bus.run(operation.type, operation.payload, { cause: 'story', state, capture: entry, carrier: plan ? { ...carrier, ...(taking.span && (plan.preserveSources || occurrenceOf(taking.span) === null) ? { ordinal: taking.span.source.ordinal } : {}), pending: plan.pending, opsBefore: plan.blocks.reduce((sum, piece) => sum + (Number.isInteger(piece.n) ? piece.n : 0), 0) } : carrier, chat, standing, standingReceipts, ...(plan ? { planned: plan.blocks.flatMap(piece => piece.block?.evidence ?? []), replacing: plan.replacing, reusing: taking.span, ...(Number.isInteger(taking.value) ? { occurrence: taking.value } : {}) } : {}), ...(seed === undefined ? {} : { seed }), ...opts });
                 result = entry.off ? await run({ capture: { ...entry, off: false }, again: true }) : await run();
                 // Refused by a feature that is off (a command it called, ctx.feature): run as it ran before.
                 if (again && !entry.off && result?.code === 'FEATURE_OFF') result = await run({ again: true });
@@ -1288,7 +1301,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             // (B-b2-timeline-9: read through readRecord, and only receipt IDs, whatever the chat holds.)
             const told = current.type === 'continue' ? readRecord(message)?.narrated ?? [] : [];
             const before = told.filter(id => typeof id === 'string');
-            store.setNarrated(id, [...new Set([...before, ...current.untold, ...result.steps.filter(receipt => receipt.beforeGenerate === true).map(receipt => receipt.id)])]);
+            store.setNarrated(id, [...new Set([...before, ...current.untold, ...result.steps.filter(receipt => receipt.beforeGenerate === true).map(receipt => receipt.id)])], { reply: !(current.type === 'swipe' && id === 0) });   // (a swipe of the opening greeting is still a greeting)
 
             // Also with no block: the change lines left in the story are listed in the hidden comment, so a
             // Re-read leaves them too (B-a1-3, B-a1-10).

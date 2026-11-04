@@ -453,7 +453,7 @@ test('signature skills: the section opens with its cards, the list tag counts th
         assert.match(await page.locator('.record-card', { hasText: 'Fenna' }).innerText(), /3 skills/);
         await page.locator('.record-card', { hasText: 'Fenna' }).click();
         const legends = await page.locator('.inspector legend').allInnerTexts();
-        assert.deepEqual(legends.slice(-3).map(text => text.trim()), ['Before they are met', 'Signature skills · 3 of 5', 'Secrets · 3 of 8']);
+        assert.deepEqual(legends.slice(-3).map(text => text.trim()), ['Before they are met', 'Signature skills · 3 of 8', 'Secrets · 3 of 8']);
         assert.equal(await skillCards(page).count(), 3);
         assert.equal(await page.getByLabel('Skill 2 name', { exact: true }).inputValue(), 'Beacon Call');
         assert.equal(await page.getByLabel('Skill 3 rank', { exact: true }).inputValue(), 'master');

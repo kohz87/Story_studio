@@ -64,7 +64,7 @@ test('an empty cast says what a person is', () => {
 
 test('the form is in the mockup’s order', () => {
     const ctx = open();
-    assert.deepEqual(legends(ctx), ['Who they are', 'Portrait', 'Where their story starts', 'Drawn to (optional)', 'Relationship at the start', 'Before they are met', 'Signature skills · 0 of 5', 'Secrets · 3 of 8']);
+    assert.deepEqual(legends(ctx), ['Who they are', 'Portrait', 'Where their story starts', 'Drawn to (optional)', 'Relationship at the start', 'Before they are met', 'Signature skills · 0 of 8', 'Secrets · 3 of 8']);
     const labels = ctx.inspector.querySelectorAll('fieldset')[0].querySelectorAll('label.field').map(node => node.childNodes[0].textContent);
     assert.deepEqual(labels, ['Name', 'Also called', 'In one line', 'Look', 'Voice', 'Personality', 'Background', 'Key']);
     assert.match(ctx.inspector.textContent, /Hidden from players until they meet Fenna; then NPC State Delta makes the dossier from this, at once\./);
