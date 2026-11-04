@@ -60,9 +60,14 @@ export const CORE_MODULE_ID = 'story-block';
 const SCREEN_TABS = Object.freeze(['inventory', 'scene']);
 export const CORE_BUDGET = 400;
 
+// Whether this reply answers the reader's first message of the chat (the greeting is the narrator's): the one reply that asks for the look.
+// Read from the chat itself, so a swipe, a regenerate or a rebuilt state gives the same answer.
+const firstReader = view => (Number.isInteger(view?.chat?.readers) ? view.chat.readers <= 1 : true);
+
 // One line for the static prompt part: no names, counts or coins, so it is byte-identical every reply.
+// (The coin rule is said once, in the coin kind's grammar line; the wallet line and this one do not repeat it.)
 export const CORE_STATIC = 'Code keeps the inventory, the wallet, the place and who is present: use or pay only what the '
-    + 'lists below hold, and write a change line for every item or coin gained, used or lost and every arrival, departure or move.';
+    + 'lists below hold, and write a change line for every item gained, used or lost and every arrival, departure or move.';
 
 /** The `~ you` grammar line: wearing and condition, and a rank under the pack's own word for it (`label`) when a pack gives one. */
 export function youGrammar(label = '') {
@@ -217,7 +222,7 @@ export function createCorePart({ hooks = () => [], settings = () => ({}), hookEn
             tail(view) {
                 const chars = CORE_BUDGET * 4;
                 const mounts = featureOn(view, MOUNTS_FEATURE) ? mountsTail(view?.state) : null;
-                const scene = [...sceneTail(view?.state, { weather: featureOn(view, CORE_FEATURE.weather), you: featureOn(view, CORE_FEATURE.you), rankLabel: featureOn(view, CORE_FEATURE.you) ? youRankLabel(view) : '' }), ...(mounts ? [mounts] : [])];
+                const scene = [...sceneTail(view?.state, { weather: featureOn(view, CORE_FEATURE.weather), you: featureOn(view, CORE_FEATURE.you), rankLabel: featureOn(view, CORE_FEATURE.you) ? youRankLabel(view) : '', askLook: firstReader(view) }), ...(mounts ? [mounts] : [])];
                 // The encumbered condition, when the carry module reports it (one short line).
                 // Asked through the query, which a host with Features answers with null while it is off.
                 let found = null;
@@ -379,7 +384,7 @@ export function createCoreModule({ hooks = () => [], settings = () => ({}), vers
     });
     const dataPart = createDataModulesPart({ packs: packs.packs, settings: () => settings(), ...dataModules });
     // The RPG's pre-call and rolls (`leanRpg`: the runtime's queued model call, the chat and its metadata; src/v2/lean-rpg/).
-    const rpg = createLazyRpgPart({ ...leanRpg, problem });
+    const rpg = createLazyRpgPart({ ...leanRpg, problem, persona: () => extras?.persona?.() ?? '', rosterOn: () => { try { return extras?.rpgOn?.() === true && extras?.gearOn?.() === true; } catch { return false; } } });
     const merged = mergeParts([core, packs.part, events, assist ?? createAssistPart({ settings: () => settings() }), createTimelinePart({ timeline }), dataPart, rpg]);
     const timelineGuard = merged.hooks.replayGuard;
     // One host-owned hook for the host's guarded blocks, by predicate: data modules (`dm.*`), the RPG's rolls
@@ -426,7 +431,7 @@ export function createCoreModule({ hooks = () => [], settings = () => ({}), vers
             },
         },
         context: {
-            static: () => merged.statics.map(fn => fn()).filter(text => typeof text === 'string' && text.trim()).join('\n'),
+            static: hint => merged.statics.map(fn => fn(hint)).filter(text => typeof text === 'string' && text.trim()).join('\n'),
             tail(view) {
                 const lines = [];
                 const optional = [];

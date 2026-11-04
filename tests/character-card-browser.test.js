@@ -209,6 +209,17 @@ test('a card picture the browser will not keep says so, and the pack is still sa
     });
 });
 
+test('Reset card from pack says so when the browser refuses to clear the card draft, and the pack is still saved', { timeout: 60000 }, async () => {
+    await withPage(async page => {
+        await open(page);
+        await go(page, 'Character card');
+        await page.evaluate(() => { IDBObjectStore.prototype.delete = () => { throw new DOMException('Refused', 'InvalidStateError'); }; });
+        await page.getByRole('button', { name: 'Reset card from pack', exact: true }).click();
+        await page.waitForFunction(() => /Only the card draft could not be cleared/.test(document.querySelector('.notice').textContent));
+        assert.notEqual(await page.evaluate(() => localStorage.getItem('story-studio-draft')), null);
+    });
+});
+
 test('typing in a card field costs under 30 ms a keystroke on a large pack', { timeout: 60000 }, async () => {
     await withPage(async page => {
         const { readFileSync } = await import('node:fs');

@@ -42,7 +42,7 @@ test('settings defaults catalogue is empty because the host has no module-settin
 
 test('all SCREEN_FIELDS accept/refuse through exactly the vendored importer', async t => {
     const cases = [
-        ['all fields', [screen({ title: 'Camp', icon: 'fa-tent', mounts: [...MOUNTS], css: '.camp { color: red; }', layout: { root: { type: 'text', value: 'Camp' } }, theme: { '--ss-accent': '#123456' }, data: { pc: { query: 'scene.place' } }, steps: [{ id: 'first', title: 'First', template: '<p>{{ q.pc.name }}</p>' }] })], true],
+        ['all fields', [screen({ title: 'Camp', icon: 'fa-tent', mounts: [...MOUNTS], css: '.camp { color: red; }', layout: { root: { type: 'text', value: 'Camp' } }, theme: { '--ss-accent': '#123456' }, data: { pc: { query: 'scene.place' } }, steps: [{ id: 'first', title: 'First', template: '<p>{{ q.pc.name }}</p>' }], tab: 'camp', tabTitle: 'Camp', order: 1 })], true],
         ['layout instead of template', [{ id: 'camp', layout: {} }], true],
         ['empty template', [screen({ template: '' })], true],
         ['restyle module id', [screen({ id: 'example-module/board' })], true],
@@ -71,6 +71,10 @@ test('all SCREEN_FIELDS accept/refuse through exactly the vendored importer', as
         ['step template wrong type', [screen({ steps: [{ template: 1 }] })], false],
         ['step template over code', [screen({ steps: [{ template: 'x'.repeat(LIMITS.code + 1) }] })], false],
         ['step four loops', [screen({ steps: [{ template: '<div data-each="q.rows as a">'.repeat(4) + '</div>'.repeat(4) }] })], false],
+        ['tab and title', [screen({ tab: 'reputation', tabTitle: 'Reputation', order: 2 })], true], ['tab bad spelling', [screen({ tab: 'Bad Tab' })], false],
+        ['tab wrong type', [screen({ tab: 1 })], false], ['tab title needs a tab', [screen({ tabTitle: 'Reputation' })], false],
+        ['tab title too long', [screen({ tab: 'rep', tabTitle: 'x'.repeat(25) })], false], ['tab title empty', [screen({ tab: 'rep', tabTitle: ' ' })], false],
+        ['order wrong type', [screen({ order: '2' })], false],
         ['script', [screen({ template: '<script>alert(1)</script>' })], false],
         ['encoded attribute accepted for later sanitizing', [screen({ template: '<img o&#110;error="alert(1)">' })], true],
         ['script link', [screen({ template: '<a href="java&#115;cript:alert(1)">Go</a>' })], false],
