@@ -225,3 +225,15 @@ test('typing in a card field costs under 30 ms a keystroke on a large pack', { t
         assert.ok(average < 30, `${average} ms a keystroke`);
     });
 });
+
+test('an edit made just before a reload is kept (the page mirrors a waiting draft as it goes away)', { timeout: 60000 }, async () => {
+    await withPage(async page => {
+        await open(page);
+        await go(page, 'Character card');
+        await page.locator('#card-name').fill('Typed a moment before');
+        await page.reload();
+        await page.locator('.studio').waitFor();
+        await go(page, 'Character card');
+        await page.waitForFunction(() => document.getElementById('card-name').value === 'Typed a moment before');
+    });
+});

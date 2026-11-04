@@ -159,6 +159,9 @@ export function mountStudio(root) {
     };
 
     let cardTimer = null;
+    const CARD_MIRROR = 'story-studio-card-pending';
+    const onPageHide = () => { ctx.unloading = true; ctx.flushForUnload(); ctx.unloading = false; };
+    const onHidden = () => { if (doc.visibilityState === 'hidden') ctx.flushForUnload(); };
     const writeCard = () => {
         cardTimer = null;
         const id = history.current?.document?.id;
@@ -219,6 +222,14 @@ export function mountStudio(root) {
             if (cardTimer !== null) win.clearTimeout(cardTimer);
             cardTimer = win.setTimeout(writeCard, 250);
             return true;
+        },
+        // The page is going away (or hidden): an edit still waiting for its save is mirrored in sessionStorage first, because the
+        // IndexedDB write may not finish; the next load prefers the mirror when it is newer.
+        flushForUnload() {
+            if (cardTimer !== null && !destroyed && typeof history.current?.document?.id === 'string' && (doc.visibilityState === undefined || doc.visibilityState === 'hidden' || ctx.unloading)) {
+                try { win.sessionStorage.setItem(CARD_MIRROR, JSON.stringify({ packId: history.current.document.id, at: Date.now(), draft: ctx.card })); } catch { /* A mirror is a convenience. */ }
+            }
+            ctx.flushCard();
         },
         flushCard() {
             if (cardTimer === null) return;
@@ -461,7 +472,8 @@ export function mountStudio(root) {
             media?.removeEventListener?.('change', setTheme);
             stack?.removeEventListener?.('change', syncParts);
             columns.destroy();
-            win?.removeEventListener?.('pagehide', ctx.flushCard);
+            win?.removeEventListener?.('pagehide', onPageHide);
+            doc.removeEventListener?.('visibilitychange', onHidden);
             win?.removeEventListener?.('beforeunload', onBeforeUnload);
             win?.removeEventListener?.('keydown', onKeyDown);
             win?.removeEventListener?.('dragover', onDragOver);
@@ -471,7 +483,8 @@ export function mountStudio(root) {
         },
     };
 
-    win?.addEventListener?.('pagehide', ctx.flushCard);
+    win?.addEventListener?.('pagehide', onPageHide);
+    doc.addEventListener?.('visibilitychange', onHidden);
     media?.addEventListener?.('change', setTheme);
     setTheme();
     ctx.render();
@@ -489,9 +502,14 @@ export function mountStudio(root) {
     // ...and so do the card page's draft and picture, kept apart from the project.
     if (restored?.model?.document) {
         const start = history.current?.document?.id;
+        let mirror = null;
+        try { mirror = JSON.parse(win.sessionStorage.getItem(CARD_MIRROR)); win.sessionStorage.removeItem(CARD_MIRROR); } catch { /* No mirror. */ }
         loadCardDraft(win).then(record => {
-            if (destroyed || !record || record.packId !== start || history.current?.document?.id !== start || cardTouched(ctx.card)) return;
-            ctx.card = sanitizeCard(record.draft);
+            const newer = mirror && mirror.packId === start && mirror.draft && typeof mirror.draft === 'object' && Number(mirror.at) >= (record?.at ?? 0);
+            if (destroyed || history.current?.document?.id !== start || cardTouched(ctx.card)) return;
+            if (!newer && (!record || record.packId !== start)) return;
+            ctx.card = sanitizeCard(newer ? mirror.draft : record.draft);
+            if (newer) writeCard();
             if (selection.kind === 'card') ctx.render();
         });
         loadCardImage(win).then(record => {

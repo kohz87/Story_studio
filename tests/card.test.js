@@ -246,3 +246,16 @@ test('the card picture: a PNG is kept, JPEG and WebP go through the browser tool
     await assert.rejects(() => cardImageFrom(Uint8Array.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13), tools), /PNG, JPEG or WebP/);
     await assert.rejects(() => cardImageFrom(new Uint8Array(0), tools), /empty/);
 });
+
+test('the portraits entry carries the pack’s current version, not the one of an earlier build', async () => {
+    const held2 = withHeld(2);
+    const portraits = await shrinkPortraits(held2, small);
+    const version = built => JSON.parse(entryTagged(built, '[storysuite:portraits]')[0].content).version;
+    assert.equal(version(buildCard(held2, emptyCard(), { portraits })), model.document.version);
+    const bumped = withPortraits(openPack({ ...structuredClone(model.document), version: '9.9.9' }), held(2));
+    const after = buildCard(bumped, emptyCard(), { portraits });
+    assert.equal(version(after), '9.9.9');
+    const entry = JSON.parse(entryTagged(after, '[storysuite:portraits]')[0].content);
+    assert.equal(entry.pack, model.document.id);
+    assert.deepEqual(Object.keys(entry.files), names.slice(0, 2));
+});

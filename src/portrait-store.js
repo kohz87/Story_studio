@@ -73,7 +73,7 @@ export async function loadCardImage(win) {
 /** Keeps the card draft (a JSON-safe object) of the pack `packId`. */
 export async function saveCardDraft(win, packId, draft) {
     try {
-        await run(win, 'readwrite', store => (draft ? store.put({ packId, draft }, DRAFT_KEY) : store.delete(DRAFT_KEY)));
+        await run(win, 'readwrite', store => (draft ? store.put({ packId, draft, at: Date.now() }, DRAFT_KEY) : store.delete(DRAFT_KEY)));
         return true;
     } catch { return false; }
 }
@@ -82,6 +82,6 @@ export async function saveCardDraft(win, packId, draft) {
 export async function loadCardDraft(win) {
     try {
         const record = await run(win, 'readonly', store => store.get(DRAFT_KEY));
-        return typeof record?.packId === 'string' && record.draft && typeof record.draft === 'object' ? record : null;
+        return typeof record?.packId === 'string' && record.draft && typeof record.draft === 'object' ? { ...record, at: Number(record.at) || 0 } : null;
     } catch { return null; }
 }

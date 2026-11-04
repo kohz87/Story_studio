@@ -253,6 +253,12 @@ const dataUri = (bytes, type) => {
     });
 };
 
+// Only the files are cached; the pack's id and version are read on every build, so a new version is never left out of the entry.
+function portraitsContent(pack, portraits) {
+    const files = cached(portraitText, portraits, () => JSON.stringify(Object.fromEntries(portraits.files.map(file => [file.name, dataUri(file.bytes, file.type)]))));
+    return `{"v":1,"pack":${JSON.stringify(pack.id)},"version":${JSON.stringify(pack.version)},"files":${files}}`;
+}
+
 /**
  * The pictures a card carries: every held portrait the cast names, shrunk by `shrink(bytes, name) -> { bytes, type }` (the browser
  * shrinks to webp of 40 KB or less; tests give their own). → `{ files: [{ name, bytes, type }], lines }`. A picture the shrink
@@ -326,10 +332,7 @@ export function buildCard(model, card, { portraits = null, only = PARTS } = {}) 
         const lore = cached(loreEntries, pack, () => Object.values(worldInfo(pack).entries).map(entry => v2Entry(entry, 0)));
         return lore.length ? lore.map(entry => ({ ...entry, extensions: { ...entry.extensions } })) : null;
     });
-    add('portraits', () => portraits?.files.length ? [suiteEntry(TAGS.portraits, pack, cached(portraitText, portraits, () => JSON.stringify({
-        v: 1, pack: pack.id, version: pack.version,
-        files: Object.fromEntries(portraits.files.map(file => [file.name, dataUri(file.bytes, file.type)])),
-    })), 0)] : null);
+    add('portraits', () => portraits?.files.length ? [suiteEntry(TAGS.portraits, pack, portraitsContent(pack, portraits), 0)] : null);
     if (included.has('statusBar')) {
         parts.push('statusBar');
         const kept = Array.isArray(extensions.regex_scripts) ? extensions.regex_scripts.filter(script => !(isObject(script) && script.id === STATUS_BAR.id)) : [];
