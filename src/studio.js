@@ -7,7 +7,8 @@ import { KINDS, RAIL_KINDS, LABELS, records, identity, localId } from './records
 import { renderScreen } from './screens/index.js';
 import { downloadPack, downloadZip } from './export.js';
 import { readDraft, writeDraft, MAX_PACK_BYTES } from './session.js';
-import { saveHeld, loadHeld } from './portrait-store.js';
+import { saveHeld, loadHeld, saveCardImage, loadCardImage } from './portrait-store.js';
+import { emptyCard } from './card.js';
 import { isZipFile, readPackZip } from '../vendor/story-block/src/v2/packs/bundle.js';
 import { ZIP_LIMITS, PORTRAIT_LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 import { imageSize, sniffImage, kb } from './cast/portrait.js';
@@ -17,7 +18,7 @@ import { createColumns } from './columns.js';
 import { saveFailed } from './timeline/drafts.js';
 
 // The screens below the record kinds in the rail, in order.
-const SCREENS = [['defaults', 'Settings defaults'], ['presentation', 'Screen builder'], ['data-modules', 'Data modules'], ['code-module', 'Code module'], ['narrator', 'Narrator card'], ['lorebook', 'Lorebook'], ['lore-import', 'Import lorebook']];
+const SCREENS = [['defaults', 'Settings defaults'], ['presentation', 'Screen builder'], ['data-modules', 'Data modules'], ['code-module', 'Code module'], ['card', 'Character card'], ['lorebook', 'Lorebook'], ['lore-import', 'Import lorebook']];
 const SCREEN_LABELS = { ...Object.fromEntries(SCREENS), settings: 'Pack settings', check: 'Check / export' };
 
 export function mountStudio(root) {
@@ -159,6 +160,8 @@ export function mountStudio(root) {
 
     const ctx = {
         doc, win, root, app, main, inspector: inspectorBody, overlays, selection, file, authoring: {}, filters: {},
+        // The Character card page's draft (saved with the pack) and its picture (PNG bytes, kept in IndexedDB beside it).
+        card: restored?.card ?? emptyCard(), cardImage: null,
         get model() { return history.current; },
         get history() { return history; },
         get dirty() {
@@ -193,11 +196,31 @@ export function mountStudio(root) {
                 }
             }
             // Whether the browser kept the project: a screen that adds work only a save holds (drafts) checks it.
-            if (history.current?.document) ctx.saved = writeDraft(win, history.current, ctx.dirty);
+            if (history.current?.document) ctx.saved = writeDraft(win, history.current, ctx.dirty, ctx.card, ctx.cardImage);
             keepPortraits();
             return true;
         },
         notify(message) { notice.textContent = message; },
+        // Saves the card page's draft with the pack. Resolves false (and says so) when the browser would not keep it.
+        saveCard() {
+            if (destroyed || !history.current?.document) return false;
+            ctx.saved = writeDraft(win, history.current, ctx.dirty, ctx.card, ctx.cardImage);
+            if (!ctx.saved) ctx.notify('The browser would not keep the card edits: they will be lost on reload. Download the card to keep them.');
+            return ctx.saved;
+        },
+        // The card picture: PNG bytes, or null for today's cover.
+        setCardImage(bytes) {
+            if (destroyed) return false;
+            ctx.cardImage = bytes ?? null;
+            saveCardImage(win, ctx.cardImage);
+            return ctx.saveCard();
+        },
+        // A new draft (a card was picked, or Reset): the old one is replaced as a whole.
+        setCard(card) {
+            if (destroyed) return false;
+            ctx.card = card;
+            return ctx.saveCard();
+        },
         select(kind, id = null, form = null) {
             if (destroyed) return;
             selection.kind = kind; selection.id = id; selection.form = form;
@@ -236,7 +259,7 @@ export function mountStudio(root) {
             if (!destroyed && history.current?.validation?.ok) {
                 lastBaselineJson = JSON.stringify(history.current.document);
                 lastBaselinePortraits = portraitSignature(history.current);
-                writeDraft(win, history.current, false);
+                writeDraft(win, history.current, false, ctx.card, ctx.cardImage);
             }
         },
         loadText(textOrObject, portraits) {
@@ -253,10 +276,12 @@ export function mountStudio(root) {
                 };
             }
             if (model?.document) {
-                const previous = { history, selection: { ...selection }, baseline: lastBaselineJson, held: lastBaselinePortraits, filename: ctx.filename, authoring: ctx.authoring, filters: ctx.filters };
+                const previous = { history, selection: { ...selection }, baseline: lastBaselineJson, held: lastBaselinePortraits, filename: ctx.filename, authoring: ctx.authoring, filters: ctx.filters, card: ctx.card, cardImage: ctx.cardImage };
                 history = createHistory(model);
                 ctx.authoring = {};
                 ctx.filters = {};
+                ctx.card = emptyCard();
+                ctx.cardImage = null;
                 selection.kind = 'places';
                 selection.id = null;
                 selection.form = null;
@@ -274,10 +299,13 @@ export function mountStudio(root) {
                     ctx.filename = previous.filename;
                     ctx.authoring = previous.authoring;
                     ctx.filters = previous.filters;
+                    ctx.card = previous.card;
+                    ctx.cardImage = previous.cardImage;
                     ctx.render();
                     return null;
                 }
-                writeDraft(win, model, false);
+                writeDraft(win, model, false, ctx.card, null);
+                saveCardImage(win, null);
                 keepPortraits();
                 return model;
             }
@@ -398,7 +426,7 @@ export function mountStudio(root) {
             ctx.previewCleanup?.();
             ctx.previewCleanup = null;
             main.replaceChildren(); inspectorBody.replaceChildren();
-            inspector.hidden = !model?.document || ['check', 'defaults', 'presentation', 'data-modules', 'code-module', 'narrator', 'lorebook', 'lore-import'].includes(selection.kind);
+            inspector.hidden = !model?.document || ['check', 'defaults', 'presentation', 'data-modules', 'code-module', 'card', 'lorebook', 'lore-import'].includes(selection.kind);
             columns.refresh();
             renderScreen(ctx);
         },
@@ -430,6 +458,15 @@ export function mountStudio(root) {
             lastKept = portraitsOf(history.current);
             lastBaselinePortraits = portraitSignature(history.current);
             ctx.render();
+        });
+    }
+    // ...and so does the card's picture.
+    if (restored?.cardImage) {
+        const start = history.current;
+        loadCardImage(win).then(bytes => {
+            if (destroyed || !bytes || history.current?.document?.id !== start?.document?.id || ctx.cardImage) return;
+            ctx.cardImage = bytes;
+            if (selection.kind === 'card') ctx.render();
         });
     }
     return ctx;

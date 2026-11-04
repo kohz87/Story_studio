@@ -40,7 +40,7 @@ Contents: 1 Scope · 2 Contracts relied on · 3 The scaffold · 4 Golden example
 - Any change to Story Block or Story Director, or to `vendor/story-block/` by hand.
 - Several state fields, several parts, features, settings, widgets, hooks other than `replayGuard`, prompt context.
   The README the scaffold ships says how to add them.
-- Keeping code-module drafts across reloads (session only, like the narrator card).
+- Keeping code-module drafts across reloads (session only).
 - Generating from a data module (a "convert this data module to code" button): a later part.
 
 ### 1.3 Baseline (read before M0)

@@ -1,4 +1,4 @@
-# Story Studio 0.7.0
+# Story Studio 0.8.0
 
 Story Studio is a pack editor for the Story Suite. You write a world, its people and its events here, check it, and export a pack file. Story Block imports that file.
 
@@ -28,7 +28,7 @@ The page has a header (pack name, Undo, Redo, Open pack, Problems, Export, theme
 - **Screen builder.** Build screens and layouts with a live preview.
 - **Data modules.** Forms, a grammar preview and a simulator for small rule modules. Story Block checks and runs them.
 - **Code module.** Fill one form, download a zip that holds a starter SillyTavern module with its own tests.
-- **Narrator card, Lorebook, Import lorebook.** Make a character card (JSON or PNG) and a World Info file from your pack, or bring World Info entries in as drafts.
+- **Character card, Lorebook, Import lorebook.** Make a full character card (JSON or PNG) from your pack: every card field, a card image, and the pack, lore, portraits, a status bar and recommended settings put inside it; pick an existing card to start from. Make a World Info file, or bring World Info entries in as drafts.
 - **Problems** and **Check / export.** The check is Story Block's own, so Studio and the game agree. Each problem has a Go to button. Export opens when the pack passes.
 
 ![The Cast list: twelve people, each with a portrait, a secrets count, a drawn-to count and the portrait size.](docs/images/cast-list.png)
@@ -70,7 +70,7 @@ The Story Suite has four parts.
 - **Story Block** (2.16.1) is the hub. It keeps the story's state, runs the packs and draws the reader's screens.
 - **Story Director** (2.9.1) adds the story clock, the map, quests, the world's events and the pack's living cast. It needs Story Block.
 - **NPC State Delta** (1.7.1) adds a dossier for each person you meet, with meters, stages and secrets. It needs Story Block; with Story Director it also follows the cast and Key people.
-- **Story Studio** (0.7.0) is a separate page where you write packs. It is not an extension.
+- **Story Studio** (0.8.0) is a separate page where you write packs. It is not an extension.
 
 Install Story Block first, then Story Director, then NPC State Delta if you want it. Data flows one way: you write a pack in Studio and import it in Story Block; Story Director reads what Story Block holds, and NPC State Delta reads both. Nothing flows back to Studio.
 
@@ -82,7 +82,7 @@ Studio carries its own copy of Story Block's pack checker, so its verdict matche
 - A portrait is at most 150 KB and 1200 px after Studio shrinks it. A pack names at most 32.
 - A zip holds `pack.json` and the portraits, at most 40 entries.
 - RPG Battle is no longer supported. Its rules packs cannot be imported, and its chats should stay on the previous versions.
-- Narrator card, Code module and lorebook-review drafts last only for the session. Download them before you reload.
+- Code module and lorebook-review drafts last only for the session. Download them before you reload.
 - Studio never calls an AI. **Write with an AI** only makes text for you to paste somewhere else.
 - A lasting change needs Story Director with world-event support. Without it the pack stays off and Story Block says why.
 

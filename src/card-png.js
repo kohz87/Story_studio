@@ -11,12 +11,14 @@ function word(value) {
     new DataView(result.buffer).setUint32(0, value);
     return result;
 }
+const TABLE = Uint32Array.from({ length: 256 }, (_, n) => {
+    let value = n;
+    for (let bit = 0; bit < 8; bit++) value = (value >>> 1) ^ ((value & 1) ? 0xedb88320 : 0);
+    return value >>> 0;
+});
 export function crc32(data) {
     let crc = 0xffffffff;
-    for (const value of data) {
-        crc ^= value;
-        for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
-    }
+    for (const value of data) crc = TABLE[(crc ^ value) & 255] ^ (crc >>> 8);
     return (crc ^ 0xffffffff) >>> 0;
 }
 function chunk(type, data) {
@@ -34,7 +36,11 @@ function deflateStored(data) {
     for (const value of data) { a = (a + value) % 65521; b = (b + a) % 65521; }
     return join([...parts, word(((b << 16) | a) >>> 0)]);
 }
-export function exportCardPng(cardJson) {
+const SIGNATURE = Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10);
+const CARD_KEYWORDS = ['chara', 'ccv3'];
+
+/** The default cover: the 128 x 192 book Studio has always drawn. */
+function coverPng() {
     const width = 128, height = 192;
     const pixels = new Uint8Array(height * (1 + width * 3));
     for (let y = 0; y < height; y++) {
@@ -48,9 +54,66 @@ export function exportCardPng(cardJson) {
             pixels.set(color, y * (1 + width * 3) + 1 + x * 3);
         }
     }
-    let binary = '';
-    for (const value of bytes(cardJson)) binary += String.fromCharCode(value);
     const header = join([word(width), word(height), Uint8Array.of(8, 2, 0, 0, 0)]);
-    return join([Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10), chunk('IHDR', header),
-        chunk('IDAT', deflateStored(pixels)), chunk('tEXt', bytes('chara\0' + btoa(binary))), chunk('IEND', new Uint8Array())]);
+    return join([SIGNATURE, chunk('IHDR', header), chunk('IDAT', deflateStored(pixels)), chunk('IEND', new Uint8Array())]);
+}
+let cover = null;
+/** The default cover as PNG bytes (no card data in it). */
+export function defaultCoverPng() { return cover ??= coverPng(); }
+
+/** The chunks of a PNG as `{ type, data }`, or null when the bytes are not a PNG (or a chunk runs past the end). */
+export function pngChunks(png) {
+    if (!(png instanceof Uint8Array) || png.length < 20 || SIGNATURE.some((value, at) => png[at] !== value)) return null;
+    const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+    const chunks = [];
+    for (let at = 8; at < png.length;) {
+        if (at + 12 > png.length) return null;
+        const length = view.getUint32(at);
+        if (at + 12 + length > png.length) return null;
+        chunks.push({ type: String.fromCharCode(...png.subarray(at + 4, at + 8)), data: png.subarray(at + 8, at + 8 + length) });
+        at += 12 + length;
+    }
+    return chunks.length && chunks[0].type === 'IHDR' && chunks.at(-1).type === 'IEND' ? chunks : null;
+}
+const keywordOf = data => { const end = data.indexOf(0); return end < 0 || end > 79 ? '' : String.fromCharCode(...data.subarray(0, end)); };
+const isCardText = ({ type, data }) => ['tEXt', 'zTXt', 'iTXt'].includes(type) && CARD_KEYWORDS.includes(keywordOf(data));
+
+/** The picture alone: the PNG without any card data chunk, or null when it is not a PNG. */
+export function stripCardChunks(png) {
+    const chunks = pngChunks(png);
+    if (!chunks) return null;
+    return join([SIGNATURE, ...chunks.filter(item => !isCardText(item)).map(item => chunk(item.type, item.data))]);
+}
+
+/**
+ * The card JSON text a PNG carries (a `ccv3` tEXt chunk first, else `chara`), or null. The chunk holds the card as base64 of its UTF-8 text.
+ */
+export function readCardPng(png) {
+    const chunks = pngChunks(png);
+    if (!chunks) return null;
+    for (const keyword of ['ccv3', 'chara']) {
+        const found = chunks.find(item => item.type === 'tEXt' && keywordOf(item.data) === keyword);
+        if (!found) continue;
+        try {
+            const binary = atob(new TextDecoder('latin1').decode(found.data.subarray(keyword.length + 1)).replace(/\s+/g, ''));
+            return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(binary, character => character.charCodeAt(0)));
+        } catch { return null; }
+    }
+    return null;
+}
+
+/**
+ * The card as a PNG: `image` (PNG bytes, default the book cover) with the card JSON in a `chara` tEXt chunk, set just before IEND.
+ * Any card data the image already had is dropped. The same inputs give the same bytes.
+ */
+export function exportCardPng(cardJson, image = null) {
+    const chunks = pngChunks(image ?? defaultCoverPng());
+    if (!chunks) throw new Error('The card image is not a PNG');
+    const bytes = new TextEncoder().encode(cardJson);
+    let binary = '';
+    for (let at = 0; at < bytes.length; at += 0x8000) binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+    const text = chunk('tEXt', join([new TextEncoder().encode('chara\0'), new TextEncoder().encode(btoa(binary))]));
+    const kept = chunks.filter(item => !isCardText(item));
+    const end = kept.pop();
+    return join([SIGNATURE, ...kept.map(item => chunk(item.type, item.data)), text, chunk(end.type, end.data)]);
 }

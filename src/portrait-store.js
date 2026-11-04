@@ -47,3 +47,21 @@ export async function loadHeld(win) {
         return held;
     } catch { return null; }
 }
+
+const IMAGE_KEY = 'card-image';
+
+/** Keeps the Character card's picture (PNG bytes) beside the project; resolves true when it was stored. `null` forgets it. */
+export async function saveCardImage(win, bytes) {
+    try {
+        await run(win, 'readwrite', store => (bytes ? store.put({ bytes }, IMAGE_KEY) : store.delete(IMAGE_KEY)));
+        return true;
+    } catch { return false; }
+}
+
+/** The card picture kept (PNG bytes), or null. */
+export async function loadCardImage(win) {
+    try {
+        const record = await run(win, 'readonly', store => store.get(IMAGE_KEY));
+        return record?.bytes instanceof Uint8Array ? record.bytes : null;
+    } catch { return null; }
+}

@@ -1,57 +1,11 @@
 import { el, button, field } from '../dom.js';
-import { narratorFields, exportNarrator } from '../narrator.js';
-import { exportCardPng } from '../card-png.js';
 import { worldInfo, exportWorldInfo, importWorldInfo, acceptLoreDraft, MAX_LORE_BYTES } from '../lorebook.js';
 import { downloadFile } from '../export.js';
 import { applyEdit } from '../apply-edit.js';
 
-const LABELS = {
-    name: 'Card name', description: 'Description and Changes instruction', personality: 'Tone notes',
-    scenario: 'Start place and time', first_mes: 'First message', mes_example: 'Example messages',
-    creator_notes: 'Creator notes', system_prompt: 'System prompt', post_history_instructions: 'Post-history instructions',
-    creator: 'Creator', character_version: 'Character version',
-};
-
 function save(ctx, makePayload, suffix, type = 'application/json;charset=utf-8') {
     try { return downloadFile(ctx, makePayload(), `${ctx.model.document.id}-${suffix}`, type); }
     catch (err) { ctx.notify(`export-error: ${err.message}`); return false; }
-}
-
-export function renderNarrator(ctx) {
-    const { doc, main } = ctx;
-    const state = ctx.authoring;
-    state.card ??= {};
-    const pack = ctx.model.document;
-    const defaults = narratorFields(pack);
-    main.append(el(doc, 'h1', 'Narrator card'), el(doc, 'p',
-        'Build a Character Card V2 from this pack. Edit the fields before downloading JSON or PNG. Card edits stay in this session; they do not change pack metadata.', { class: 'muted' }));
-    if (!pack.start?.scene?.place) main.append(el(doc, 'p', 'This pack has no start place. Set the start place and first message before export.', { class: 'warning' }));
-    const actions = el(doc, 'div', '', { class: 'row' });
-    const json = () => exportNarrator(ctx.model.document, state.card);
-    actions.append(button(doc, 'Download card JSON', () => save(ctx, json, 'narrator.json'), { class: 'primary' }),
-        button(doc, 'Download card PNG', () => save(ctx, () => exportCardPng(json()), 'narrator.png', 'image/png')),
-        button(doc, 'Reset card from pack', () => { state.card = {}; ctx.render(); }));
-    main.append(actions);
-    const form = el(doc, 'div', '', { class: 'stack authoring-form' });
-    const extra = el(doc, 'details', '', { class: 'card stack' });
-    extra.append(el(doc, 'summary', 'Additional card fields'));
-    const preview = el(doc, 'pre', '', { id: 'card-preview' });
-    const updatePreview = () => {
-        try { preview.textContent = json(); }
-        catch (err) { preview.textContent = `export-error: ${err.message}`; }
-    };
-    updatePreview();
-    for (const key of Object.keys(defaults)) {
-        const input = el(doc, ['name', 'creator', 'character_version'].includes(key) ? 'input' : 'textarea', '', { id: `card-${key}` });
-        input.value = state.card[key] ?? defaults[key];
-        if (key === 'description') input.setAttribute('rows', '14');
-        input.addEventListener('input', () => { state.card[key] = input.value; updatePreview(); });
-        const target = ['name', 'description', 'personality', 'scenario', 'first_mes'].includes(key) ? form : extra;
-        target.append(field(doc, LABELS[key], input));
-    }
-    const details = el(doc, 'details', '', { class: 'card' });
-    details.append(el(doc, 'summary', 'Card JSON preview'), preview);
-    main.append(form, extra, details);
 }
 
 export function renderLorebook(ctx) {

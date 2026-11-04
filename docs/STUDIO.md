@@ -148,28 +148,33 @@ run locally, inside that same file. No service, connection, runtime dependency, 
 lorebook is consulted. Card/lorebook downloads do not mark unsaved pack edits as saved. Pack export continues
 to use Story Block's checker and the existing lossless export path.
 
-### Narrator card
+### Character card
 
-Select **Narrator card**. Studio derives the name, description, creator and version from pack metadata,
-the opening location from `start.scene.place`, and the opening date/time from `calendar.start` and its era.
-The first message opens at that location and invites the reader to act. Missing location/time metadata is not
-invented; a missing place is shown as a warning. The card's scenario and first message can be edited independently.
+Select **Character card** (or press **Build a card…** on Check / export). The page is saved with the pack: drafts survive a
+reload. Studio derives the name, description, creator and version from pack metadata, the opening location from
+`start.scene.place` and the opening date/time from `calendar.start`; missing location/time metadata is not invented, and a
+missing place is shown as a warning. Everything is editable; **Reset card from pack** goes back to those defaults.
 
-Edit **Card name**, **Description and Changes instruction**, **Tone notes**, **Start place and time**, and
-**First message**. Additional card fields expose example messages, creator notes, system prompt, post-history
-instructions, creator and character version. Tone notes use the V2 `personality` field; the current host pack
-schema has no dedicated tone field, so ordinary packs start with empty tone notes. A safe draft's `toneNotes`
-or text `tone`, when present, supplies that default. The JSON preview updates as you type.
+- **Top:** **Pick a card…** reads a V1, V2 or V3 JSON card or a PNG (`ccv3` or `chara` tEXt) into every field; the card's own
+  lorebook entries are kept as **Card's own lore**. **Change…** sets the card image (PNG, JPEG or WebP, written as the PNG
+  image, at most 10 MB, drawn at 1200 px or less); **Remove** goes back to the default book cover.
+- **Main:** card name, description and Changes instruction, tone notes (`personality`), start place and time, first message and
+  alternate greetings (add and remove).
+- **More** (collapsed on a phone): example messages, system prompt, post-history instructions, Character's Note
+  (`extensions.depth_prompt` with depth and role), talkativeness (`extensions.talkativeness`, 0 to 1), tags, creator,
+  character version and creator notes.
+- **Put in the card:** the pack (disabled `[storysuite:pack]`), the lore (the entries the Lorebook page builds, enabled),
+  the portraits (disabled `[storysuite:portraits]`, each picture shrunk in the browser to webp of about 40 KB; at most 24
+  files, 200 KB each and 3 MB in all), the status bar (`extensions.regex_scripts`, a copy of Story Block's
+  `examples/cards/status-bar`, kept in `vendor/story-block-examples/`), recommended settings (disabled
+  `[storysuite:settings]`; only ticked rows are written) and Card's own lore. Each row shows what it adds, in bytes of
+  the card, and the total (the PNG total includes base64 and the picture).
 
-The card name must contain non-whitespace text. Both JSON and PNG downloads show an `export-error`
-notice and produce no file while the name is blank. Enter a name to enable a successful export.
+The card name must contain non-whitespace text, and talkativeness must be 0 to 1. Both downloads show an `export-error` notice and
+produce no file otherwise.
 
-**Download card JSON** exports `chara_card_v2`, version `2.0`, with the mandatory V2 fields, empty alternate
-greetings/tags and an empty extensions object. **Download card PNG** contains the exact same UTF-8 JSON,
-base64-encoded in a `chara` PNG `tEXt` chunk before `IEND`. The 128 × 192 book cover, stored DEFLATE scanlines,
-checksums and metadata are produced locally without a canvas, compression library or network. The cover is
-a placeholder; custom avatar import is outside this part. Identical pack data and edits yield identical JSON
-and PNG bytes, with no timestamps or random IDs.
+**Download card JSON** writes `chara_card_v2`, version `2.0`, as compact JSON. **Download card PNG** holds the exact same
+text, base64-encoded in a `chara` tEXt chunk before `IEND` of the card image. Identical inputs yield identical bytes.
 
 The default description copies the line shape, operators and five examples from
 [Story Block SPEC §4.4](https://github.com/kohz87/Story_block/blob/708e2ae986361f1aa1ed27617c4957f95efe4343/docs/v2/SPEC.md#44-the-change-line-grammar):
@@ -250,12 +255,11 @@ determinism, local-only records, all import types, refusal isolation, duplicate 
 distribution on a `file:` URL, blocks every other request, checks literal hostile-text rendering and collects
 page/console errors. It also checks that the browser decodes the PNG, that imported drafts undo correctly,
 and that card/lorebook export does not clear unsaved pack edits. Screenshots are written to the ignored
-`artifacts/part-3/narrator-card.png`, `artifacts/part-3/lorebook.png` and `artifacts/part-3/lore-import.png`.
+`artifacts/part-3/narrator-card.png` (the Character card page), `artifacts/part-3/lorebook.png` and `artifacts/part-3/lore-import.png`.
 Set `STUDIO_SCREENSHOTS_DIR` to change that directory, or `STUDIO_CHROMIUM_PATH` to use an existing browser.
 
 ## Known issues
 
-- Narrator card drafts disappear on page reload; download the card before reloading.
 - Lorebook review decisions stay “accepted” after Undo removes the accepted record from the pack.
 - Switching presentation records silently discards unapplied form drafts.
 - Packs cannot supply per-module settings defaults.
@@ -404,7 +408,7 @@ vendored host. For a reproducible rebuild, run `npm run -s build` twice and comp
 
 ## Part 5a: data module authoring
 
-**Data modules** (content navigation, between Screen builder and Narrator card) edits `content.dataModules`, the
+**Data modules** (content navigation, between Screen builder and Character card) edits `content.dataModules`, the
 closed JSON definitions described in Story Block's `docs/v2/DATA_MODULES.md` (§8 and the approved decisions win over
 anything earlier in that document). Studio edits and explains; Story Block checks and runs.
 
@@ -588,7 +592,7 @@ deterministic (build twice, same hash), the page makes no requests, and every pi
 The **Code module** section (rail, after Data modules) writes a starter SillyTavern extension that is a real Story Suite v2
 module. The author fills one form, downloads a zip, runs `git init` and `npm test` in the unzipped folder, installs it and
 grows it. Everything runs in the page: no network, no model call. The section works with or without a pack open and never
-reads or changes the pack, its history, its saved draft or its dirty state. The draft is session-only, like the narrator card.
+reads or changes the pack, its history, its saved draft or its dirty state. The draft is session-only.
 
 What the form makes (`src/code-module/`, `src/screens/code-module.js`):
 

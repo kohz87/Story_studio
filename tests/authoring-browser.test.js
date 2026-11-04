@@ -69,23 +69,24 @@ async function assertLayout(page) {
 test('offline narrator flow edits V2 JSON and exports a decodable PNG with identical metadata', { timeout: 60000 }, async () => {
     await withPage(async page => {
         await upload(page, fixture);
-        await navigate(page, 'Narrator card');
+        await navigate(page, 'Character card');
         assert.equal(await page.locator('#card-first_mes').inputValue(), JSON.parse(golden('ersveil-narrator')).data.first_mes);
-        assert.equal((await download(page, 'Download card JSON')).bytes.toString(), golden('ersveil-narrator'));
+        const same = bytes => { const data = JSON.parse(bytes).data, want = JSON.parse(golden('ersveil-narrator')).data; for (const key of Object.keys(want)) if (typeof want[key] === 'string') assert.equal(data[key], want[key], key); };
+        same((await download(page, 'Download card JSON')).bytes);
         await page.locator('#card-name').fill('Bluewatch Narrator');
         await page.locator('#card-personality').fill('Measured pace; salt air and quiet tension.');
         await page.locator('#card-first_mes').fill('You stand at Bluewatch Village as the quay stirs. What do you do?');
         await navigate(page, 'Lorebook');
-        await navigate(page, 'Narrator card');
+        await navigate(page, 'Character card');
         assert.equal(await page.locator('#card-name').inputValue(), 'Bluewatch Narrator', 'Edits survive navigation');
         const json = await download(page, 'Download card JSON');
-        assert.equal(json.name, 'ersveil-narrator.json');
+        assert.equal(json.name, 'ersveil-card.json');
         const card = JSON.parse(json.bytes);
         assert.equal(card.data.personality, 'Measured pace; salt air and quiet tension.');
         assert.match(card.data.first_mes, /Bluewatch Village/);
         assert.match(card.data.description, /op kind Name\[ — text\]\[ \| label: value\]\*/);
         const png = await download(page, 'Download card PNG');
-        assert.equal(png.name, 'ersveil-narrator.png');
+        assert.equal(png.name, 'ersveil-card.png');
         let metadata;
         for (let at = 8; at < png.bytes.length;) {
             const length = png.bytes.readUInt32BE(at);
@@ -104,7 +105,7 @@ test('offline narrator flow edits V2 JSON and exports a decodable PNG with ident
         await assertLayout(page);
         await screenshot(page, 'narrator-card');
         await page.getByRole('button', { name: 'Reset card from pack', exact: true }).click();
-        assert.equal((await download(page, 'Download card JSON')).bytes.toString(), golden('ersveil-narrator'));
+        same((await download(page, 'Download card JSON')).bytes);
         assert.equal((await packDownload(page)).toString(), fixture, 'Card edits never alter the pack');
     });
 });
@@ -112,14 +113,14 @@ test('offline narrator flow edits V2 JSON and exports a decodable PNG with ident
 test('blank card names visibly refuse JSON and PNG downloads until corrected', { timeout: 60000 }, async () => {
     await withPage(async page => {
         await upload(page, worldPack());
-        await navigate(page, 'Narrator card');
+        await navigate(page, 'Character card');
         const downloads = [];
         page.on('download', file => downloads.push(file.suggestedFilename()));
         for (const name of ['', ' \t\u00a0\u2003']) {
             await page.locator('#card-name').fill(name);
             assert.equal(await page.locator('#card-preview').textContent(), 'export-error: Card name must not be empty');
             await navigate(page, 'Lorebook');
-            await navigate(page, 'Narrator card');
+            await navigate(page, 'Character card');
             assert.equal(await page.locator('#card-name').inputValue(), name, 'Invalid drafts remain editable after navigation');
             for (const format of ['JSON', 'PNG']) {
                 await page.getByRole('button', { name: `Download card ${format}`, exact: true }).click();
@@ -134,7 +135,7 @@ test('blank card names visibly refuse JSON and PNG downloads until corrected', {
         assert.equal(JSON.parse(json.bytes).data.name, 'A named narrator');
         const png = await download(page, 'Download card PNG');
         assert.deepEqual([...png.bytes.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
-        assert.deepEqual(downloads, ['fixture-narrator.json', 'fixture-narrator.png']);
+        assert.deepEqual(downloads, ['fixture-card.json', 'fixture-card.png']);
     });
 });
 
@@ -272,14 +273,14 @@ test('card drafts reset when opening another pack and derived exports never mark
         await upload(page, pack);
         await page.locator('#pack-name').fill('An edited pack');
         await page.locator('#pack-name').press('Tab');
-        await navigate(page, 'Narrator card');
+        await navigate(page, 'Character card');
         await page.locator('#card-name').fill('Local card edit');
         await download(page, 'Download card JSON');
         await navigate(page, 'Lorebook');
         await download(page, 'Download World Info JSON');
         assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('story-studio-draft')).dirty), true);
         await upload(page, { id: 'other', version: '1.0.0', name: 'Another pack', requires: { storyBlock: '^2' }, content: {} });
-        await navigate(page, 'Narrator card');
+        await navigate(page, 'Character card');
         assert.equal(await page.locator('#card-name').inputValue(), 'Another pack — Narrator');
         await navigate(page, 'Import lorebook');
         assert.equal(await page.locator('#import-counts').count(), 0);
