@@ -8,7 +8,9 @@
   control (a name used twice by one person, more than the limit, a bad stat, uses or rank). The Cast list shows a
   "3 skills" tag and Check / export counts them. They are written as `cast[].skills` and read back from a pack, a .zip
   and the saved draft. Until the vendored Story Block carries its own check, Studio reads these rules itself
-  (`src/cast/skills.js`, stepped aside once `cast` knows `skills`); the limit is one constant that follows Story Block's.
+  (`src/cast/skills.js`, stepped aside once `cast` knows `skills`); the limit is one constant that follows Story Block's `CAST_LIMITS.skills` (5 now, 8 after the sync).
+  The stat is saved in lowercase (`int`), as Story Block requires, and shown in capitals; Studio's own check compares
+  stat, uses and rank exactly and refuses `< > { } |` in a name or description, as Story Block does.
 
 ## 0.8.0
 

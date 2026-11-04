@@ -6,7 +6,7 @@
 // same rules and `withCastSkillsChecked` (model.js) lets it stand in until the vendored checker has them (see VENDOR_CHECKS_SKILLS).
 // Once a sync brings Story Block's own check, both give way to it and this file keeps only the form's constants.
 
-import { CAST_FIELDS, LEAN_RPG_LIMITS } from '../../vendor/story-block/src/v2/packs/limits.js';
+import { CAST_FIELDS, CAST_LIMITS, LEAN_RPG_LIMITS } from '../../vendor/story-block/src/v2/packs/limits.js';
 import { foldKey, oneLine } from '../../vendor/story-block/src/text.js';
 
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -14,10 +14,11 @@ const isRecord = value => value !== null && typeof value === 'object' && !Array.
 /** True when the vendored Story Block copy reads `cast[].skills` itself; then Studio checks nothing of its own. */
 export const VENDOR_CHECKS_SKILLS = CAST_FIELDS.includes('skills');
 
-// One constant: 5 slots today, 8 once the extra skill slots land in Story Block (LEAN_RPG_LIMITS.skills follows it after a sync).
-export const SKILL_SLOTS = LEAN_RPG_LIMITS.skills;
+// One constant: 5 slots today, 8 once a sync brings Story Block's CAST_LIMITS.skills (the cast list's own limit, not the skill-set one).
+export const SKILL_SLOTS = CAST_LIMITS.skills ?? 5;
 export const SKILL_FIELDS = Object.freeze(['name', 'about', 'stat', 'uses', 'rank']);
-export const SKILL_STATS = Object.freeze(LEAN_RPG_LIMITS.stats.map(stat => stat.toUpperCase()));
+// Stored lowercase, as Story Block's checker has them; the form shows them in capitals (statLabel).
+export const SKILL_STATS = Object.freeze([...LEAN_RPG_LIMITS.stats]);
 export const SKILL_USES = Object.freeze(['stamina', 'mana']);
 export const SKILL_RANKS = Object.freeze(['novice', 'adept', 'expert', 'master']);
 export const SKILL_LIMITS = Object.freeze({ name: LEAN_RPG_LIMITS.skillName, about: LEAN_RPG_LIMITS.skillAbout });
@@ -25,12 +26,15 @@ export const SKILL_LIMITS = Object.freeze({ name: LEAN_RPG_LIMITS.skillName, abo
 const titleCase = word => word.charAt(0).toUpperCase() + word.slice(1);
 export const usesLabel = uses => titleCase(uses);
 export const rankLabel = rank => titleCase(rank);
+export const statLabel = stat => stat.toUpperCase();
+// Story Block's plain-text rule for a skill's name and what it does.
+const SHORT = /[<>{}|]/;
 
-/** The skill as the form shows it: the defaults filled in, the stat in capitals. */
+/** The skill as the form shows it: the defaults filled in, every value as written. */
 export function skillView(skill) {
-    const stat = typeof skill?.stat === 'string' ? skill.stat.trim().toUpperCase() : '';
-    const uses = typeof skill?.uses === 'string' ? skill.uses.trim().toLowerCase() : skill?.uses === undefined ? SKILL_USES[0] : '';
-    const rank = typeof skill?.rank === 'string' ? skill.rank.trim().toLowerCase() : skill?.rank === undefined ? SKILL_RANKS[0] : '';
+    const stat = typeof skill?.stat === 'string' ? skill.stat : '';
+    const uses = typeof skill?.uses === 'string' ? skill.uses : skill?.uses === undefined ? SKILL_USES[0] : '';
+    const rank = typeof skill?.rank === 'string' ? skill.rank : skill?.rank === undefined ? SKILL_RANKS[0] : '';
     return { name: typeof skill?.name === 'string' ? skill.name : '', about: typeof skill?.about === 'string' ? skill.about : '', stat, uses, rank };
 }
 
@@ -58,14 +62,19 @@ export function checkCastSkills(skills, base, label) {
         const at = `skills[${index}]`;
         if (!isRecord(skill)) return say(at, `${at} must be an object.`);
         for (const key of Object.keys(skill)) if (!SKILL_FIELDS.includes(key)) say(`${at}.${key}`, `"${key}" is not a skill field (expected ${SKILL_FIELDS.join(', ')}).`, 'UNKNOWN_FIELD');
-        const name = typeof skill.name === 'string' ? oneLine(skill.name) : '';
-        if (!name || [...name].length > SKILL_LIMITS.name) say(`${at}.name`, `${at}.name must be text of 1 to ${SKILL_LIMITS.name} characters.`);
-        else if (seen.includes(foldKey(name))) say(`${at}.name`, `${at}.name repeats "${name}"; a person names each skill once.`, 'DUPLICATE');
-        else seen.push(foldKey(name));
-        const about = typeof skill.about === 'string' ? oneLine(skill.about) : '';
-        if (!about || [...about].length > SKILL_LIMITS.about) say(`${at}.about`, `${at}.about must be text of 1 to ${SKILL_LIMITS.about} characters (what the skill does; the story reads it).`);
+        const plain = (key, value, max) => {
+            const line = typeof value === 'string' ? oneLine(value) : '';
+            if (!line) { say(`${at}.${key}`, `${at}.${key} must be text of 1 to ${max} characters.`); return ''; }
+            if ([...line].length > max) { say(`${at}.${key}`, `${at}.${key} must be text of at most ${max} characters.`); return ''; }
+            if (SHORT.test(line)) { say(`${at}.${key}`, `${at}.${key} is plain text: no < > { } |.`); return ''; }
+            return line;
+        };
+        const name = plain('name', skill.name, SKILL_LIMITS.name);
+        plain('about', skill.about, SKILL_LIMITS.about);
+        if (name && seen.includes(foldKey(name))) say(`${at}.name`, `${at}.name repeats "${name}"; a person names each skill once.`, 'DUPLICATE');
+        else if (name) seen.push(foldKey(name));
         const view = skillView(skill);
-        if (!SKILL_STATS.includes(view.stat)) say(`${at}.stat`, `${at}.stat must be one of ${SKILL_STATS.join(', ').toLowerCase()}.`);
+        if (!SKILL_STATS.includes(view.stat)) say(`${at}.stat`, `${at}.stat must be one of ${SKILL_STATS.join(', ')}.`);
         if (!SKILL_USES.includes(view.uses)) say(`${at}.uses`, `${at}.uses must be ${SKILL_USES.join(' or ')}.`);
         if (!SKILL_RANKS.includes(view.rank)) say(`${at}.rank`, `${at}.rank must be one of ${SKILL_RANKS.join(', ')}.`);
     });

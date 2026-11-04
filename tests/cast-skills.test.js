@@ -1,5 +1,7 @@
 // A cast member's signature skills: the checker rules, the form on the shared test DOM, the list tag, and the pack as it is written and read back.
 import test from 'node:test';
+import { existsSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 import { openPack, exportPack } from '../src/model.js';
 import { setSchemaField } from '../src/edits.js';
@@ -10,12 +12,12 @@ import { readDraft, writeDraft } from '../src/session.js';
 import { createTestContext } from './helpers/dom.js';
 import { castPack } from './fixtures/cast.js';
 
-const skill = (name, extra = {}) => ({ name, about: 'Does a thing.', stat: 'STR', uses: 'stamina', rank: 'novice', ...extra });
+const skill = (name, extra = {}) => ({ name, about: 'Does a thing.', stat: 'str', uses: 'stamina', rank: 'novice', ...extra });
 const withSkills = (skills, at = 0) => { const pack = castPack(); pack.content.cast[at].skills = skills; return pack; };
 const three = () => [
     skill('Long Watch Cleave', { rank: 'expert' }),
-    skill('Beacon Call', { stat: 'CHA', rank: 'adept' }),
-    skill('Hold the Line', { stat: 'VIT', rank: 'master' }),
+    skill('Beacon Call', { stat: 'cha', rank: 'adept' }),
+    skill('Hold the Line', { stat: 'vit', rank: 'master' }),
 ];
 const problems = pack => openPack(JSON.stringify(pack)).validation.errors.map(error => error.message);
 
@@ -55,20 +57,20 @@ test('a name once per person, ignoring case; the same name for two people is fin
 
 test('name 1 to 40 and what it does 1 to 120 characters', () => {
     assert.match(problems(withSkills([skill('')]))[0], /skills\[0\]\.name must be text of 1 to 40 characters\./);
-    assert.match(problems(withSkills([skill('x'.repeat(41))]))[0], /skills\[0\]\.name must be text of 1 to 40/);
+    assert.match(problems(withSkills([skill('x'.repeat(41))]))[0], /skills\[0\]\.name must be text of at most 40 characters\./);
     assert.deepEqual(problems(withSkills([skill('x'.repeat(40), { about: 'y'.repeat(120) })])), []);
-    assert.match(problems(withSkills([skill('A', { about: 'y'.repeat(121) })]))[0], /skills\[0\]\.about must be text of 1 to 120 characters/);
+    assert.match(problems(withSkills([skill('A', { about: 'y'.repeat(121) })]))[0], /skills\[0\]\.about must be text of at most 120 characters\./);
     assert.match(problems(withSkills([skill('A', { about: '' })]))[0], /skills\[0\]\.about must be text of 1 to 120/);
 });
 
 test('stat, uses and rank are checked, and a key the checker does not know is refused', () => {
-    assert.deepEqual(SKILL_STATS, ['STR', 'VIT', 'AGI', 'DEX', 'INT', 'LUK', 'CHA']);
+    assert.deepEqual(SKILL_STATS, ['str', 'vit', 'agi', 'dex', 'int', 'luk', 'cha']);
     assert.match(problems(withSkills([skill('A', { stat: 'CON' })]))[0], /skills\[0\]\.stat must be one of str, vit, agi, dex, int, luk, cha\./);
     assert.match(problems(withSkills([skill('A', { uses: 'rage' })]))[0], /skills\[0\]\.uses must be stamina or mana\./);
     assert.match(problems(withSkills([skill('A', { rank: 'legend' })]))[0], /skills\[0\]\.rank must be one of novice, adept, expert, master\./);
     assert.match(problems(withSkills([skill('A', { level: 3 })]))[0], /"level" is not a skill field \(expected name, about, stat, uses, rank\)\./);
     assert.match(problems(withSkills(['A']))[0], /skills\[0\] must be an object\./);
-    assert.equal(openPack(JSON.stringify(withSkills([skill('A', { stat: ' cha ', uses: 'MANA', rank: 'Master' })]))).validation.errors.length, 0);
+    assert.equal(openPack(JSON.stringify(withSkills([skill('A', { stat: 'cha', uses: 'mana', rank: 'master' })]))).validation.errors.length, 0);
 });
 
 test('checkCastSkills gives each problem its path', () => {
@@ -82,7 +84,7 @@ test('the form: a section after “Before they are met” and before Secrets, wi
     assert.match(section(ctx).textContent, /Filled into their skill slots when they join; free slots stay for the story\./);
     assert.equal(cards(ctx).length, 3);
     assert.equal(ctx.inspector.querySelector(path(0, 'name')).value, 'Long Watch Cleave');
-    assert.equal(ctx.inspector.querySelector(path(1, 'stat')).value, 'CHA');
+    assert.equal(ctx.inspector.querySelector(path(1, 'stat')).value, 'cha');
     assert.equal(ctx.inspector.querySelector(path(0, 'rank')).value, 'expert');
     assert.equal(section(ctx).querySelectorAll('.tl-count')[0].textContent, '17 / 40');
     assert.equal(section(ctx).querySelectorAll('.tl-count')[1].textContent, '13 / 120');
@@ -100,7 +102,7 @@ test('a person without skills has an empty section and an Add button; the pack s
 test('add: a new skill starts from placeholders with a name nobody has, up to five, in one undo step', () => {
     const ctx = open(castPack());
     press(section(ctx), '+ Add skill');
-    assert.deepEqual(saved(ctx), [{ name: 'New skill', about: '[WHAT IT DOES]', stat: 'STR', uses: 'stamina', rank: 'novice' }]);
+    assert.deepEqual(saved(ctx), [{ name: 'New skill', about: '[WHAT IT DOES]', stat: 'str', uses: 'stamina', rank: 'novice' }]);
     assert.deepEqual(ctx.model.validation.errors, []);
     for (let n = 0; n < 4; n++) press(section(ctx), '+ Add skill');
     assert.deepEqual(saved(ctx).map(item => item.name), ['New skill', 'New skill 2', 'New skill 3', 'New skill 4', 'New skill 5']);
@@ -115,10 +117,10 @@ test('edit: name, what it does, stat, rank and uses are saved as whole rows, one
     change(ctx.inspector.querySelector(path(1, 'name')), '  Rallying   Horn ');
     assert.equal(saved(ctx)[1].name, 'Rallying Horn');
     change(ctx.inspector.querySelector(path(1, 'about')), 'A blast that rallies the party.');
-    change(ctx.inspector.querySelector(path(1, 'stat')), 'DEX');
+    change(ctx.inspector.querySelector(path(1, 'stat')), 'dex');
     change(ctx.inspector.querySelector(path(1, 'rank')), 'master');
     press(cards(ctx)[1], 'Mana');
-    assert.deepEqual(saved(ctx)[1], { name: 'Rallying Horn', about: 'A blast that rallies the party.', stat: 'DEX', uses: 'mana', rank: 'master' });
+    assert.deepEqual(saved(ctx)[1], { name: 'Rallying Horn', about: 'A blast that rallies the party.', stat: 'dex', uses: 'mana', rank: 'master' });
     assert.deepEqual(saved(ctx)[0], three()[0]);
     ctx.history.undo(); ctx.render();
     assert.equal(saved(ctx)[1].uses, 'stamina');
@@ -129,7 +131,7 @@ test('a skill written without uses or rank shows the defaults and is written out
     assert.equal(ctx.inspector.querySelector(path(0, 'rank')).value, 'novice');
     assert.equal(cards(ctx)[0].querySelectorAll('.cf-seg button')[0].getAttribute('aria-pressed'), 'true');
     change(ctx.inspector.querySelector(path(0, 'about')), 'A bigger burst.');
-    assert.deepEqual(saved(ctx)[0], { name: 'Spark', about: 'A bigger burst.', stat: 'INT', uses: 'stamina', rank: 'novice' });
+    assert.deepEqual(saved(ctx)[0], { name: 'Spark', about: 'A bigger burst.', stat: 'int', uses: 'stamina', rank: 'novice' });
 });
 
 test('move up and down changes the slot order; Remove drops a skill, and the last one takes the field away', () => {
@@ -209,7 +211,7 @@ test('a skill edited in the form goes out in the exported pack and opens again',
     change(ctx.inspector.querySelector(path(0, 'name')), 'Long Watch Cleave');
     change(ctx.inspector.querySelector(path(0, 'about')), 'A two-handed sweep.');
     const text = exportPack(ctx.model);
-    assert.deepEqual(JSON.parse(text).content.cast[0].skills, [{ name: 'Long Watch Cleave', about: 'A two-handed sweep.', stat: 'STR', uses: 'stamina', rank: 'novice' }]);
+    assert.deepEqual(JSON.parse(text).content.cast[0].skills, [{ name: 'Long Watch Cleave', about: 'A two-handed sweep.', stat: 'str', uses: 'stamina', rank: 'novice' }]);
     assert.deepEqual(openPack(text).validation.errors, []);
 });
 
@@ -223,4 +225,61 @@ test('the browser draft keeps the skills, including ones the checker refuses, so
         assert.deepEqual(back.model.document.content.cast[0].skills, skills);
         assert.deepEqual(back.model.validation.errors.map(error => error.message), model.validation.errors.map(error => error.message));
     }
+});
+
+test('the stopgap applies Story Block’s exact rules: plain text, and stat, uses and rank compared as written', () => {
+    assert.match(problems(withSkills([skill('Cut | thrust')]))[0], /skills\[0\]\.name is plain text: no < > \{ \} \|\./);
+    assert.match(problems(withSkills([skill('A', { about: 'Does {a} thing.' })]))[0], /skills\[0\]\.about is plain text/);
+    assert.match(problems(withSkills([skill('A', { stat: 'STR' })]))[0], /skills\[0\]\.stat must be one of str, vit/);
+    assert.match(problems(withSkills([skill('A', { uses: 'Mana' })]))[0], /skills\[0\]\.uses must be stamina or mana\./);
+    assert.match(problems(withSkills([skill('A', { rank: 'Adept' })]))[0], /skills\[0\]\.rank must be one of novice/);
+});
+
+test('the skill cap follows CAST_LIMITS.skills when the vendor exposes 8: six skills are accepted and the title reads "of 8"', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    // A scratch copy of the Studio source whose vendored limits carry skills: 8, as after the re-sync.
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-eight-'));
+    try {
+        fs.writeFileSync(path.join(root, 'package.json'), '{ "type": "module" }');
+        for (const dir of ['vendor', 'src', 'tests/helpers', 'tests/fixtures']) fs.cpSync(new URL(`../${dir}`, import.meta.url), path.join(root, dir), { recursive: true });
+        const copy = path.join(root, 'vendor/story-block/src/v2/packs/limits.js');
+        const text = fs.readFileSync(copy, 'utf8');
+        assert.match(text, /secrets: 8, secretTitle: 60/);
+        fs.writeFileSync(copy, text.replace('secrets: 8, secretTitle: 60', 'secrets: 8, skills: 8, secretTitle: 60'));
+        const load = file => import(pathToFileURL(path.join(root, file)).href);
+        const [eight, model, screens, dom, fixtures] = await Promise.all([load('src/cast/skills.js'), load('src/model.js'), load('src/screens/index.js'), load('tests/helpers/dom.js'), load('tests/fixtures/cast.js')]);
+        assert.equal(eight.SKILL_SLOTS, 8);
+        const pack = fixtures.castPack();
+        pack.content.cast[0].skills = Array.from({ length: 6 }, (_, n) => skill(`Skill ${n + 1}`));
+        const ctx = dom.createTestContext(model.openPack(pack));
+        ctx.onRender = screens.renderScreen;
+        ctx.select('cast', 'fenna');
+        assert.deepEqual(ctx.model.validation.errors, []);
+        const set = ctx.inspector.querySelector('[data-cf="skills"]');
+        assert.equal(set.querySelector('legend').textContent, 'Signature skills · 6 of 8');
+        assert.equal(set.querySelectorAll('button').find(node => node.textContent === '+ Add skill').disabled, false);
+        pack.content.cast[0].skills.push(skill('S7'), skill('S8'), skill('S9'));
+        assert.match(model.openPack(JSON.stringify(pack)).validation.errors[0].message, /skills must be a list of 1 to 8 skills/);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+// Story Block's own checker (stage66/skills, d81df59) decides whether the exported pack is accepted. Point STORY_BLOCK_SKILLS at that checkout.
+const sbRoot = process.env.STORY_BLOCK_SKILLS ?? '/tmp/claude-0/-home-user-inventory-block/3572f065-fdf3-5cf4-88eb-a15358a57ebe/scratchpad/rv222-studio/sb';
+const sbHere = existsSync(`${sbRoot}/src/v2/packs/validate.js`);
+test('a skill added and edited in the browser form exports stat "int", and Story Block’s validatePack accepts the pack', { skip: sbHere ? false : 'no Story Block stage66/skills checkout (set STORY_BLOCK_SKILLS)' }, async () => {
+    const { validatePack } = await import(pathToFileURL(`${sbRoot}/src/v2/packs/validate.js`).href);
+    const ctx = open(castPack());
+    press(section(ctx), '+ Add skill');
+    change(ctx.inspector.querySelector(path(0, 'name')), 'Spark');
+    change(ctx.inspector.querySelector(path(0, 'about')), 'A small burst of magic.');
+    change(ctx.inspector.querySelector(path(0, 'stat')), 'int');
+    press(cards(ctx)[0], 'Mana');
+    change(ctx.inspector.querySelector(path(0, 'rank')), 'adept');
+    const text = exportPack(ctx.model);
+    assert.deepEqual(JSON.parse(text).content.cast[0].skills, [{ name: 'Spark', about: 'A small burst of magic.', stat: 'int', uses: 'mana', rank: 'adept' }]);
+    const verdict = validatePack(text);
+    assert.deepEqual(verdict.errors ?? [], []);
+    assert.equal(verdict.ok, true);
 });

@@ -18,7 +18,7 @@ import {
     CAST_LIMITS, METER_LIMITS, PORTRAIT_LIMITS, PLACEHOLDER_ID, cardTags, idForName, meterLabel, metersOf, newPerson, pictureOf, placeNames,
     playerView, portraitNames, presetChoices, problemsAt, problemsExactly, problemsOfPerson,
 } from '../cast/data.js';
-import { SKILL_LIMITS, SKILL_RANKS, SKILL_SLOTS, SKILL_STATS, SKILL_USES, newSkill, rankLabel, skillView, usesLabel } from '../cast/skills.js';
+import { SKILL_LIMITS, SKILL_RANKS, SKILL_SLOTS, SKILL_STATS, SKILL_USES, newSkill, rankLabel, skillView, statLabel, usesLabel } from '../cast/skills.js';
 
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -483,7 +483,7 @@ function skillCard(ctx, index, skills, at) {
     const mode = el(doc, 'span', '', { class: 'cf-seg' });
     for (const value of SKILL_USES) mode.append(button(doc, usesLabel(value), () => { if (view.uses !== value) save(target => { target.uses = value; }); }, { 'aria-pressed': String(view.uses === value) }));
     uses.append(mode);
-    row.append(choose('stat', 'Stat', SKILL_STATS, value => value), choose('rank', 'Rank', SKILL_RANKS, rankLabel), uses);
+    row.append(choose('stat', 'Stat', SKILL_STATS, statLabel), choose('rank', 'Rank', SKILL_RANKS, rankLabel), uses);
     card.append(row);
     for (const key of ['stat', 'uses', 'rank']) {
         const problem = problemNote(doc, model, [...base, key]);

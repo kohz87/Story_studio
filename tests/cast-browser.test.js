@@ -438,9 +438,9 @@ test('the story event beside a meter secret keeps the target size, labels and co
 const SKILLED = () => {
     const cast = castEntries();
     cast[0].skills = [
-        { name: 'Long Watch Cleave', about: 'A two-handed sweep with the greataxe that clears the line.', stat: 'STR', uses: 'stamina', rank: 'expert' },
-        { name: 'Beacon Call', about: 'A blast on the carved horn that rallies the party.', stat: 'CHA', uses: 'stamina', rank: 'adept' },
-        { name: 'Hold the Line', about: 'Plants a boot and takes the blow meant for another.', stat: 'VIT', uses: 'stamina', rank: 'master' },
+        { name: 'Long Watch Cleave', about: 'A two-handed sweep with the greataxe that clears the line.', stat: 'str', uses: 'stamina', rank: 'expert' },
+        { name: 'Beacon Call', about: 'A blast on the carved horn that rallies the party.', stat: 'cha', uses: 'stamina', rank: 'adept' },
+        { name: 'Hold the Line', about: 'Plants a boot and takes the blow meant for another.', stat: 'vit', uses: 'stamina', rank: 'master' },
     ];
     return JSON.stringify(castPack({ cast }));
 };
@@ -462,7 +462,7 @@ test('signature skills: the section opens with its cards, the list tag counts th
         await page.getByLabel('Skill 4 name', { exact: true }).press('Tab');
         await page.getByLabel('Skill 4 what it does', { exact: true }).fill('A small burst of magic.');
         await page.getByLabel('Skill 4 what it does', { exact: true }).press('Tab');
-        await page.getByLabel('Skill 4 stat', { exact: true }).selectOption('INT');
+        await page.getByLabel('Skill 4 stat', { exact: true }).selectOption('int');
         await page.getByLabel('Skill 4 rank', { exact: true }).selectOption('novice');
         await page.getByRole('group', { name: 'Skill 4 uses' }).getByRole('button', { name: 'Mana' }).click();
         assert.equal(await page.locator('.topbar').getByRole('button', { name: /^Problems/ }).innerText(), 'Problems (0)');
@@ -472,7 +472,7 @@ test('signature skills: the section opens with its cards, the list tag counts th
         const plain = await downloaded(page, '#export-btn');
         const skills = JSON.parse(new TextDecoder().decode(plain.bytes)).content.cast[0].skills;
         assert.equal(skills.length, 4);
-        assert.deepEqual(skills[3], { name: 'Spark', about: 'A small burst of magic.', stat: 'INT', uses: 'mana', rank: 'novice' });
+        assert.deepEqual(skills[3], { name: 'Spark', about: 'A small burst of magic.', stat: 'int', uses: 'mana', rank: 'novice' });
         assert.match((await page.locator('.cf-list li').allInnerTexts()).find(line => line.startsWith('Signature skills')), /^Signature skills: 4 for 1 person/);
     });
 });
@@ -482,9 +482,9 @@ test('signature skills: a repeated name shows the checker’s line under it and 
         await withPage({ width, height }, async page => {
             const cast = castEntries();
             cast[0].skills = [
-                { name: 'Beacon Call', about: 'A blast on the carved horn.', stat: 'CHA', uses: 'stamina', rank: 'adept' },
-                { name: 'Hold the Line', about: 'Takes the blow meant for another.', stat: 'VIT', uses: 'stamina', rank: 'master' },
-                { name: 'beacon call', about: 'Again.', stat: 'STR', uses: 'mana', rank: 'novice' },
+                { name: 'Beacon Call', about: 'A blast on the carved horn.', stat: 'cha', uses: 'stamina', rank: 'adept' },
+                { name: 'Hold the Line', about: 'Takes the blow meant for another.', stat: 'vit', uses: 'stamina', rank: 'master' },
+                { name: 'beacon call', about: 'Again.', stat: 'str', uses: 'mana', rank: 'novice' },
             ];
             await load(page, JSON.stringify(castPack({ cast })));
             await openPerson(page, 'Fenna');
