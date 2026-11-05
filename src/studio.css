@@ -309,3 +309,12 @@ details.cc-box>summary{font-size:20px;font-weight:800}
 .cc-downloads{flex-wrap:nowrap}.cc-downloads button{flex:1}
 [aria-invalid=true]{border-color:var(--danger)}
 @media(max-width:600px){.cc-row{grid-template-columns:44px minmax(0,1fr) auto}.cc-setting{grid-template-columns:44px minmax(0,1fr) minmax(0,120px)}.cc-settings{padding-left:0}}
+.cf-list-rows{display:flex;flex-direction:column;gap:6px}
+.cf-levers{container-type:inline-size}
+.cf-lever{display:grid;grid-template-columns:minmax(0,9em) minmax(0,6.5em) minmax(0,1fr) auto;gap:6px;align-items:center}
+.cf-lever select,.cf-lever input,.cf-item input{width:100%;min-width:0}
+.cf-lever select{padding-inline:8px 2px;font-size:13px}
+.cf-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center}
+@container (max-width:460px){.cf-lever{grid-template-columns:minmax(0,8fr) minmax(0,5fr) auto}.cf-lever input{grid-column:1/-1;grid-row:2}}
+.cf-x{width:44px;height:44px;color:var(--muted)}
+.cf-add{align-self:flex-start;border-color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:0 14px;font-weight:700}

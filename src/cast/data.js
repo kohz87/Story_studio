@@ -1,7 +1,7 @@
 // The cast, read from a pack (pure): what the list, the form, the player-view preview and the check say. Every limit comes from
 // Story Block's own limits (vendor/.../packs/limits.js) and every problem from its checker; nothing is judged here twice.
 
-import { CAST_BUILT_IN_METERS, CAST_LIMITS, METER_LIMITS, PORTRAIT_LIMITS } from '../../vendor/story-block/src/v2/packs/limits.js';
+import { CAST_BEHAVIOUR_LEVELS, CAST_BEHAVIOUR_LEVERS, CAST_BUILT_IN_METERS, CAST_LIMITS, METER_LIMITS, PORTRAIT_LIMITS } from '../../vendor/story-block/src/v2/packs/limits.js';
 import { slugify } from '../../vendor/story-block/src/v2/packs/validate.js';
 import { foldKey } from '../../vendor/story-block/src/text.js';
 import { crc32 } from '../../vendor/story-block/src/v2/packs/zip.js';
@@ -9,7 +9,7 @@ import { records } from '../records.js';
 import { portraitsOf } from '../model.js';
 import { kb } from './portrait.js';
 
-export { CAST_LIMITS, METER_LIMITS, PORTRAIT_LIMITS };
+export { CAST_BEHAVIOUR_LEVELS, CAST_BEHAVIOUR_LEVERS, CAST_LIMITS, METER_LIMITS, PORTRAIT_LIMITS };
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 export const castOf = model => records(model, 'cast').filter(isRecord);

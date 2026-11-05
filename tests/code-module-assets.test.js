@@ -16,9 +16,9 @@ const vendorDir = join(root, 'vendor', 'story-block');
 const committed = readFileSync(join(root, 'src', 'code-module', 'assets.js'), 'utf8');
 const copied = new Map(VENDOR_FILES.map(([path, base64]) => [path, Buffer.from(base64, 'base64')]));
 
-// The baseline these counts describe: Story Block 2.22.5 (25505a65, main after #300: cast entries gain an optional wears). The closure contains
+// The baseline these counts describe: Story Block 2.22.5 (3487994f, branch stage73/cast-behave: cast entries gain optional behaviour, mannerisms and withYou). The closure contains
 // 224 files, so the copied set has 227 entries (the closure, plus LICENSE, package.json and the generated VERSION text).
-const BASELINE = { version: '2.22.5', commit: '25505a659dbfc593884b312b2bffda90f23b5022', files: 224 };
+const BASELINE = { version: '2.22.5', commit: '3487994f872c620a18c1248f474f11e319ef6a9f', files: 224 };
 
 test('the committed assets.js is exactly what the generator writes now', () => {
     assert.equal(committed, codeModuleAssets(root));

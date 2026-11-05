@@ -5,6 +5,7 @@ import { openPack, exportPack, withPortraits } from '../src/model.js';
 import { renderScreen } from '../src/screens/index.js';
 import { goToProblem } from '../src/screens/problems.js';
 import { createTestContext } from './helpers/dom.js';
+import { readFileSync } from 'node:fs';
 import { castEntries, castPack } from './fixtures/cast.js';
 import { webpBytes } from './helpers/images.js';
 
@@ -64,9 +65,9 @@ test('an empty cast says what a person is', () => {
 
 test('the form is in the mockup’s order', () => {
     const ctx = open();
-    assert.deepEqual(legends(ctx), ['Who they are', 'Portrait', 'Where their story starts', 'Drawn to (optional)', 'Relationship at the start', 'Before they are met', 'Signature skills · 0 of 8', 'Secrets · 3 of 8']);
+    assert.deepEqual(legends(ctx), ['Who they are', 'How they behave', 'Portrait', 'Where their story starts', 'Drawn to (optional)', 'Relationship at the start', 'Before they are met', 'Signature skills · 0 of 8', 'Secrets · 3 of 8']);
     const labels = ctx.inspector.querySelectorAll('fieldset')[0].querySelectorAll('label.field').map(node => node.childNodes[0].textContent);
-    assert.deepEqual(labels, ['Name', 'Also called', 'In one line', 'Look', 'Usually wears', 'Voice', 'Personality', 'Background', 'Key']);
+    assert.deepEqual(labels, ['Name', 'Also called', 'In one line', 'Look', 'Usually wears', 'Voice', 'Background', 'Key']);
     assert.match(ctx.inspector.textContent, /Hidden from players until they meet Fenna; then NPC State Delta makes the dossier from this, at once\./);
     assert.equal(ctx.inspector.querySelector('h2').textContent, 'Fenna');
 });
@@ -534,4 +535,167 @@ test('the player view says "or with the story" for a secret with both rules, nev
     const lines = check.main.querySelectorAll('.cf-list li').map(item => item.textContent);
     assert.equal(lines[0], 'Cast: 2 people, all fields within limits.');
     assert.ok(lines.includes('Secrets: 3, each opens at a meter or on a story event.'));
+});
+
+// --- How they behave ---------------------------------------------------------------------------------------------------
+
+const LEVERS = ['Disposition', 'Care', 'Expression', 'Independence', 'Conflict', 'Threat', 'Analytical', 'Presentation', 'Mercy', 'Loyalty', 'Drive', 'Honesty'];
+const behaving = (extra = {}) => castPack({ cast: castEntries().map((person, at) => (at === 0 ? { ...person, ...extra } : person)) });
+const group = ctx => ctx.inspector.querySelector("[data-cf='behave']");
+const named = (root, label) => { const found = ['select', 'input', 'textarea', 'button'].flatMap(tag => root.querySelectorAll(tag)).find(node => node.getAttribute('aria-label') === label || (node.tagName.toLowerCase() === 'button' && node.textContent === label)); assert.ok(found, `no control ${label}`); return found; };
+const rowsOf = ctx => group(ctx).querySelectorAll('.cf-lever');
+const habitsOf = ctx => group(ctx).querySelectorAll('.cf-item');
+const fullPack = () => behaving({
+    behaviour: ['Mercy: low - slow stitches', 'Care: high - protective', 'Loyalty: high - cannot let go', 'Independence: high - refuses', 'Presentation: high - plays on it', 'Drive: medium - restless'],
+    mannerisms: ['A weary smirk', 'Laughs at pain', 'Taps the rail', 'Hums'],
+    withYou: 'Jealous once you matter.',
+});
+
+test('How they behave holds Personality (same binding and limit), Behaviour, Mannerisms and With you, with the approved hints', () => {
+    const ctx = open();
+    const set = group(ctx);
+    assert.equal(set.querySelector('legend').textContent, 'How they behave');
+    const personality = control(ctx, 0, 'personality');
+    assert.equal(personality.tagName.toLowerCase(), 'textarea');
+    assert.equal(set.querySelectorAll('textarea').includes(personality), true);
+    assert.equal(personality.value, castEntries()[0].personality);
+    assert.equal(personality.parentElement.parentElement.querySelector('.tl-count').textContent, `${[...castEntries()[0].personality].length} / 600`);
+    const hints = set.querySelectorAll('.cf-hint').map(node => node.textContent);
+    assert.deepEqual(hints, [
+        'Who they are inside, in a few words.',
+        `How they generally respond or decide. Levers: ${LEVERS.join(', ')}. Level: low, medium or high.`,
+        'Small recurring habits you would notice in a scene.',
+        "How they treat the player character. Becomes the dossier's relationship summary at the first meeting; the story keeps it up to date after that.",
+    ]);
+    assert.equal(control(ctx, 0, 'withYou').parentElement.parentElement.querySelector('.tl-count').textContent, '0 / 400');
+    assert.equal(rowsOf(ctx).length, 0);
+    assert.equal(named(set, '+ Add a lever').disabled, false);
+});
+
+test('rows render from a pack: lever, level, effect and a remove button', () => {
+    const ctx = open(fullPack());
+    assert.equal(rowsOf(ctx).length, 6);
+    const first = rowsOf(ctx)[0];
+    assert.equal(named(first, 'Lever 1').value, 'Mercy');
+    assert.equal(named(first, 'Level 1').value, 'low');
+    assert.equal(named(first, 'Effect 1').value, 'slow stitches');
+    assert.equal(named(first, 'Remove lever 1').textContent, '✕');
+    assert.deepEqual(named(first, 'Lever 1').querySelectorAll('option').map(node => node.value), LEVERS);
+    assert.deepEqual(named(first, 'Level 1').querySelectorAll('option').map(node => node.value), ['low', 'medium', 'high']);
+    assert.equal(habitsOf(ctx).length, 4);
+    assert.equal(named(habitsOf(ctx)[2], 'Mannerism 3').value, 'Taps the rail');
+    assert.equal(control(ctx, 0, 'withYou').value, 'Jealous once you matter.');
+    assert.equal(control(ctx, 0, 'withYou').parentElement.parentElement.querySelector('.tl-count').textContent, '24 / 400');
+});
+
+test('Add a lever stops at six, Add a mannerism at four, and removing frees the button again', () => {
+    const ctx = open();
+    for (let n = 1; n <= 6; n += 1) {
+        assert.equal(rowsOf(ctx).length, n - 1);
+        press(group(ctx), '+ Add a lever');
+    }
+    assert.equal(rowsOf(ctx).length, 6);
+    assert.equal(cast(ctx)[0].behaviour.length, 6);
+    assert.equal(named(group(ctx), '+ Add a lever').disabled, true);
+    press(group(ctx), 'Remove lever 6');
+    assert.equal(named(group(ctx), '+ Add a lever').disabled, false);
+    for (let n = 1; n <= 4; n += 1) press(group(ctx), '+ Add a mannerism');
+    assert.equal(cast(ctx)[0].mannerisms.length, 4);
+    assert.equal(named(group(ctx), '+ Add a mannerism').disabled, true);
+    press(group(ctx), 'Remove mannerism 1');
+    assert.equal(cast(ctx)[0].mannerisms.length, 3);
+    assert.equal(named(group(ctx), '+ Add a mannerism').disabled, false);
+});
+
+test('a lever is used once: its option is disabled in the other rows, and a new row takes an unused lever', () => {
+    const ctx = open(behaving({ behaviour: ['Care: high - protective', 'Mercy: low - slow'] }));
+    const options = label => named(group(ctx), label).querySelectorAll('option');
+    assert.deepEqual(options('Lever 1').filter(node => node.disabled).map(node => node.value), ['Mercy']);
+    assert.deepEqual(options('Lever 2').filter(node => node.disabled).map(node => node.value), ['Care']);
+    press(group(ctx), '+ Add a lever');
+    const third = cast(ctx)[0].behaviour[2];
+    assert.match(third, /^Disposition: medium - ?$/);
+    assert.deepEqual(options('Lever 3').filter(node => node.disabled).map(node => node.value), ['Care', 'Mercy']);
+});
+
+test('edits write the strings “Lever: level - effect”, mannerism lines and withYou', () => {
+    const ctx = open();
+    press(group(ctx), '+ Add a lever');
+    change(named(group(ctx), 'Lever 1'), 'Care');
+    change(named(group(ctx), 'Level 1'), 'high');
+    change(named(group(ctx), 'Effect 1'), '  fiercely\n protective of the dead ');
+    assert.deepEqual(cast(ctx)[0].behaviour, ['Care: high - fiercely protective of the dead']);
+    assert.deepEqual(ctx.model.validation.errors, []);
+    press(group(ctx), '+ Add a mannerism');
+    change(named(group(ctx), 'Mannerism 1'), 'A weary  smirk');
+    assert.deepEqual(cast(ctx)[0].mannerisms, ['A weary smirk']);
+    edit(ctx, [0, 'withYou'], 'Cold to rivals,\n sweet to you.');
+    assert.equal(cast(ctx)[0].withYou, 'Cold to rivals, sweet to you.');
+    edit(ctx, [0, 'personality'], 'Weary.');
+    assert.equal(cast(ctx)[0].personality, 'Weary.');
+    assert.deepEqual(ctx.model.validation.errors, []);
+    undo(ctx);
+    assert.equal(cast(ctx)[0].personality, castEntries()[0].personality);
+});
+
+test('emptying everything removes behaviour, mannerisms and withYou from the entry', () => {
+    const ctx = open(fullPack());
+    for (let n = 6; n >= 1; n -= 1) press(group(ctx), `Remove lever ${n}`);
+    for (let n = 4; n >= 1; n -= 1) press(group(ctx), `Remove mannerism ${n}`);
+    edit(ctx, [0, 'withYou'], '');
+    for (const key of ['behaviour', 'mannerisms', 'withYou']) assert.equal(key in cast(ctx)[0], false, key);
+    assert.deepEqual(cast(ctx)[0], castEntries()[0]);
+});
+
+test('Story Block’s problems show under the field: a long effect, a repeated lever, a mannerism over 120', () => {
+    const ctx = open(behaving({ behaviour: ['Care: high - ok'], mannerisms: ['fine'], withYou: 'ok' }));
+    change(named(group(ctx), 'Effect 1'), 'x'.repeat(121));
+    assert.match(group(ctx).querySelector("[data-cf='behaviour'] .cf-error").textContent, /Care.*1 to 120 characters/);
+    change(named(group(ctx), 'Mannerism 1'), 'y'.repeat(121));
+    assert.match(group(ctx).querySelector("[data-cf='mannerisms'] .cf-error").textContent, /1 to 120 characters/);
+    edit(ctx, [0, 'withYou'], 'z'.repeat(401));
+    assert.match(control(ctx, 0, 'withYou').parentElement.parentElement.querySelector('.cf-error').textContent, /400/);
+    assert.ok(ctx.model.validation.errors.length >= 3);
+});
+
+test('an old pack without the new keys exports byte-identical, also after an edit and a re-open', () => {
+    const pack = castPack();
+    const text = JSON.stringify(pack, null, 2) + '\n';
+    const ctx = open(pack);
+    assert.equal(exportPack(ctx.model), text);
+    edit(ctx, [0, 'personality'], castEntries()[0].personality);
+    assert.equal(exportPack(ctx.model), text);
+    edit(ctx, [0, 'voice'], 'Quiet.');
+    const out = JSON.parse(exportPack(ctx.model)).content.cast;
+    for (const person of out) for (const key of ['behaviour', 'mannerisms', 'withYou']) assert.equal(key in person, false);
+});
+
+test('Ersveil round trip: import, edit a lever, export, re-open', () => {
+    const text = readFileSync(new URL('./fixtures/ersveil-pack.json', import.meta.url), 'utf8');
+    const ctx = createTestContext(openPack(text));
+    ctx.onRender = renderScreen;
+    ctx.select('cast', 'temiwa');
+    assert.deepEqual(ctx.model.validation.errors, []);
+    const before = ctx.model.document.content.cast[0];
+    assert.equal(before.behaviour.length, 5);
+    assert.equal(rowsOf(ctx).length, 5);
+    assert.equal(habitsOf(ctx).length, 2);
+    assert.equal(exportPack(ctx.model), text);
+    change(named(group(ctx), 'Level 1'), 'high');
+    change(named(group(ctx), 'Effect 5'), 'plays on it');
+    const out = exportPack(ctx.model);
+    assert.notEqual(out, text);
+    const person = JSON.parse(out).content.cast[0];
+    assert.equal(person.behaviour[0], before.behaviour[0].replace(/: \w+ -/, ': high -'));
+    assert.match(person.behaviour[4], / - plays on it$/);
+    assert.deepEqual(person.mannerisms, before.mannerisms);
+    assert.equal(person.withYou, before.withYou);
+    JSON.parse(out).content.cast.forEach((other, at) => { if (at !== 0) assert.deepEqual(other, JSON.parse(text).content.cast[at]); });
+    const again = createTestContext(openPack(out));
+    again.onRender = renderScreen;
+    again.select('cast', 'temiwa');
+    assert.deepEqual(again.model.validation.errors, []);
+    assert.equal(named(group(again), 'Level 1').value, 'high');
+    assert.equal(named(group(again), 'Effect 5').value, 'plays on it');
+    assert.equal(exportPack(again.model), out);
 });
