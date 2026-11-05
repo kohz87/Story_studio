@@ -140,7 +140,10 @@ function whoFields(ctx, index, person) {
     const body = [
         names, aliases,
         text(ctx, index, person, ['about'], 'In one line', { max: CAST_LIMITS.about, wide: true }),
-        text(ctx, index, person, ['look'], 'Look', { area: true, max: CAST_LIMITS.look, wide: true }),
+        text(ctx, index, person, ['look'], 'Look', { area: true, max: CAST_LIMITS.look, wide: true,
+            note: 'Build, face, hair, eyes, marks: what stays the same whatever they wear. NPC State Delta shows it as their physical appearance.' }),
+        text(ctx, index, person, ['wears'], 'Usually wears', { area: true, max: CAST_LIMITS.wears, wide: true,
+            note: 'Clothes, armour and gear they usually have on. NPC State Delta shows it as their current appearance until the story changes it.' }),
         text(ctx, index, person, ['voice'], 'Voice', { max: CAST_LIMITS.voice, wide: true }),
         text(ctx, index, person, ['personality'], 'Personality', { area: true, max: CAST_LIMITS.personality, wide: true }),
         text(ctx, index, person, ['history'], 'Background', { area: true, max: CAST_LIMITS.history, wide: true }),
