@@ -15,7 +15,7 @@ import { oneLine } from '../../vendor/story-block/src/text.js';
 import { slugify } from '../../vendor/story-block/src/v2/packs/validate.js';
 import { browserIo, fitPortrait, kb, pictureUrl, portraitFileName, sniffImage } from '../cast/portrait.js';
 import {
-    CAST_LIMITS, METER_LIMITS, PORTRAIT_LIMITS, PLACEHOLDER_ID, cardTags, idForName, meterLabel, metersOf, newPerson, pictureOf, placeNames,
+    CAST_BEHAVIOUR_LEVELS, CAST_BEHAVIOUR_LEVERS, CAST_LIMITS, METER_LIMITS, PORTRAIT_LIMITS, PLACEHOLDER_ID, cardTags, idForName, meterLabel, metersOf, newPerson, pictureOf, placeNames,
     playerView, portraitNames, presetChoices, problemsAt, problemsExactly, problemsOfPerson,
 } from '../cast/data.js';
 import { SKILL_LIMITS, SKILL_RANKS, SKILL_SLOTS, SKILL_STATS, SKILL_USES, newSkill, rankLabel, skillView, statLabel, usesLabel } from '../cast/skills.js';
@@ -145,7 +145,6 @@ function whoFields(ctx, index, person) {
         text(ctx, index, person, ['wears'], 'Usually wears', { area: true, max: CAST_LIMITS.wears, wide: true,
             note: 'Clothes, armour and gear they usually have on. NPC State Delta shows it as their current appearance until the story changes it.' }),
         text(ctx, index, person, ['voice'], 'Voice', { max: CAST_LIMITS.voice, wide: true }),
-        text(ctx, index, person, ['personality'], 'Personality', { area: true, max: CAST_LIMITS.personality, wide: true }),
         text(ctx, index, person, ['history'], 'Background', { area: true, max: CAST_LIMITS.history, wide: true }),
     ];
     const key = el(doc, 'input', '', { value: person.id, 'data-path': JSON.stringify(['content', 'cast', index, 'id']) });
@@ -159,6 +158,114 @@ function whoFields(ctx, index, person) {
     grid.append(...body, wrap(ctx, 'Key', key, { note: 'What the story files them under. Change it only before anyone plays this pack.', wide: true }));
     const note = hint(doc, `Hidden from players until they meet ${safeLabel(person.name || 'them')}; then NPC State Delta makes the dossier from this, at once.`);
     return group(doc, 'Who they are', grid, note);
+}
+
+// --- how they behave ---------------------------------------------------------------------------------------------------
+
+const LEVER_HINT = `How they generally respond or decide. Levers: ${CAST_BEHAVIOUR_LEVERS.join(', ')}. Level: low, medium or high.`;
+
+/** One stored line "Lever: level - effect" as three parts; a part that is not one of the known words is left empty so the row still shows. */
+function leverParts(value) {
+    const match = /^([^:]*?)\s*:\s*([^\s-]+)\s*[-\u2013\u2014]\s*(.*)$/u.exec(line(value));
+    if (!match) return { lever: '', level: '', effect: line(value) };
+    const lever = CAST_BEHAVIOUR_LEVERS.find(word => word.toLowerCase() === match[1].trim().toLowerCase()) ?? '';
+    const level = CAST_BEHAVIOUR_LEVELS.find(word => word === match[2].toLowerCase()) ?? '';
+    return { lever, level, effect: match[3].trim() };
+}
+const leverLine = ({ lever, level, effect }) => `${lever}: ${level} - ${effect}`;
+
+function behaviourBox(ctx, index, person) {
+    const { doc } = ctx;
+    const stored = Array.isArray(person.behaviour) ? person.behaviour.map(entry => String(entry ?? '')) : [];
+    const rows = stored.map(leverParts);
+    const base = ['content', 'cast', index, 'behaviour'];
+    const write = list => edit(ctx, index, record => put(record, ['behaviour'], list));
+    const box = el(doc, 'div', '', { class: 'cf-field wide cf-levers', 'data-cf': 'behaviour' });
+    box.append(el(doc, 'span', 'Behaviour', { class: 'cf-label' }));
+    const list = el(doc, 'div', '', { class: 'cf-list-rows' });
+    rows.forEach((row, at) => {
+        const n = at + 1;
+        const lever = el(doc, 'select', '', { 'aria-label': `Lever ${n}`, 'data-path': JSON.stringify([...base, at]) });
+        if (!row.lever) lever.append(el(doc, 'option', 'Lever…', { value: '' }));
+        for (const word of CAST_BEHAVIOUR_LEVERS) {
+            const option = el(doc, 'option', word, { value: word });
+            if (rows.some((other, k) => k !== at && other.lever === word)) option.disabled = true;
+            lever.append(option);
+        }
+        lever.value = row.lever;
+        const level = el(doc, 'select', '', { 'aria-label': `Level ${n}` });
+        if (!row.level) level.append(el(doc, 'option', 'Level…', { value: '' }));
+        for (const word of CAST_BEHAVIOUR_LEVELS) level.append(el(doc, 'option', word, { value: word }));
+        level.value = row.level;
+        const effect = el(doc, 'input', '', { 'aria-label': `Effect ${n}` });
+        effect.value = safeLabel(row.effect);
+        const save = () => {
+            const next = { lever: lever.value, level: level.value, effect: line(effect.value) };
+            if (leverLine(next) === stored[at] || leverLine(next) === leverLine(row)) return;
+            write(stored.map((entry, k) => (k === at ? leverLine(next) : entry)));
+        };
+        for (const control of [lever, level, effect]) control.addEventListener('change', save);
+        const remove = button(doc, '✕', () => write(stored.filter((_, k) => k !== at)), { class: 'cf-x', 'aria-label': `Remove lever ${n}` });
+        const item = el(doc, 'div', '', { class: 'cf-lever' });
+        item.append(lever, level, effect, remove);
+        list.append(item);
+    });
+    box.append(list);
+    const addLever = button(doc, '+ Add a lever', () => {
+        const free = CAST_BEHAVIOUR_LEVERS.find(word => !rows.some(row => row.lever === word)) ?? CAST_BEHAVIOUR_LEVERS[0];
+        write([...stored, leverLine({ lever: free, level: 'medium', effect: '' })]);
+    }, { class: 'cf-add' });
+    addLever.disabled = stored.length >= CAST_LIMITS.behaviour;
+    box.append(addLever);
+    box.append(hint(doc, LEVER_HINT));
+    const problem = problemNote(doc, ctx.model, base);
+    if (problem) box.append(problem);
+    return box;
+}
+
+function manneristBox(ctx, index, person) {
+    const { doc } = ctx;
+    const stored = Array.isArray(person.mannerisms) ? person.mannerisms.map(entry => String(entry ?? '')) : [];
+    const base = ['content', 'cast', index, 'mannerisms'];
+    const write = list => edit(ctx, index, record => put(record, ['mannerisms'], list));
+    const box = el(doc, 'div', '', { class: 'cf-field wide', 'data-cf': 'mannerisms' });
+    box.append(el(doc, 'span', 'Mannerisms', { class: 'cf-label' }));
+    const list = el(doc, 'div', '', { class: 'cf-list-rows' });
+    stored.forEach((habit, at) => {
+        const input = el(doc, 'input', '', { 'aria-label': `Mannerism ${at + 1}`, 'data-path': JSON.stringify([...base, at]) });
+        input.value = safeLabel(habit);
+        input.addEventListener('change', () => {
+            const value = line(input.value);
+            if (value === habit) { input.value = safeLabel(habit); return; }
+            write(stored.map((entry, k) => (k === at ? value : entry)));
+        });
+        const remove = button(doc, '✕', () => write(stored.filter((_, k) => k !== at)), { class: 'cf-x', 'aria-label': `Remove mannerism ${at + 1}` });
+        const item = el(doc, 'div', '', { class: 'cf-item' });
+        item.append(input, remove);
+        list.append(item);
+    });
+    box.append(list);
+    const addHabit = button(doc, '+ Add a mannerism', () => write([...stored, '']), { class: 'cf-add' });
+    addHabit.disabled = stored.length >= CAST_LIMITS.mannerisms;
+    box.append(addHabit, hint(doc, 'Small recurring habits you would notice in a scene.'));
+    const problem = problemNote(doc, ctx.model, base);
+    if (problem) box.append(problem);
+    return box;
+}
+
+function behaviourFields(ctx, index, person) {
+    const { doc } = ctx;
+    const grid = el(doc, 'div', '', { class: 'cf-grid' });
+    grid.append(
+        text(ctx, index, person, ['personality'], 'Personality', { area: true, max: CAST_LIMITS.personality, wide: true, note: 'Who they are inside, in a few words.' }),
+        behaviourBox(ctx, index, person),
+        manneristBox(ctx, index, person),
+        text(ctx, index, person, ['withYou'], 'With you', { area: true, max: CAST_LIMITS.withYou, wide: true,
+            note: "How they treat the player character. Becomes the dossier's relationship summary at the first meeting; the story keeps it up to date after that." }),
+    );
+    const set = group(doc, 'How they behave', grid);
+    set.setAttribute('data-cf', 'behave');
+    return set;
 }
 
 function portraitFields(ctx, index, person) {
@@ -627,7 +734,7 @@ function renderPerson(ctx, inspector, { record, idx }) {
     if (problems.length) inspector.append(el(doc, 'div', problems.join('\n'), { role: 'status', class: 'warning' }));
     const form = el(doc, 'div', '', { class: 'inspector-form-body cf-form' });
     form.append(
-        whoFields(ctx, idx, record), portraitFields(ctx, idx, record), startFields(ctx, idx, record), drawnFields(ctx, idx, record),
+        whoFields(ctx, idx, record), behaviourFields(ctx, idx, record), portraitFields(ctx, idx, record), startFields(ctx, idx, record), drawnFields(ctx, idx, record),
         relationFields(ctx, idx, record), dieFields(ctx, idx, record), skillFields(ctx, idx, record), secretFields(ctx, idx, record),
     );
     inspector.append(form);
