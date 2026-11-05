@@ -1,7 +1,7 @@
 // The Cast part, driven through the real controls on the shared test DOM: list, form, edits, undo, problems and the check.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { openPack, withPortraits } from '../src/model.js';
+import { openPack, exportPack, withPortraits } from '../src/model.js';
 import { renderScreen } from '../src/screens/index.js';
 import { goToProblem } from '../src/screens/problems.js';
 import { createTestContext } from './helpers/dom.js';
@@ -66,7 +66,7 @@ test('the form is in the mockup’s order', () => {
     const ctx = open();
     assert.deepEqual(legends(ctx), ['Who they are', 'Portrait', 'Where their story starts', 'Drawn to (optional)', 'Relationship at the start', 'Before they are met', 'Signature skills · 0 of 8', 'Secrets · 3 of 8']);
     const labels = ctx.inspector.querySelectorAll('fieldset')[0].querySelectorAll('label.field').map(node => node.childNodes[0].textContent);
-    assert.deepEqual(labels, ['Name', 'Also called', 'In one line', 'Look', 'Voice', 'Personality', 'Background', 'Key']);
+    assert.deepEqual(labels, ['Name', 'Also called', 'In one line', 'Look', 'Usually wears', 'Voice', 'Personality', 'Background', 'Key']);
     assert.match(ctx.inspector.textContent, /Hidden from players until they meet Fenna; then NPC State Delta makes the dossier from this, at once\./);
     assert.equal(ctx.inspector.querySelector('h2').textContent, 'Fenna');
 });
@@ -80,6 +80,51 @@ test('every limit is shown as a count that goes red past Story Block’s number'
     look.dispatchEvent({ type: 'input' });
     assert.equal(count.textContent, '601 / 600');
     assert.ok(count.classList.contains('cf-over'));
+});
+
+test('Usually wears sits right under Look, with both hints, a 300 counter and no placeholder', () => {
+    const ctx = open();
+    const labels = ctx.inspector.querySelectorAll('fieldset')[0].querySelectorAll('label.field').map(node => node.childNodes[0].textContent);
+    assert.equal(labels.indexOf('Usually wears'), labels.indexOf('Look') + 1);
+    const wears = control(ctx, 0, 'wears');
+    assert.equal(wears.tagName.toLowerCase(), 'textarea');
+    assert.equal(wears.value, '');
+    assert.equal(wears.parentElement.parentElement.classList.contains('wide'), true);
+    assert.equal(wears.parentElement.parentElement.querySelector('.tl-count').textContent, '0 / 300');
+    assert.equal(wears.parentElement.parentElement.querySelector('.cf-hint').textContent, 'Clothes, armour and gear they usually have on. NPC State Delta shows it as their current appearance until the story changes it.');
+    assert.equal(control(ctx, 0, 'look').parentElement.parentElement.querySelector('.cf-hint').textContent, 'Build, face, hair, eyes, marks: what stays the same whatever they wear. NPC State Delta shows it as their physical appearance.');
+});
+
+test('editing Usually wears writes wears, the counter goes red past 300, and emptying it removes the key', () => {
+    const ctx = open();
+    edit(ctx, [0, 'wears'], 'Grey veil,\n patched habit.');
+    assert.equal(cast(ctx)[0].wears, 'Grey veil, patched habit.');
+    assert.equal(ctx.model.validation.ok, true);
+    const wears = control(ctx, 0, 'wears');
+    const count = wears.parentElement.parentElement.querySelector('.tl-count');
+    assert.equal(count.textContent, '25 / 300');
+    wears.value = 'x'.repeat(301);
+    wears.dispatchEvent({ type: 'input' });
+    assert.equal(count.textContent, '301 / 300');
+    assert.ok(count.classList.contains('cf-over'));
+    edit(ctx, [0, 'wears'], 'x'.repeat(301));
+    assert.equal(ctx.model.validation.ok, false);
+    edit(ctx, [0, 'wears'], '');
+    assert.equal('wears' in cast(ctx)[0], false);
+    assert.equal(ctx.model.validation.ok, true);
+});
+
+test('a pack with wears opens, shows it, and exports it again after an edit elsewhere', () => {
+    const pack = castPack({ cast: castEntries().map((person, at) => (at === 0 ? { ...person, wears: 'Oilskin coat; boat hook.' } : person)) });
+    const ctx = open(pack);
+    assert.deepEqual(ctx.model.validation.errors, []);
+    assert.equal(control(ctx, 0, 'wears').value, 'Oilskin coat; boat hook.');
+    edit(ctx, [0, 'voice'], 'Quiet.');
+    const out = JSON.parse(exportPack(ctx.model)).content.cast;
+    assert.equal(out[0].wears, 'Oilskin coat; boat hook.');
+    assert.equal(out[0].voice, 'Quiet.');
+    assert.equal('wears' in out[1], false);
+    assert.equal(exportPack(openPack(exportPack(ctx.model))), exportPack(ctx.model));
 });
 
 test('an edit is one undo step, and undo and redo bring the text back', () => {
