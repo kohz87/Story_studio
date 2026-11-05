@@ -567,7 +567,7 @@ test('How they behave holds Personality (same binding and limit), Behaviour, Man
         'Small recurring habits you would notice in a scene.',
         "How they treat the player character. Becomes the dossier's relationship summary at the first meeting; the story keeps it up to date after that.",
     ]);
-    assert.equal(control(ctx, 0, 'withYou').parentElement.parentElement.querySelector('.tl-count').textContent, '0 / 400');
+    assert.equal(control(ctx, 0, 'withYou').parentElement.parentElement.querySelector('.tl-count').textContent, '0 / 320');
     assert.equal(rowsOf(ctx).length, 0);
     assert.equal(named(set, '+ Add a lever').disabled, false);
 });
@@ -585,7 +585,7 @@ test('rows render from a pack: lever, level, effect and a remove button', () => 
     assert.equal(habitsOf(ctx).length, 4);
     assert.equal(named(habitsOf(ctx)[2], 'Mannerism 3').value, 'Taps the rail');
     assert.equal(control(ctx, 0, 'withYou').value, 'Jealous once you matter.');
-    assert.equal(control(ctx, 0, 'withYou').parentElement.parentElement.querySelector('.tl-count').textContent, '24 / 400');
+    assert.equal(control(ctx, 0, 'withYou').parentElement.parentElement.querySelector('.tl-count').textContent, '24 / 320');
 });
 
 test('Add a lever stops at six, Add a mannerism at four, and removing frees the button again', () => {
@@ -654,7 +654,7 @@ test('Story Block’s problems show under the field: a long effect, a repeated l
     change(named(group(ctx), 'Mannerism 1'), 'y'.repeat(121));
     assert.match(group(ctx).querySelector("[data-cf='mannerisms'] .cf-error").textContent, /1 to 120 characters/);
     edit(ctx, [0, 'withYou'], 'z'.repeat(401));
-    assert.match(control(ctx, 0, 'withYou').parentElement.parentElement.querySelector('.cf-error').textContent, /400/);
+    assert.match(control(ctx, 0, 'withYou').parentElement.parentElement.querySelector('.cf-error').textContent, /320/);
     assert.ok(ctx.model.validation.errors.length >= 3);
 });
 
