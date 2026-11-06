@@ -14,7 +14,7 @@ Story Director; NPC State Delta). It edits and checks packs and exports pack fil
   DOMParser, eval or new Function.
 - Tests with `node:test` under `tests/`; `npm run -s check` and `npm run -s test:dot` pass before every commit.
 - Match the surrounding code: its comment density, naming and idiom (Story Block's `src/v2/` is the model).
-- No model or tool names in files or commit messages. No keys, tokens or secrets anywhere.
+- No model or tool names in files or commit messages, except the suite's standard `Co-Authored-By:` trailer at the end of a commit message. No keys, tokens or secrets anywhere.
 - Work only on the branch you were given. Never push to `main`, never force-push, never open or merge a PR: the suite's
   lead does that after review.
 
