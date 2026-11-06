@@ -1,5 +1,5 @@
 # Story Studio source codemap
-Covers the `src/` files not already named in `CLAUDE.md`, `AI-README.md`, `README.md`, or `docs/**/*.md`; files already mapped there stay listed there.
+Covers the `src/` files not already named in `AGENTS.md`, `AI-README.md`, `README.md` or `docs/**/*.md`; files already mapped there stay listed there.
 Mapped 2026-11-07.
 
 ## src/
@@ -27,6 +27,7 @@ Mapped 2026-11-07.
 - `src/assets/icons/undo.svg`: Curved-arrow line icon for undo actions.
 
 ## src/cast/
+- `src/cast/focus.js`: Keeps the cast form's focus through a redraw: waits for a change or click to finish, then restores the field, draft, caret and scroll.
 - `src/cast/data.js`: Pure cast-pack helpers for defaults, meters, portraits, card tags and checker-backed problem views.
 - `src/cast/portrait.js`: Portrait naming, size sniffing, fitting and browser encoding within Story Block limits.
 - `src/cast/skills.js`: Cast skill limits, labels, view defaults and new-skill helpers for the form.
@@ -63,6 +64,3 @@ Mapped 2026-11-07.
 - `src/timeline/event.js`: Pure timeline event reading, grouping, labels and plain-language firing descriptions.
 - `src/timeline/lasting.js`: Story Director lasting-change payloads, validation, capability helpers and timeline problem checks.
 - `src/timeline/notes.js`: Non-blocking Timeline notes about conditions waiting on world events the pack never adds.
-
-## Pointer to add
-Source codemap for files not covered in the other docs: docs/dev/codemap.md
