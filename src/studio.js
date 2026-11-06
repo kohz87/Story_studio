@@ -13,6 +13,7 @@ import { isZipFile, readPackZip } from '../vendor/story-block/src/v2/packs/bundl
 import { ZIP_LIMITS, PORTRAIT_LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
 import { imageSize, sniffImage, kb } from './cast/portrait.js';
 import { portraitSignature, portraitNames } from './cast/data.js';
+import { keepCastFocus } from './cast/focus.js';
 import { renderProblemsDrawer } from './screens/problems.js';
 import { createColumns } from './columns.js';
 import { saveFailed } from './timeline/drafts.js';
@@ -114,6 +115,7 @@ export function mountStudio(root) {
     const inspectorClose = button(doc, 'Close inspector', () => { app.classList.remove('inspector-open'); main.focus(); }, { class: 'inspector-close' });
     const inspectorBody = el(doc, 'div', '', { class: 'inspector-body' });
     inspector.append(inspectorClose, inspectorBody);
+    const castFocus = keepCastFocus({ doc, win, inspector: inspectorBody, selection, render: () => ctx.render() });
     const notice = el(doc, 'div', '', { role: 'status', 'aria-live': 'polite', class: 'notice' });
     const problemsHost = el(doc, 'div', '', { class: 'problems-drawer-host' });
     const overlays = el(doc, 'div', '', { class: 'overlays' });
@@ -422,7 +424,10 @@ export function mountStudio(root) {
         render() {
             if (destroyed) return false;
             try {
+                const focus = castFocus.before();
+                if (focus.defer) return true;
                 ctx.renderContent();
+                castFocus.after(focus);
                 return true;
             } catch (err) {
                 ctx.notify(`render-error: ${safeLabel(err?.message || 'Could not render pack')}`);
@@ -483,6 +488,7 @@ export function mountStudio(root) {
         destroy() {
             ctx.previewCleanup?.();
             destroyed = true;
+            castFocus.destroy();
             ++seq;
             media?.removeEventListener?.('change', setTheme);
             stack?.removeEventListener?.('change', syncParts);

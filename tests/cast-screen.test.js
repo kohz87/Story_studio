@@ -265,6 +265,41 @@ test('drawn to: chips are added with the field, removed with the cross, never du
     assert.equal('drawnTo' in cast(ctx)[0], false);
 });
 
+test('a drawn-to phrase entered with Enter is saved once and the next field starts empty', () => {
+    const ctx = open();
+    ctx.doc.defaultView = { Event: class { constructor(type) { this.type = type; } } };
+    const input = control(ctx, 0, 'drawnTo');
+    input.value = 'the old bridge';
+    input.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault() {} });
+    assert.deepEqual(cast(ctx)[0].drawnTo, ['the weir', 'a flood on the river', 'the old bridge']);
+    assert.equal(control(ctx, 0, 'drawnTo').value, '');
+});
+
+test('list actions after a field edit use the current person while the redraw is pending', () => {
+    const people = castEntries();
+    people[0].behaviour = ['Care: high - watches the river'];
+    people[0].mannerisms = ['Hums softly'];
+    const ctx = open(castPack({ cast: people }));
+    const named = label => ctx.inspector.querySelectorAll('input').find(node => node.getAttribute('aria-label') === label);
+    const effect = named('Effect 1');
+    const habit = named('Mannerism 1');
+    const drawn = named('Add something they are drawn to');
+    const addLever = buttons(ctx.inspector, '+ Add a lever')[0];
+    const addHabit = buttons(ctx.inspector, '+ Add a mannerism')[0];
+    const remove = buttons(ctx.inspector, 'Remove the weir')[0];
+    ctx.render = () => {};
+    change(effect, 'helps everyone');
+    addLever.click();
+    change(habit, 'Hums at dusk');
+    addHabit.click();
+    change(drawn, 'the old bridge');
+    remove.click();
+    assert.equal(cast(ctx)[0].behaviour[0], 'Care: high - helps everyone');
+    assert.equal(cast(ctx)[0].behaviour.length, 2);
+    assert.deepEqual(cast(ctx)[0].mannerisms, ['Hums at dusk', '']);
+    assert.deepEqual(cast(ctx)[0].drawnTo, ['a flood on the river', 'the old bridge']);
+});
+
 test('the meter preset is picked from the pack’s own and the built-in ones; the starting values follow it', () => {
     const pack = castPack();
     pack.content.meterPresets = [{ id: 'regard', title: 'Regard', meters: [{ id: 'esteem', name: 'Esteem', min: 0, max: 100, start: 0 }] }];
@@ -451,6 +486,19 @@ test('the rail knows nothing of the cast’s pictures: a swap of a picture is un
     assert.equal(ctx.inspector.querySelectorAll('img').length, 1);
 });
 
+test('removing a portrait after naming a new person uses their current key', () => {
+    const people = castEntries();
+    people[0].id = 'new-person';
+    const ctx = open(castPack({ cast: people }), 'new-person');
+    const name = control(ctx, 0, 'name');
+    const remove = buttons(ctx.inspector, 'Remove').find(button => !button.disabled);
+    ctx.render = () => {};
+    change(name, 'Old Marta');
+    assert.equal(cast(ctx)[0].id, 'old-marta');
+    remove.click();
+    assert.equal('portrait' in cast(ctx)[0], false);
+});
+
 test('the check lists the cast and offers the .zip and the plain pack.json', () => {
     const ctx = createTestContext(openPack(castPack()));
     ctx.onRender = renderScreen;
@@ -497,6 +545,31 @@ test('a meter secret has an optional story event beside it: it saves when beside
     assert.equal(secret().at, 30);
     undo(ctx);
     assert.equal(secret().when, 'the party finds the ledger');
+});
+
+test('the player preview follows a story event change while the form redraw is deferred', () => {
+    const entries = castEntries();
+    entries[0].secrets[0].when = 'Severa comes to Bluewatch';
+    const ctx = open(castPack({ cast: entries }));
+    const input = control(ctx, 0, 'secrets', 0, 'when');
+    const preview = ctx.inspector.querySelector('[data-cf=preview]');
+    const rules = () => preview.querySelectorAll('.cf-hint').map(node => node.textContent);
+    assert.deepEqual(rules(), ['Opens at Trust 20 or with the story', 'Opens at Trust 60', 'Opens with the story']);
+    const render = ctx.render;
+    ctx.render = () => {};
+    input.focus();
+    change(input, '');
+    assert.equal(ctx.doc.activeElement, input);
+    assert.equal(control(ctx, 0, 'secrets', 0, 'when'), input);
+    assert.equal('when' in cast(ctx)[0].secrets[0], false);
+    assert.deepEqual(rules(), ['Opens at Trust 20', 'Opens at Trust 60', 'Opens with the story']);
+    change(input, 'the party finds the ledger');
+    assert.equal(cast(ctx)[0].secrets[0].when, 'the party finds the ledger');
+    assert.deepEqual(rules(), ['Opens at Trust 20 or with the story', 'Opens at Trust 60', 'Opens with the story']);
+    assert.doesNotMatch(preview.textContent, /the party finds the ledger/);
+    ctx.render = render;
+    ctx.render();
+    assert.deepEqual(ctx.inspector.querySelector('[data-cf=preview]').querySelectorAll('.cf-hint').map(node => node.textContent), rules());
 });
 
 test('choosing "on a story event" is the event alone, and an event that is already there is kept; "at a meter" keeps meter only', () => {

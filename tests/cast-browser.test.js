@@ -325,6 +325,246 @@ test('typing in the form is undone and redone with the top-bar buttons', async (
     });
 });
 
+test('typing across cast fields with Tab keeps focus and every character', async () => {
+    const cast = castEntries();
+    delete cast[0].aliases;
+    await withPage({}, async page => {
+        await load(page, JSON.stringify(castPack({ cast })));
+        await openPerson(page, 'Fenna');
+        const name = page.getByLabel('Name', { exact: true }).first();
+        await name.fill('');
+        await page.keyboard.type('Fenna Vale');
+        const oldName = await name.elementHandle();
+        await name.press('Tab');
+        const aliases = page.getByLabel('Also called', { exact: true });
+        await page.keyboard.type('Captain ');
+        await page.waitForFunction(node => !node.isConnected, oldName);
+        assert.equal(await aliases.evaluate(node => node === document.activeElement), true);
+        assert.equal(await aliases.inputValue(), 'Captain ');
+        await page.keyboard.type('Fen');
+        assert.equal(await aliases.inputValue(), 'Captain Fen');
+        const oldAliases = await aliases.elementHandle();
+        await page.keyboard.press('Tab');
+        await page.waitForFunction(node => !node.isConnected, oldAliases);
+        assert.equal(await page.getByLabel('In one line', { exact: true }).evaluate(node => node === document.activeElement), true);
+        await page.keyboard.press('Shift+Tab');
+        assert.equal(await aliases.evaluate(node => node === document.activeElement), true);
+        assert.equal(await aliases.inputValue(), 'Captain Fen');
+        await navigate(page, 'Check / export');
+        const pack = JSON.parse(new TextDecoder().decode((await downloaded(page, '#export-btn')).bytes));
+        assert.equal(pack.content.cast[0].name, 'Fenna Vale');
+        assert.deepEqual(pack.content.cast[0].aliases, ['Captain Fen']);
+    });
+});
+
+test('entering drawn-to phrases keeps focus and does not repeat the saved phrase', async () => {
+    await withPage({}, async page => {
+        await load(page);
+        await openPerson(page, 'Fenna');
+        const input = page.getByLabel('Add something they are drawn to');
+        await input.fill('the old bridge');
+        await input.press('Enter');
+        await page.locator('.cf-chip', { hasText: 'the old bridge' }).waitFor();
+        assert.equal(await input.evaluate(node => node === document.activeElement), true);
+        assert.equal(await input.inputValue(), '');
+        await page.keyboard.type('a new boat');
+        await input.press('Enter');
+        await page.locator('.cf-chip', { hasText: 'a new boat' }).waitFor();
+        assert.equal(await input.inputValue(), '');
+        await input.press('Tab');
+        assert.equal(await page.locator('.cf-chip', { hasText: 'the old bridge' }).count(), 1);
+        assert.equal(await page.locator('.cf-chip', { hasText: 'a new boat' }).count(), 1);
+    });
+});
+
+test('a pointer transition keeps a draft and its caret through the cast redraw', async () => {
+    const cast = castEntries();
+    delete cast[0].aliases;
+    await withPage({}, async page => {
+        await load(page, JSON.stringify(castPack({ cast })));
+        await openPerson(page, 'Fenna');
+        await page.getByLabel('Name', { exact: true }).first().fill('Fenna Vale');
+        const aliases = page.getByLabel('Also called', { exact: true });
+        const original = await aliases.elementHandle();
+        const box = await aliases.boundingBox();
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.keyboard.type('Captain ');
+        await page.mouse.up();
+        await page.waitForFunction(node => !node.isConnected, original);
+        assert.equal(await aliases.inputValue(), 'Captain ');
+        assert.deepEqual(await aliases.evaluate(node => [node === document.activeElement, node.selectionStart, node.selectionEnd]), [true, 8, 8]);
+        await page.keyboard.press('Tab');
+        assert.equal(await page.getByLabel('In one line', { exact: true }).evaluate(node => node === document.activeElement), true);
+        await navigate(page, 'Check / export');
+        const pack = JSON.parse(new TextDecoder().decode((await downloaded(page, '#export-btn')).bytes));
+        assert.deepEqual(pack.content.cast[0].aliases, ['Captain']);
+    });
+});
+
+test('a cast redraw preserves a draft until it is committed', async () => {
+    const cast = castEntries();
+    delete cast[0].aliases;
+    cast[0].behaviour = ['Care: high - watches the river'];
+    await withPage({}, async page => {
+        await load(page, JSON.stringify(castPack({ cast })));
+        await page.locator('.rail').getByRole('button', { name: /^Cast/ }).evaluate(node => node.click());
+        await page.locator('.record-card', { hasText: 'Fenna' }).evaluate(node => node.click());
+        const aliases = page.getByLabel('Also called', { exact: true });
+        const original = await aliases.elementHandle();
+        await page.getByLabel('Name', { exact: true }).first().evaluate(node => {
+            node.focus();
+            node.value = 'Fenna Vale';
+            const next = [...document.querySelectorAll('input')].find(input => input.getAttribute('data-path')?.endsWith(',"aliases"]'));
+            next.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+            node.dispatchEvent(new Event('change', { bubbles: true }));
+            next.focus();
+            next.value = 'Captain ';
+            next.setSelectionRange(8, 8);
+            next.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        assert.deepEqual(await original.evaluate(node => [node.isConnected, node === document.activeElement, node.value]), [true, true, 'Captain ']);
+        await aliases.evaluate(node => node.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })));
+        await page.waitForFunction(node => !node.isConnected, original, { polling: 20 });
+        assert.deepEqual(await aliases.evaluate(node => [node === document.activeElement, node.value, node.selectionStart, node.selectionEnd]), [true, 'Captain ', 8, 8]);
+        await aliases.evaluate(node => node.blur());
+        await page.waitForFunction(() => [...document.querySelectorAll('input')].some(input => input.getAttribute('data-path')?.endsWith(',"aliases"]') && input.value === 'Captain'), null, { polling: 20 });
+        assert.equal(await aliases.inputValue(), 'Captain');
+        const level = page.getByLabel('Level 1', { exact: true });
+        const oldLevel = await level.elementHandle();
+        const scroll = await level.evaluate(node => {
+            node.focus();
+            const top = document.querySelector('.inspector').scrollTop;
+            node.value = 'medium';
+            node.dispatchEvent(new Event('change', { bubbles: true }));
+            return top;
+        });
+        assert.ok(scroll > 0);
+        await page.waitForFunction(node => !node.isConnected, oldLevel, { polling: 20 });
+        assert.equal(await level.evaluate(node => node === document.activeElement), true);
+        assert.equal(await page.locator('.inspector').evaluate(node => node.scrollTop), scroll);
+        const number = page.getByLabel('Stage 1 value 1', { exact: true });
+        const oldNumber = await number.elementHandle();
+        await number.evaluate(node => { node.focus(); node.value = '21'; node.dispatchEvent(new Event('change', { bubbles: true })); });
+        await page.waitForFunction(node => !node.isConnected, oldNumber, { polling: 20 });
+        assert.deepEqual(await number.evaluate(node => [node === document.activeElement, node.value]), [true, '21']);
+        const checkbox = page.getByRole('checkbox', { name: /may die off-screen/ });
+        const oldCheckbox = await checkbox.elementHandle();
+        await checkbox.evaluate(node => { node.focus(); node.checked = true; node.dispatchEvent(new Event('change', { bubbles: true })); });
+        await page.waitForFunction(node => !node.isConnected, oldCheckbox, { polling: 20 });
+        assert.deepEqual(await checkbox.evaluate(node => [node === document.activeElement, node.checked]), [true, true]);
+        const look = page.getByLabel('Look', { exact: true });
+        const oldLook = await look.elementHandle();
+        await look.evaluate(node => {
+            node.focus(); node.value = 'Calm and keen'; node.setSelectionRange(5, 8, 'backward');
+            node.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        await page.waitForFunction(node => !node.isConnected, oldLook, { polling: 20 });
+        assert.deepEqual(await look.evaluate(node => [node === document.activeElement, node.value, node.selectionStart, node.selectionEnd, node.selectionDirection]), [true, 'Calm and keen', 5, 8, 'backward']);
+    });
+});
+
+test('cast text selections, selects, number fields and checkboxes retain focus on update', async () => {
+    const cast = castEntries();
+    cast[0].behaviour = ['Care: high - watches the river'];
+    await withPage({}, async page => {
+        await load(page, JSON.stringify(castPack({ cast })));
+        await openPerson(page, 'Fenna');
+        const look = page.getByLabel('Look', { exact: true });
+        await look.fill('Calm and keen');
+        await look.evaluate(node => node.setSelectionRange(5, 8, 'backward'));
+        const oldLook = await look.elementHandle();
+        await look.dispatchEvent('change');
+        await page.waitForFunction(node => !node.isConnected, oldLook);
+        assert.deepEqual(await look.evaluate(node => [node === document.activeElement, node.selectionStart, node.selectionEnd, node.selectionDirection]), [true, 5, 8, 'backward']);
+        await page.keyboard.type('quite');
+        assert.equal(await look.inputValue(), 'Calm quite keen');
+        const editedLook = await look.elementHandle();
+        await look.press('Tab');
+        await page.waitForFunction(node => !node.isConnected, editedLook);
+
+        const level = page.getByLabel('Level 1', { exact: true });
+        await level.focus();
+        const oldLevel = await level.elementHandle();
+        await level.selectOption('medium');
+        await page.waitForFunction(node => !node.isConnected, oldLevel);
+        assert.equal(await level.evaluate(node => node === document.activeElement), true);
+        assert.equal(await level.inputValue(), 'medium');
+        const effect = page.getByLabel('Effect 1', { exact: true });
+        const oldEffect = await effect.elementHandle();
+        await effect.fill('helps everyone');
+        await effect.press('Tab');
+        await page.waitForFunction(node => !node.isConnected, oldEffect);
+        assert.equal(await page.getByRole('button', { name: 'Remove lever 1' }).evaluate(node => node === document.activeElement), true);
+
+        const number = page.getByLabel('Stage 1 value 1', { exact: true });
+        await number.focus();
+        const oldNumber = await number.elementHandle();
+        await number.press('ArrowUp');
+        await page.waitForFunction(node => !node.isConnected, oldNumber);
+        assert.equal(await number.evaluate(node => node === document.activeElement), true);
+        assert.equal(await number.inputValue(), '21');
+        const checkbox = page.getByRole('checkbox', { name: /may die off-screen/ });
+        const oldCheckbox = await checkbox.elementHandle();
+        await checkbox.check();
+        await page.waitForFunction(node => !node.isConnected, oldCheckbox);
+        assert.equal(await checkbox.evaluate(node => node === document.activeElement), true);
+        assert.equal(await checkbox.isChecked(), true);
+    });
+});
+
+test('a newly named person keeps the next field focused when the key changes', async () => {
+    await withPage({}, async page => {
+        await load(page);
+        await page.locator('.rail').getByRole('button', { name: /^Cast/ }).evaluate(node => node.click());
+        await page.getByRole('button', { name: '+ Add person' }).evaluate(node => node.click());
+        const aliases = page.getByLabel('Also called', { exact: true });
+        const original = await aliases.elementHandle();
+        await page.getByLabel('Name', { exact: true }).first().evaluate(node => {
+            node.focus();
+            node.value = 'Old Marta';
+            node.dispatchEvent(new Event('change', { bubbles: true }));
+            const next = [...document.querySelectorAll('input')].find(input => input.getAttribute('data-path')?.endsWith(',"aliases"]'));
+            next.focus();
+        });
+        await page.waitForFunction(node => !node.isConnected, original, { polling: 20 });
+        assert.equal(await page.getByLabel('Key', { exact: true }).inputValue(), 'old-marta');
+        assert.equal(await aliases.evaluate(node => node === document.activeElement), true);
+    });
+});
+
+test('clicking a cast list control after editing a row keeps both changes', async () => {
+    const cast = castEntries();
+    cast[0].behaviour = ['Care: high - watches the river'];
+    cast[0].mannerisms = ['Hums softly'];
+    await withPage({}, async page => {
+        await load(page, JSON.stringify(castPack({ cast })));
+        await page.locator('.rail').getByRole('button', { name: /^Cast/ }).evaluate(node => node.click());
+        await page.locator('.record-card', { hasText: 'Fenna' }).evaluate(node => node.click());
+        const commitAndClick = async (field, value, button) => {
+            const target = await button.elementHandle();
+            await field.evaluate((node, { value, target }) => {
+                node.focus();
+                node.value = value;
+                target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+                node.dispatchEvent(new Event('change', { bubbles: true }));
+                target.focus();
+                target.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+                target.click();
+            }, { value, target });
+        };
+        await commitAndClick(page.getByLabel('Effect 1', { exact: true }), 'helps everyone', page.getByRole('button', { name: '+ Add a lever' }));
+        assert.equal(await page.getByLabel('Effect 1', { exact: true }).inputValue(), 'helps everyone');
+        assert.equal(await page.getByLabel('Effect 2', { exact: true }).count(), 1);
+        await commitAndClick(page.getByLabel('Mannerism 1', { exact: true }), 'Hums at dusk', page.getByRole('button', { name: '+ Add a mannerism' }));
+        assert.equal(await page.getByLabel('Mannerism 1', { exact: true }).inputValue(), 'Hums at dusk');
+        assert.equal(await page.getByLabel('Mannerism 2', { exact: true }).count(), 1);
+        await commitAndClick(page.getByLabel('Add something they are drawn to'), 'the old bridge', page.getByRole('button', { name: 'Remove the weir' }));
+        assert.equal(await page.locator('.cf-chip', { hasText: 'the weir' }).count(), 0);
+        assert.equal(await page.locator('.cf-chip', { hasText: 'the old bridge' }).count(), 1);
+    });
+});
+
 test('adding a person, filling the form and adding secrets works through the controls', async () => {
     await withPage({}, async page => {
         await load(page);
