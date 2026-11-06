@@ -17,3 +17,7 @@ Story Director; NPC State Delta). It edits and checks packs and exports pack fil
 - No model or tool names in files or commit messages. No keys, tokens or secrets anywhere.
 - Work only on the branch you were given. Never push to `main`, never force-push, never open or merge a PR: the suite's
   lead does that after review.
+
+## Code map
+
+- Source files not named in the other docs: `docs/dev/codemap.md` (one line each).
