@@ -6,20 +6,42 @@ export function keepCastFocus({ doc, win, inspector, selection, render }) {
     let renderedId = null;
     let pending = null;
     let timer = null;
+    let changeTimer = null;
+    let pointerTimer = null;
     const pointers = new Set();
 
     const schedule = () => {
-        if (!pending || pointers.size || timer !== null) return;
+        if (!pending) return;
+        if (pointers.size) {
+            // A pointer release can be missed, so do not leave a redraw waiting indefinitely.
+            if (pointerTimer === null) pointerTimer = win.setTimeout(() => {
+                pointerTimer = null;
+                pointers.clear();
+                if (timer !== null) { win.clearTimeout(timer); timer = null; }
+                render();
+            }, 5000);
+            return;
+        }
+        if (timer !== null) return;
         timer = win.setTimeout(() => { timer = null; render(); }, 0);
     };
     const onChange = event => {
         if (selection.kind !== 'cast' || !event.target.closest?.('.cf-form')) return;
         changing.set(event, { node: event.target, value: event.target.value });
+        // A stopped change never reaches the inspector's bubble listener.
+        if (changeTimer === null && win?.setTimeout) changeTimer = win.setTimeout(() => {
+            changeTimer = null;
+            changing.clear();
+        }, 0);
     };
-    const afterChange = event => { changing.delete(event); };
+    const afterChange = event => {
+        changing.delete(event);
+        if (!changing.size && changeTimer !== null) { win.clearTimeout(changeTimer); changeTimer = null; }
+    };
     const onPointerDown = event => {
         pointers.add(event.pointerId);
         if (timer !== null) { win.clearTimeout(timer); timer = null; }
+        schedule();
     };
     const onPointerUp = event => { pointers.delete(event.pointerId); schedule(); };
     const onBlur = () => { pointers.clear(); schedule(); };
@@ -28,7 +50,10 @@ export function keepCastFocus({ doc, win, inspector, selection, render }) {
     win?.addEventListener?.('pointerdown', onPointerDown, true);
     win?.addEventListener?.('pointerup', onPointerUp, true);
     win?.addEventListener?.('pointercancel', onPointerUp, true);
+    win?.addEventListener?.('lostpointercapture', onPointerUp, true);
+    win?.addEventListener?.('contextmenu', onBlur, true);
     win?.addEventListener?.('blur', onBlur);
+    doc?.addEventListener?.('visibilitychange', onBlur);
 
     // Paths identify most fields; the others have labels or live in a numbered stage, skill or secret.
     const mark = form => {
@@ -52,6 +77,7 @@ export function keepCastFocus({ doc, win, inspector, selection, render }) {
             return { defer: true };
         }
         if (timer !== null) { win.clearTimeout(timer); timer = null; }
+        if (pointerTimer !== null) { win.clearTimeout(pointerTimer); pointerTimer = null; }
         const form = inspector.querySelector('.cf-form');
         const node = doc.activeElement;
         const samePerson = selection.kind === 'cast' && (selection.id === renderedId || (pending?.kind === 'cast' && pending.id === selection.id));
@@ -94,12 +120,17 @@ export function keepCastFocus({ doc, win, inspector, selection, render }) {
     };
     const destroy = () => {
         if (timer !== null) win.clearTimeout(timer);
+        if (changeTimer !== null) win.clearTimeout(changeTimer);
+        if (pointerTimer !== null) win.clearTimeout(pointerTimer);
         inspector.removeEventListener('change', onChange, true);
         inspector.removeEventListener('change', afterChange);
         win?.removeEventListener?.('pointerdown', onPointerDown, true);
         win?.removeEventListener?.('pointerup', onPointerUp, true);
         win?.removeEventListener?.('pointercancel', onPointerUp, true);
+        win?.removeEventListener?.('lostpointercapture', onPointerUp, true);
+        win?.removeEventListener?.('contextmenu', onBlur, true);
         win?.removeEventListener?.('blur', onBlur);
+        doc?.removeEventListener?.('visibilitychange', onBlur);
     };
     return { before, after, destroy };
 }
