@@ -37,7 +37,13 @@ function edit(ctx, index, change, extra) {
     const next = clone(records(ctx.model, 'cast')[index]);
     change(next);
     const result = setField(ctx.model, ['content', 'cast', index], next);
-    return applyEdit(ctx, extra && result.ok ? extra(result) : result);
+    const preview = ctx.inspector?.querySelector('[data-cf=preview]');
+    const saved = applyEdit(ctx, extra && result.ok ? extra(result) : result);
+    // A change can defer the form redraw until focus has moved; keep the non-interactive preview current meanwhile.
+    if (saved && preview && preview === ctx.inspector.querySelector('[data-cf=preview]')) {
+        showPlayerPreview(ctx.doc, ctx.model, records(ctx.model, 'cast')[index], preview);
+    }
+    return saved;
 }
 
 /** Sets or removes (undefined, '') a value at `keys` in a copy of the entry. */
@@ -102,16 +108,18 @@ function wrap(ctx, label, control, { path, note, max, wide = false } = {}) {
 /** A text input or textarea for one value of the entry; the change is saved as one undo step. */
 function text(ctx, index, person, keys, label, { area = false, max, note, wide = false, transform, after } = {}) {
     const { doc } = ctx;
-    const current = keys.reduce((node, key) => (isRecord(node) ? node[key] : undefined), person);
+    const read = entry => keys.reduce((node, key) => (isRecord(node) ? node[key] : undefined), entry);
+    const current = read(person);
     const path = ['content', 'cast', index, ...keys];
     const control = el(doc, area ? 'textarea' : 'input', '', { 'data-path': JSON.stringify(path) });
     control.value = Array.isArray(current) ? current.join(', ') : safeLabel(current ?? '');
     control.addEventListener('change', () => {
         const value = transform ? transform(control.value) : line(control.value);
-        const same = JSON.stringify(value ?? '') === JSON.stringify(current ?? '');
-        if (same) { control.value = Array.isArray(current) ? current.join(', ') : safeLabel(current ?? ''); return; }
+        const saved = read(records(ctx.model, 'cast')[index]);
+        const same = JSON.stringify(value ?? '') === JSON.stringify(saved ?? '');
+        if (same) { control.value = Array.isArray(saved) ? saved.join(', ') : safeLabel(saved ?? ''); return; }
         if (after && after(value, index) === true) return;
-        if (!edit(ctx, index, record => put(record, keys, value))) control.value = safeLabel(current ?? '');
+        if (!edit(ctx, index, record => put(record, keys, value))) control.value = safeLabel(saved ?? '');
     });
     return wrap(ctx, label, control, { path, note, max, wide });
 }
@@ -119,14 +127,15 @@ function text(ctx, index, person, keys, label, { area = false, max, note, wide =
 // --- the form --------------------------------------------------------------------------------------------------------
 
 function whoFields(ctx, index, person) {
-    const { doc, model } = ctx;
+    const { doc } = ctx;
     const names = text(ctx, index, person, ['name'], 'Name', {
         max: CAST_LIMITS.name,
         // A new person's key follows the name until the writer has named them; after that it is theirs to keep.
         after: (value, at) => {
-            const id = idForName(model, value, person.id);
-            if (!PLACEHOLDER_ID.test(person.id) || !id) return false;
-            const moved = renameId(model, 'cast', person.id, id);
+            const current = records(ctx.model, 'cast')[at];
+            const id = idForName(ctx.model, value, current.id);
+            if (!PLACEHOLDER_ID.test(current.id) || !id) return false;
+            const moved = renameId(ctx.model, 'cast', current.id, id);
             if (!moved.ok) return false;
             const named = setField(moved.model, ['content', 'cast', at, 'name'], value);
             if (!named.ok) return false;
@@ -150,9 +159,10 @@ function whoFields(ctx, index, person) {
     const key = el(doc, 'input', '', { value: person.id, 'data-path': JSON.stringify(['content', 'cast', index, 'id']) });
     key.addEventListener('change', () => {
         const next = key.value.trim();
-        const result = renameId(ctx.model, 'cast', person.id, next);
+        const id = records(ctx.model, 'cast')[index].id;
+        const result = renameId(ctx.model, 'cast', id, next);
         if (result.ok) applyEdit(ctx, result, { id: next });
-        else { ctx.notify(`${result.errors?.[0]?.code ?? 'bad-id'}: ${result.errors?.[0]?.message ?? 'Use a lowercase key with hyphens.'}`); key.value = person.id; }
+        else { ctx.notify(`${result.errors?.[0]?.code ?? 'bad-id'}: ${result.errors?.[0]?.message ?? 'Use a lowercase key with hyphens.'}`); key.value = id; }
     });
     const grid = el(doc, 'div', '', { class: 'cf-grid' });
     grid.append(...body, wrap(ctx, 'Key', key, { note: 'What the story files them under. Change it only before anyone plays this pack.', wide: true }));
@@ -179,6 +189,10 @@ function behaviourBox(ctx, index, person) {
     const stored = Array.isArray(person.behaviour) ? person.behaviour.map(entry => String(entry ?? '')) : [];
     const rows = stored.map(leverParts);
     const base = ['content', 'cast', index, 'behaviour'];
+    const current = () => {
+        const value = records(ctx.model, 'cast')[index]?.behaviour;
+        return Array.isArray(value) ? value.map(entry => String(entry ?? '')) : [];
+    };
     const write = list => edit(ctx, index, record => put(record, ['behaviour'], list));
     const box = el(doc, 'div', '', { class: 'cf-field wide cf-levers', 'data-cf': 'behaviour' });
     box.append(el(doc, 'span', 'Behaviour', { class: 'cf-label' }));
@@ -200,20 +214,22 @@ function behaviourBox(ctx, index, person) {
         const effect = el(doc, 'input', '', { 'aria-label': `Effect ${n}` });
         effect.value = safeLabel(row.effect);
         const save = () => {
+            const entries = current();
             const next = { lever: lever.value, level: level.value, effect: line(effect.value) };
-            if (leverLine(next) === stored[at] || leverLine(next) === leverLine(row)) return;
-            write(stored.map((entry, k) => (k === at ? leverLine(next) : entry)));
+            if (leverLine(next) === entries[at] || leverLine(next) === leverLine(leverParts(entries[at]))) return;
+            write(entries.map((entry, k) => (k === at ? leverLine(next) : entry)));
         };
         for (const control of [lever, level, effect]) control.addEventListener('change', save);
-        const remove = button(doc, '✕', () => write(stored.filter((_, k) => k !== at)), { class: 'cf-x', 'aria-label': `Remove lever ${n}` });
+        const remove = button(doc, '✕', () => write(current().filter((_, k) => k !== at)), { class: 'cf-x', 'aria-label': `Remove lever ${n}` });
         const item = el(doc, 'div', '', { class: 'cf-lever' });
         item.append(lever, level, effect, remove);
         list.append(item);
     });
     box.append(list);
     const addLever = button(doc, '+ Add a lever', () => {
-        const free = CAST_BEHAVIOUR_LEVERS.find(word => !rows.some(row => row.lever === word)) ?? CAST_BEHAVIOUR_LEVERS[0];
-        write([...stored, leverLine({ lever: free, level: 'medium', effect: '' })]);
+        const entries = current();
+        const free = CAST_BEHAVIOUR_LEVERS.find(word => !entries.some(entry => leverParts(entry).lever === word)) ?? CAST_BEHAVIOUR_LEVERS[0];
+        write([...entries, leverLine({ lever: free, level: 'medium', effect: '' })]);
     }, { class: 'cf-add' });
     addLever.disabled = stored.length >= CAST_LIMITS.behaviour;
     box.append(addLever);
@@ -227,6 +243,10 @@ function manneristBox(ctx, index, person) {
     const { doc } = ctx;
     const stored = Array.isArray(person.mannerisms) ? person.mannerisms.map(entry => String(entry ?? '')) : [];
     const base = ['content', 'cast', index, 'mannerisms'];
+    const current = () => {
+        const value = records(ctx.model, 'cast')[index]?.mannerisms;
+        return Array.isArray(value) ? value.map(entry => String(entry ?? '')) : [];
+    };
     const write = list => edit(ctx, index, record => put(record, ['mannerisms'], list));
     const box = el(doc, 'div', '', { class: 'cf-field wide', 'data-cf': 'mannerisms' });
     box.append(el(doc, 'span', 'Mannerisms', { class: 'cf-label' }));
@@ -235,17 +255,18 @@ function manneristBox(ctx, index, person) {
         const input = el(doc, 'input', '', { 'aria-label': `Mannerism ${at + 1}`, 'data-path': JSON.stringify([...base, at]) });
         input.value = safeLabel(habit);
         input.addEventListener('change', () => {
+            const entries = current();
             const value = line(input.value);
-            if (value === habit) { input.value = safeLabel(habit); return; }
-            write(stored.map((entry, k) => (k === at ? value : entry)));
+            if (value === entries[at]) { input.value = safeLabel(entries[at]); return; }
+            write(entries.map((entry, k) => (k === at ? value : entry)));
         });
-        const remove = button(doc, '✕', () => write(stored.filter((_, k) => k !== at)), { class: 'cf-x', 'aria-label': `Remove mannerism ${at + 1}` });
+        const remove = button(doc, '✕', () => write(current().filter((_, k) => k !== at)), { class: 'cf-x', 'aria-label': `Remove mannerism ${at + 1}` });
         const item = el(doc, 'div', '', { class: 'cf-item' });
         item.append(input, remove);
         list.append(item);
     });
     box.append(list);
-    const addHabit = button(doc, '+ Add a mannerism', () => write([...stored, '']), { class: 'cf-add' });
+    const addHabit = button(doc, '+ Add a mannerism', () => write([...current(), '']), { class: 'cf-add' });
     addHabit.disabled = stored.length >= CAST_LIMITS.mannerisms;
     box.append(addHabit, hint(doc, 'Small recurring habits you would notice in a scene.'));
     const problem = problemNote(doc, ctx.model, base);
@@ -281,10 +302,10 @@ function portraitFields(ctx, index, person) {
     chooser.addEventListener('change', async () => {
         const file = chooser.files?.[0];
         chooser.value = '';
-        if (file) await choosePortrait(ctx, person.id, file);
+        if (file) await choosePortrait(ctx, records(ctx.model, 'cast')[index]?.id, file);
     });
     const choose = button(doc, picture || named ? 'Replace image…' : 'Choose image…', () => chooser.click());
-    const remove = button(doc, 'Remove', () => removePortrait(ctx, person.id), { class: 'danger' });
+    const remove = button(doc, 'Remove', () => removePortrait(ctx, records(ctx.model, 'cast')[index]?.id), { class: 'danger' });
     remove.disabled = !named;
     const row = el(doc, 'div', '', { class: 'cf-row' });
     row.append(choose, remove, chooser);
@@ -392,24 +413,34 @@ function startFields(ctx, index, person) {
 function drawnFields(ctx, index, person) {
     const { doc } = ctx;
     const list = Array.isArray(person.drawnTo) ? person.drawnTo : [];
+    const current = () => {
+        const value = records(ctx.model, 'cast')[index]?.drawnTo;
+        return Array.isArray(value) ? value : [];
+    };
     const row = el(doc, 'div', '', { class: 'cf-row' });
     list.forEach((phrase, at) => {
         const chip = el(doc, 'span', '', { class: 'cf-chip' });
-        chip.append(safeLabel(phrase), button(doc, '✕', () => edit(ctx, index, record => put(record, ['drawnTo'], list.filter((_, n) => n !== at))), { 'aria-label': `Remove ${safeLabel(phrase)}` }));
+        chip.append(safeLabel(phrase), button(doc, '✕', () => edit(ctx, index, record => put(record, ['drawnTo'], current().filter((_, n) => n !== at))), { 'aria-label': `Remove ${safeLabel(phrase)}` }));
         row.append(chip);
     });
     const input = el(doc, 'input', '', { placeholder: 'Add…', 'aria-label': 'Add something they are drawn to', 'data-path': JSON.stringify(['content', 'cast', index, 'drawnTo']) });
     input.disabled = list.length >= CAST_LIMITS.drawnTo;
-    // Enter and the field losing focus (the form is rebuilt under it) both mean "take this"; once is enough.
+    // Enter and the field losing focus both mean "take this".
     let taken = false;
     const take = () => {
         const phrase = line(input.value);
         if (!phrase || taken) return;
         taken = true;
-        edit(ctx, index, record => put(record, ['drawnTo'], [...list, phrase]));
+        if (edit(ctx, index, record => put(record, ['drawnTo'], [...current(), phrase]))) input.value = '';
+        taken = false;
     };
     input.addEventListener('change', take);
-    input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault?.(); take(); } });
+    input.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault?.();
+        if (doc.defaultView?.Event) input.dispatchEvent(new doc.defaultView.Event('change', { bubbles: true }));
+        else take();
+    });
     row.append(input);
     const set = group(doc, 'Drawn to ', row,
         hint(doc, `When the story touches one of these, they come looking for the party. Up to ${CAST_LIMITS.drawnTo}, each up to ${CAST_LIMITS.phrase} characters.`));
@@ -568,7 +599,8 @@ function skillCard(ctx, index, skills, at) {
         const control = el(doc, 'input', '', { 'aria-label': `Skill ${at + 1} ${aria}`, 'data-path': JSON.stringify([...base, key]) });
         control.value = safeLabel(view[key]);
         control.addEventListener('change', () => {
-            if (line(control.value) === line(view[key])) { control.value = safeLabel(view[key]); return; }
+            const current = skillView(records(ctx.model, 'cast')[index]?.skills?.[at])[key];
+            if (line(control.value) === line(current)) { control.value = safeLabel(current); return; }
             save(target => { target[key] = line(control.value); });
         });
         return wrap(ctx, label, control, { path: [...base, key], max });
@@ -694,6 +726,22 @@ function secretCard(ctx, index, person, secret, at, total) {
     return card;
 }
 
+function showPlayerPreview(doc, model, person, preview) {
+    preview.replaceChildren();
+    preview.append(el(doc, 'b', `What the player sees after meeting ${safeLabel(person.name || 'them')}`));
+    const view = playerView(model, person);
+    if (!view.length) preview.append(hint(doc, 'Nothing yet: add a secret.'));
+    view.forEach(item => {
+        if (item.open) {
+            const open = el(doc, 'div', '', { class: 'cf-open' });
+            open.append(el(doc, 'b', safeLabel(item.title)), ' ', el(doc, 'span', item.rule, { class: 'cf-tag' }), el(doc, 'p', safeLabel(item.text), { class: 'cf-hint' }));
+            preview.append(open);
+        } else {
+            preview.append(el(doc, 'span', '', { class: 'cf-bar', 'aria-hidden': 'true' }), hint(doc, item.rule));
+        }
+    });
+}
+
 function secretFields(ctx, index, person) {
     const { doc, model } = ctx;
     const secrets = Array.isArray(person.secrets) ? person.secrets.filter(isRecord) : [];
@@ -709,18 +757,7 @@ function secretFields(ctx, index, person) {
     row.append(addSecret, hint(doc, 'Light to deep. The narrator knows them all from the first meeting and keeps them; the player sees each one when it opens.'));
     set.append(row);
     const preview = el(doc, 'div', '', { class: 'cf-preview', 'data-cf': 'preview' });
-    preview.append(el(doc, 'b', `What the player sees after meeting ${safeLabel(person.name || 'them')}`));
-    const view = playerView(model, person);
-    if (!view.length) preview.append(hint(doc, 'Nothing yet: add a secret.'));
-    view.forEach(item => {
-        if (item.open) {
-            const open = el(doc, 'div', '', { class: 'cf-open' });
-            open.append(el(doc, 'b', safeLabel(item.title)), ' ', el(doc, 'span', item.rule, { class: 'cf-tag' }), el(doc, 'p', safeLabel(item.text), { class: 'cf-hint' }));
-            preview.append(open);
-        } else {
-            preview.append(el(doc, 'span', '', { class: 'cf-bar', 'aria-hidden': 'true' }), hint(doc, item.rule));
-        }
-    });
+    showPlayerPreview(doc, model, person, preview);
     set.append(preview);
     return set;
 }
