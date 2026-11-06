@@ -193,7 +193,7 @@ Studio has no per-chat state. Everything lives in the browser that opened the pa
 | `src/model.js`, `src/edits.js`, `src/history.js`, `src/apply-edit.js`, `src/records.js`, `src/identity.js` | Pack model, edits, undo/redo, record kinds and keys. |
 | `src/screens/` | One file per screen: records, timeline, timeline-ai, cast, pack-settings, presentation, authoring, code-module, problems; `dm/` for data modules. |
 | `src/timeline/` | Pure parts of the Timeline: condition, calendar, lasting change, AI prompt and answer, drafts. |
-| `src/cast/` | Cast data and checks, portrait fitting, zip writer. |
+| `src/cast/` | Cast data and checks, form focus across redraws, portrait fitting, zip writer. |
 | `src/data-modules/` | Adapter to Story Block's data-module checker, forms, expression editor, simulator. |
 | `src/code-module/` | Starter-module generator: inputs, templates, zip writer, generated assets. |
 | `src/narrator.js`, `src/card.js`, `src/card-png.js`, `src/card-image.js`, `src/lorebook.js`, `src/screens/character-card.js` | Character card (fields, checklist, PNG/JSON writer and reader) and World Info export and import. `vendor/story-block-examples/` holds the copied status-bar script. |
