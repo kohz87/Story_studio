@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.2
+
+- **Pack settings no longer has a Stat formula card.** Packs are always Standard and Studio writes no formula. A pack that says `standard` stays valid; one that says `classic` shows Story Block's refusal in Check.
+- Vendored Story Block 2.25.0 (the pinned counts are 368/371).
+
 ## 0.10.1
 
 - **Cast fields no longer pile up focus listeners.** Each field keeps one restore listener pair; closing the screen removes it. Typing across cast fields with Tab keeps every character (unchanged).
