@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.0
+
+- **The Cast form has a Usually wears box under Look.** What the person wears is kept apart from their body (`wears`), so the dossier's appearance shows the outfit and Look stays the body.
+- **The Cast form has a How they behave group.** Personality, Behaviour levers, Mannerisms and With you (how they treat the player character, up to 320 characters) are separate fields, written as the pack's `behaviour`, `mannerisms` and `withYou`.
+- **The Cast form keeps focus while you type.** An edit used to redraw the whole form while focus was moving to the next field, so the first characters typed there could be lost. The redraw now waits for the change to finish and restores the field, its text, the caret and the scroll position.
+- **The single-file page may be up to 10 MB** (it was 6.5 MB); Story Block's file split made the page about 6.5 MB.
+- **The vendored Story Block and the authoring kit follow Story Block 2.23.0.**
+- **No source file is over 450 lines, and every source file is in a codemap (no behaviour change).** `screens/cast.js`, `edits.js`, `model.js`, `studio.js`, `timeline/ai-answer.js`, `screens/dm/sections.js` and `data-modules/sb-sim.js` are now small parts with header comments; `docs/dev/codemap.md` names every file the other docs do not.
+
 ## 0.9.0
 
 - **Signature skills on the Cast form.** A **Signature skills · n of 8** section sits after "Before they are met" and
