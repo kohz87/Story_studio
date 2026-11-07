@@ -64,3 +64,52 @@ Mapped 2026-11-07.
 - `src/timeline/event.js`: Pure timeline event reading, grouping, labels and plain-language firing descriptions.
 - `src/timeline/lasting.js`: Story Director lasting-change payloads, validation, capability helpers and timeline problem checks.
 - `src/timeline/notes.js`: Non-blocking Timeline notes about conditions waiting on world events the pack never adds.
+
+## Split files
+- `src/edits/values.js`: Value checks for pack edits: plain JSON within Story Block's limits, cloned on the way, and the document clone.
+- `src/edits/ids.js`: Record identity for edits: the pack's ID prefix, local IDs, identity keys and the kinds that carry identities.
+- `src/edits/commit.js`: Edit results: a checked snapshot the pack checker accepts, or a refusal that leaves the model unchanged.
+- `src/edits/lists.js`: Finds and writes records in a pack document: a kind's list, a value at a path, and a record by its ID.
+- `src/edits/record-ops.js`: Record edits: add, replace a kind's records in place, rename an ID with its references, and remove with dependants.
+- `src/edits/pack-settings.js`: The pack's stat formula set as one edit, leaving the rest of `content.rpg` as it is.
+- `src/edits/guards.js`: Identity guards for structural edits: replacing an ancestor or a definition collection may not drop an identity.
+- `src/edits/field-path.js`: setField's path steps: checks the path an edit names and walks a copy down to the parent it changes.
+- `src/edits/field.js`: setField: the guarded edit of one field at a structured path, refusing identity changes, unsafe keys and bad values.
+- `src/edits/schema-field.js`: setSchemaField: the schema-checked field edit every UI commit uses, moving references when a record's name changes.
+- `src/data-modules/sb-sim/util.js`: Helpers the simulator's parts share: clones, deep equality, the failure shape, step text and reply source keys.
+- `src/data-modules/sb-sim/grammar.js`: The narrator grammar text Story Block puts in the prompt for a pinned data module.
+- `src/data-modules/sb-sim/host.js`: The disposable Story Block host on a fake SillyTavern, and the quiet that keeps runtime console lines out of the author's console.
+- `src/data-modules/sb-sim/build.js`: Sample world setup: the pack checked and installed on a disposable host, with the modules it needs pinned.
+- `src/data-modules/sb-sim/play.js`: Playing a scenario on the sample host: steps as replies, Continues, time advances and edits made after the fact.
+- `src/data-modules/sb-sim/read.js`: Reading the sample host: fields and timer cursors, changes between snapshots, card text and usage.
+- `src/data-modules/sb-sim/trace.js`: Rebuilding simulated rows from saved records and surviving receipts: lines, refusals, changes and field state.
+- `src/data-modules/sb-sim/replay.js`: Replay purity check: live state equals a fresh store's replay, with and without checkpoints.
+- `src/timeline/ai-answer/values.js`: Value readers for answers: limits, record and text checks, folded names, character-counted cuts and descriptions.
+- `src/timeline/ai-answer/json.js`: Finds the JSON in a pasted answer: the whole text, a code fence, or each bracketed value around the prose.
+- `src/timeline/ai-answer/dates.js`: Reads dates in an answer's words as story minutes in the pack's calendar.
+- `src/timeline/ai-answer/where.js`: Matches an answer's place names to the pack's regions, places and aliases, and reads an event's "where" list.
+- `src/timeline/ai-answer/lasting-payload.js`: Reads an event's lasting change field by field, with a note for each field cut or left out.
+- `src/timeline/ai-answer/read.js`: Reads an answer into draft events: IDs, "after" and delay, dates, places, and the drafts with their notes.
+- `src/screens/dm/sections/shared.js`: Helpers the data-module form sections share: draft list and object access, the budget note, the expression context and the condition control.
+- `src/screens/dm/sections/identity-state.js`: The data module's identity (slug, name, scope, IDs) and its state fields.
+- `src/screens/dm/sections/imports.js`: The imports section: each alias with its adapter, mode and projection, or the module and export it reads from this pack.
+- `src/screens/dm/sections/kinds.js`: The kinds section: each kind of line the narrator can write, with its labels, condition and effects.
+- `src/screens/dm/sections/rules-timers.js`: Ordered rules (run after a line's effects) and timers (add to fields once per period of story time).
+- `src/screens/dm/sections/rewards.js`: The rewards section: reward templates with bindings (the narrator picks), values (the code picks) and a condition.
+- `src/screens/dm/sections/exports.js`: The exports section: the fields each export shares with other data modules through its named public view.
+- `src/screens/dm/sections/migrations.js`: The migrations section: additive migrations between state versions, and the check of a draft against an earlier pack.
+- `src/model/safe-clone.js`: Bounded, getter-safe cloning of pack data under Story Block's limits.
+- `src/model/references.js`: Typed pack references in traversal order, with pack-local names resolved.
+- `src/model/references/lookups.js`: Place, item, race, talent and legacy-skill lookup tables used by reference indexing.
+- `src/screens/cast/pieces.js`: Shared Cast fieldsets, hints and Story Block problem notes.
+- `src/screens/cast/preview.js`: Player-facing preview of the Cast secrets.
+- `src/screens/cast/form.js`: Cast one-undo edits, nested value writes and labelled controls.
+- `src/screens/cast/identity.js`: Cast names, aliases, appearance, background and key fields.
+- `src/screens/cast/behaviour.js`: Cast personality, levers, mannerisms and player-relationship fields.
+- `src/screens/cast/portrait.js`: Cast portrait field, image fitting and snapshot picture handling.
+- `src/screens/cast/story.js`: Cast start, drawn-to, meter, stage and unmet-death fields.
+- `src/screens/cast/skills.js`: Cast signature-skill rows, ordering and checker notes.
+- `src/screens/cast/secrets.js`: Cast secret cards, opening rules and the player preview.
+- `src/studio/chrome.js`: Studio page shell with header controls, workspace columns, inspector, notices and overlays.
+- `src/studio/events.js`: Page-level unload, Escape and dropped-file listeners, attached and removed as a pair.
+- `src/studio/open-file.js`: JSON and zip pack reading with size, portrait and stale-read guards.

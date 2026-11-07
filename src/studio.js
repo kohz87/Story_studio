@@ -2,21 +2,19 @@ import { applyEdit } from './apply-edit.js';
 import { openPack, draftsOf, portraitsOf, withPortraits } from './model.js';
 import { setSchemaField as setField } from './edits.js';
 import { createHistory } from './history.js';
-import { safeLabel, el, button, field, icon } from './dom.js';
+import { safeLabel, el, button, icon } from './dom.js';
 import { KINDS, RAIL_KINDS, LABELS, records, identity, localId } from './records.js';
 import { renderScreen } from './screens/index.js';
 import { downloadPack, downloadZip } from './export.js';
-import { readDraft, writeDraft, MAX_PACK_BYTES } from './session.js';
+import { readDraft, writeDraft } from './session.js';
 import { saveHeld, loadHeld, saveCardImage, loadCardImage, saveCardDraft, loadCardDraft } from './portrait-store.js';
 import { emptyCard, sanitizeCard, cardTouched } from './card.js';
-import { isZipFile, readPackZip } from '../vendor/story-block/src/v2/packs/bundle.js';
-import { ZIP_LIMITS, PORTRAIT_LIMITS } from '../vendor/story-block/src/v2/packs/limits.js';
-import { imageSize, sniffImage, kb } from './cast/portrait.js';
 import { portraitSignature, portraitNames } from './cast/data.js';
-import { keepCastFocus } from './cast/focus.js';
 import { renderProblemsDrawer } from './screens/problems.js';
-import { createColumns } from './columns.js';
 import { saveFailed } from './timeline/drafts.js';
+import { createStudioTheme, createStudioChrome } from './studio/chrome.js';
+import { createStudioEvents } from './studio/events.js';
+import { createPackFileReader } from './studio/open-file.js';
 
 // The screens below the record kinds in the rail, in order.
 const SCREENS = [['defaults', 'Settings defaults'], ['presentation', 'Screen builder'], ['data-modules', 'Data modules'], ['code-module', 'Code module'], ['card', 'Character card'], ['lorebook', 'Lorebook'], ['lore-import', 'Import lorebook']];
@@ -44,16 +42,7 @@ export function mountStudio(root) {
     }
 
     lastKept = portraitsOf(history.current);
-    const media = win?.matchMedia?.('(prefers-color-scheme: light)');
-    let themeChoice;
-    try { themeChoice = win?.localStorage?.getItem('story-studio-theme'); } catch { /* Storage is optional. */ }
-    const setTheme = () => {
-        const theme = themeChoice === 'dark' || themeChoice === 'light' ? themeChoice : media?.matches ? 'light' : 'dark';
-        doc.documentElement.dataset.theme = theme;
-        themeButton.textContent = theme === 'dark' ? 'Light theme' : 'Dark theme';
-        themeButton.setAttribute('aria-label', `Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`);
-    };
-
+    const theme = createStudioTheme({ doc, win });
     // The parts list is a disclosure on a phone (up to 600 px): it starts collapsed and collapses again after a part is picked.
     // Everywhere else it is always open.
     const stack = win?.matchMedia?.('(max-width: 600px)');
@@ -62,15 +51,6 @@ export function mountStudio(root) {
     const syncParts = () => { if (parts) parts.open = stack?.matches ? partsOpen : true; };
     stack?.addEventListener?.('change', syncParts);
 
-    const app = el(doc, 'div', '', { class: 'studio' });
-    const header = el(doc, 'header', '', { class: 'topbar' });
-    const brand = el(doc, 'strong', 'Story Studio', { class: 'brand' });
-    brand.prepend(icon(doc, 'logo-mark'));
-    const name = el(doc, 'input', '', { id: 'pack-name', placeholder: '[YOUR PACK NAME]', 'aria-label': 'Pack name' });
-    name.addEventListener('change', () => {
-        applyEdit(ctx, setField(ctx.model, ['name'], name.value));
-    });
-    const fingerprint = el(doc, 'span', 'pack · —', { class: 'fingerprint muted' });
     // A step through the history that brings drafts back or takes them away is saved with the project like any other. If the
     // browser would not keep that, the step is taken back (the history is as it was) and the writer is told, never left with
     // work that a reload would lose.
@@ -87,70 +67,22 @@ export function mountStudio(root) {
             ctx.notify(saveFailed(`${verb} left them as they were`));
         }
     };
-    const undo = button(doc, '', () => step(() => history.undo(), () => history.redo(), 'Undo'), { 'aria-label': 'Undo' });
-    undo.append(icon(doc, 'undo'));
-    const redo = button(doc, '', () => step(() => history.redo(), () => history.undo(), 'Redo'), { 'aria-label': 'Redo' });
-    redo.append(icon(doc, 'redo'));
-    const file = el(doc, 'input', '', { type: 'file', accept: '.json,application/json,.zip,application/zip', id: 'pack-file', hidden: '', 'aria-label': 'Open pack file' });
-    file.addEventListener('change', () => {
-        const f = file.files?.[0];
-        file.value = '';
-        if (f) ctx.openFile(f);
+    const {
+        app, name, fingerprint, undo, redo, file, problems, check, exportButton, rail, main, inspector, inspectorBody,
+        castFocus, notice, problemsHost, overlays, columns, media, setTheme,
+    } = createStudioChrome({
+        doc, win, root, selection, theme,
+        nameChanged: value => applyEdit(ctx, setField(ctx.model, ['name'], value)),
+        onUndo: () => step(() => history.undo(), () => history.redo(), 'Undo'),
+        onRedo: () => step(() => history.redo(), () => history.undo(), 'Redo'),
+        onOpenFile: f => ctx.openFile(f),
+        onShowProblems: () => ctx.showProblems(),
+        onSelectCheck: () => ctx.select('check'),
+        render: () => ctx.render(),
     });
-    const open = button(doc, 'Open pack…', () => file.click());
-    const problems = button(doc, 'Problems (0)', () => ctx.showProblems());
-    const check = button(doc, 'Check / export', () => ctx.select('check'));
-    const exportButton = button(doc, 'Export', () => ctx.select('check'), { class: 'primary' });
-    const themeButton = button(doc, '', () => {
-        themeChoice = doc.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-        try { win?.localStorage?.setItem('story-studio-theme', themeChoice); } catch { /* Storage is optional. */ }
-        setTheme();
-    });
-    header.append(brand, field(doc, 'Pack', name), fingerprint, undo, redo, open, problems, exportButton, themeButton, file);
 
-    const workspace = el(doc, 'div', '', { class: 'workspace' });
-    const rail = el(doc, 'nav', '', { 'aria-label': 'Pack parts', class: 'rail', id: 'rail' });
-    const main = el(doc, 'main', '', { id: 'main', tabindex: '-1' });
-    const inspector = el(doc, 'aside', '', { class: 'inspector', 'aria-label': 'Inspector', id: 'inspector' });
-    const inspectorClose = button(doc, 'Close inspector', () => { app.classList.remove('inspector-open'); main.focus(); }, { class: 'inspector-close' });
-    const inspectorBody = el(doc, 'div', '', { class: 'inspector-body' });
-    inspector.append(inspectorClose, inspectorBody);
-    const castFocus = keepCastFocus({ doc, win, inspector: inspectorBody, selection, render: () => ctx.render() });
-    const notice = el(doc, 'div', '', { role: 'status', 'aria-live': 'polite', class: 'notice' });
-    const problemsHost = el(doc, 'div', '', { class: 'problems-drawer-host' });
-    const overlays = el(doc, 'div', '', { class: 'overlays' });
-    const columns = createColumns({ doc, win, workspace, inspectorShown: () => !inspector.hidden });
-    workspace.append(rail, columns.railDivider, main, columns.inspectorDivider, inspector);
-    app.append(header, workspace, notice, problemsHost, overlays);
-    root.replaceChildren(app);
-
-    const onBeforeUnload = (e) => {
-        if (ctx.dirty) {
-            e.preventDefault();
-            e.returnValue = '';
-            return '';
-        }
-    };
-    const onKeyDown = (e) => {
-        if (e.key === 'Escape' && problemsHost.childNodes.length > 0) {
-            e.preventDefault?.();
-            ctx.closeProblems(true);
-        }
-    };
-    const onDragOver = (e) => {
-        e.preventDefault();
-    };
-    const onDrop = (e) => {
-        e.preventDefault();
-        const f = e.dataTransfer?.files?.[0];
-        if (f) ctx.openFile(f);
-    };
-
-    win?.addEventListener?.('beforeunload', onBeforeUnload);
-    win?.addEventListener?.('keydown', onKeyDown);
-    win?.addEventListener?.('dragover', onDragOver);
-    win?.addEventListener?.('drop', onDrop);
-
+    const events = createStudioEvents({ win, doc, problemsHost, getContext: () => ctx });
+    events.attach();
 
     // The pictures are kept in the browser beside the project, whenever the open pack's set of them is a new one.
     const keepPortraits = () => {
@@ -188,6 +120,14 @@ export function mountStudio(root) {
         });
     };
 
+    const fileReader = createPackFileReader({
+        destroyed: () => destroyed,
+        nextToken: () => ++seq,
+        isStale: token => destroyed || token !== seq,
+        notify: message => ctx.notify(message),
+        routeZip: file => ctx.openZip(file),
+        loadText: (...args) => ctx.loadText(...args),
+    });
     const ctx = {
         doc, win, root, app, main, inspector: inspectorBody, overlays, selection, file, authoring: {}, filters: {},
         // The Character card page's draft (saved with the pack) and its picture (PNG bytes, kept in IndexedDB beside it).
@@ -369,58 +309,9 @@ export function mountStudio(root) {
             }
             return model;
         },
-        async openFile(f) {
-            if (destroyed) return false;
-            if (isZipFile(f)) return ctx.openZip(f);
-            const token = ++seq;
-            if (f && typeof f.size === 'number' && f.size > MAX_PACK_BYTES) {
-                ctx.notify('too-large: Pack file exceeds maximum size limit');
-                return false;
-            }
-            let text;
-            try {
-                text = await f.text();
-            } catch (err) {
-                if (destroyed || token !== seq) return false;
-                ctx.notify(`file-read-error: ${err?.message || 'Failed to read file'}`);
-                return false;
-            }
-            if (destroyed || token !== seq) return false;
-            return ctx.loadText(text);
-        },
+        openFile: fileReader.openFile,
         // A pack as one zip (pack.json and portraits/): the same reader the game uses, so Studio and Story Block agree on what is a pack.
-        async openZip(f) {
-            if (destroyed) return false;
-            const token = ++seq;
-            if (f && typeof f.size === 'number' && f.size > ZIP_LIMITS.archive) {
-                ctx.notify(`too-large: The zip is larger than ${Math.round(ZIP_LIMITS.archive / 1024 / 1024)} MB`);
-                return false;
-            }
-            let opened;
-            const held = new Map();
-            const left = [];
-            try {
-                opened = await readPackZip(new Uint8Array(await f.arrayBuffer()));
-                if (opened.ok) {
-                    for (const file of opened.files) {
-                        const bytes = await file.read();
-                        const type = sniffImage(bytes);
-                        if (!type) left.push(`${file.name} is not a picture`);
-                        else if (bytes.length > PORTRAIT_LIMITS.bytes) left.push(`${file.name} is over ${kb(PORTRAIT_LIMITS.bytes)} KB`);
-                        else held.set(file.name, Object.freeze({ bytes, type, ...(imageSize(bytes) ?? { width: 0, height: 0 }) }));
-                    }
-                }
-            } catch (err) {
-                if (destroyed || token !== seq) return false;
-                ctx.notify(`file-read-error: ${safeLabel(err?.message || 'Failed to read file')}`);
-                return false;
-            }
-            if (destroyed || token !== seq) return false;
-            if (!opened.ok) { ctx.notify(`zip-refused: ${safeLabel(opened.message)}`); return false; }
-            const model = ctx.loadText(opened.text, held);
-            if (model?.document && left.length) ctx.notify(`portrait: ${left.join('; ')}; left out.`);
-            return model;
-        },
+        openZip: fileReader.openZip,
         render() {
             if (destroyed) return false;
             try {
@@ -495,10 +386,7 @@ export function mountStudio(root) {
             columns.destroy();
             win?.removeEventListener?.('pagehide', onPageHide);
             doc.removeEventListener?.('visibilitychange', onHidden);
-            win?.removeEventListener?.('beforeunload', onBeforeUnload);
-            win?.removeEventListener?.('keydown', onKeyDown);
-            win?.removeEventListener?.('dragover', onDragOver);
-            win?.removeEventListener?.('drop', onDrop);
+            events.detach();
 
             root.replaceChildren();
         },

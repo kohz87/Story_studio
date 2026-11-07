@@ -12,7 +12,7 @@ function sources(dir) {
 
 test('every UI field commit imports the guarded edit and cannot bypass schema validation', () => {
     let consumers = 0;
-    for (const path of sources('src').filter(path => path !== 'src/edits.js')) {
+    for (const path of sources('src').filter(path => path !== 'src/edits.js' && !path.startsWith('src/edits/'))) {
         const source = readFileSync(path, 'utf8');
         if (!/\bsetField\s*\(/.test(source)) continue;
         consumers++;
@@ -20,7 +20,7 @@ test('every UI field commit imports the guarded edit and cannot bypass schema va
         assert.doesNotMatch(source, /import \*/, `${path}: no namespace edit import`);
     }
     assert.ok(consumers > 0, 'At least one screen commits guarded fields');
-    const edits = readFileSync('src/edits.js', 'utf8').split('export function setSchemaField')[1];
+    const edits = readFileSync('src/edits/schema-field.js', 'utf8').split('export function setSchemaField')[1];
     assert.match(edits, /validateChange\([\s\S]*if \(!checked.ok\) return[\s\S]*return setField\(/);
     const forms = readFileSync('src/forms.js', 'utf8');
     assert.match(forms, /validateChange\(options.rootSchema, options.rootValue[\s\S]*if \(!checked.ok\)[\s\S]*if \(options.isNew\)/);
