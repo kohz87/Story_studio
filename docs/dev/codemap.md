@@ -45,7 +45,7 @@ Mapped 2026-11-07.
 ## src/screens/
 - `src/screens/authoring.js`: Lorebook screens for World Info download and review/import of entries as pack drafts.
 - `src/screens/cast.js`: Cast part: list and per-person dossier editor for portraits, meters, stages, secrets and skills.
-- `src/screens/pack-settings.js`: Pack settings screen with the stat-formula picker and JSON editors for host and content fields.
+- `src/screens/pack-settings.js`: Pack settings screen with JSON editors for host and content fields.
 - `src/screens/presentation.js`: Screen and layout builder with record forms, template and widget tools, layout editing and live preview.
 - `src/screens/problems.js`: Problem grouping and navigation plus the Check/export screen and the Problems drawer.
 - `src/screens/records.js`: Shared record list, add form and cascading remove dialog with per-record problem display.
@@ -71,7 +71,6 @@ Mapped 2026-11-07.
 - `src/edits/commit.js`: Edit results: a checked snapshot the pack checker accepts, or a refusal that leaves the model unchanged.
 - `src/edits/lists.js`: Finds and writes records in a pack document: a kind's list, a value at a path, and a record by its ID.
 - `src/edits/record-ops.js`: Record edits: add, replace a kind's records in place, rename an ID with its references, and remove with dependants.
-- `src/edits/pack-settings.js`: The pack's stat formula set as one edit, leaving the rest of `content.rpg` as it is.
 - `src/edits/guards.js`: Identity guards for structural edits: replacing an ancestor or a definition collection may not drop an identity.
 - `src/edits/field-path.js`: setField's path steps: checks the path an edit names and walks a copy down to the parent it changes.
 - `src/edits/field.js`: setField: the guarded edit of one field at a structured path, refusing identity changes, unsafe keys and bad values.

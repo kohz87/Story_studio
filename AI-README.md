@@ -5,7 +5,7 @@ Rules for changing code are in [AGENTS.md](AGENTS.md).
 
 ## Purpose
 
-- Story Studio 0.10.1 is an offline, single-file pack editor and creator kit for the Story Suite (SillyTavern extensions).
+- Story Studio 0.10.2 is an offline, single-file pack editor and creator kit for the Story Suite (SillyTavern extensions).
 - It opens, edits, checks and exports world packs (`pack.json`, or a `.zip` with portraits). It is not an extension and not a reader.
 
 ## Suite map
@@ -15,10 +15,10 @@ Rules for changing code are in [AGENTS.md](AGENTS.md).
 | Story Block | 2.16.1 | The hub. State, packs and their checker, the reader's screens, the `<Changes>` line grammar, the module SDK. Install first. |
 | Story Director | 2.9.1 | Clock, map and trips, quests and hooks, world events (the chronicle). Needs Story Block. |
 | NPC State Delta | 1.7.1 | Dossiers: meters, stages, secrets, portraits. Needs Story Block. Optional. |
-| Story Studio | 0.10.1 | This repo. Writes and checks packs. Standalone page. |
+| Story Studio | 0.10.2 | This repo. Writes and checks packs. Standalone page. |
 
 - Data flows one way: Studio writes a pack file; Story Block imports it (Settings, Tabs & Packs); Story Director and NPC State Delta read what Story Block holds. Nothing flows back to Studio.
-- Studio uses Story Block only through `vendor/story-block/` (Story Block 2.22.0, commit c57512e). The pack checker is Story Block's own `validatePack`, so Studio and the game cannot disagree on what a valid pack is.
+- Studio uses Story Block only through `vendor/story-block/` (Story Block 2.25.0, commit d71fc06). The pack checker is Story Block's own `validatePack`, so Studio and the game cannot disagree on what a valid pack is.
 - Studio has no model, no keys and no network access at runtime.
 
 ## Install & requirements
@@ -60,7 +60,7 @@ Rules for changing code are in [AGENTS.md](AGENTS.md).
 - **Timeline**: Timeline / List switch; `+ Add event`; event form (On a date / After another event / Any time; Anywhere / Only in...; news; Lasting change; "When this fires" line; Advanced fold with raw `when`, `after`, `then`).
 - **Write with an AI** (Timeline): step 1 builds a prompt (Copy prompt, Save as .txt), step 2 reads the pasted answer (Check it), results become drafts with Keep, Discard, Keep all.
 - **Cast**: `+ Add person`; sections Who they are, Portrait, Where their story starts, Drawn to, Relationship at the start, Before they are met, Secrets (up to 8, with a player-view preview).
-- **Pack settings**: first card is Stat formula (Reader's choice, Standard, Classic; writes `content.rpg.formula`); then one JSON card per other pack field.
+- **Pack settings**: one JSON card per pack field. No stat-formula card: packs are always Standard and Studio writes no `content.rpg.formula`.
 - **Settings defaults**: states that Story Block's importer accepts zero per-module settings defaults; checking a proposal never changes the pack.
 - **Screen builder**: Screens and Layouts; all ten screen fields; live preview; Apply screen / Apply layout validate the whole candidate pack.
 - **Data modules**: forms from Story Block's descriptors, expression editor, Simulator on the real runtime, Apply module (one undo step).
@@ -79,7 +79,6 @@ Studio has no settings screen. Its choices:
 | Theme (`story-studio-theme`) | `dark` or `light`. | The browser's colour-scheme preference; dark if none. |
 | Column widths (`story-studio-columns`) | Parts list 150-320 px, inspector 280-640 px, wide screens only. | 190 and 330 px. |
 | Timeline view | Timeline or List. | Timeline. |
-| Stat formula (`content.rpg.formula`) | Pack field. `standard` or `classic`; absent means the reader chooses. | Absent (Reader's choice). |
 | Export file name | Name offered on Check / export. | `<id>.json`; `<id>-<version>.zip` for a pack with a cast. |
 | Pack `economy.scale` | Number 0.001 to 1000, multiplies money defaults across the suite. | 1 |
 | Reader settings | Cannot be shipped by a pack; the checker refuses unknown fields. | n/a |
@@ -223,6 +222,6 @@ Code rules (from `AGENTS.md`): plain ES modules, DOM only through `createElement
 
 ## Version
 
-- Story Studio 0.10.1 (`package.json`, `CHANGELOG.md`). Vendored Story Block 2.22.0 (commit c57512e); authoring kit stamped with the same commit.
-- Suite today: Story Block 2.22.0, Story Director 2.10.0, NPC State Delta 1.10.0, Story Studio 0.10.1.
+- Story Studio 0.10.2 (`package.json`, `CHANGELOG.md`). Vendored Story Block 2.25.0 (commit d71fc06); authoring kit stamped with the same commit.
+- Suite today: Story Block 2.25.0, Story Director 2.11.2, NPC State Delta 1.13.0, Story Studio 0.10.2.
 - Licence: AGPL-3.0-only. Phosphor Icons (MIT) are bundled; the notice is in `src/credits.txt` and the built page.

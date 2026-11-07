@@ -1,5 +1,5 @@
-// The Stat formula card of Pack settings in a real browser, against the committed offline distribution: the choice, the help line,
-// Undo and Redo, a reload, the exported pack, Check, and the usual target-size and contrast checks on a desktop and a phone.
+// Pack settings in a real browser, against the committed offline distribution: no Stat formula card, a standard pack stays valid,
+// a classic pack gets Story Block's refusal in Check, and the usual target-size checks on a desktop and a phone.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -85,80 +85,54 @@ async function findings(page) {
 
 
 const card = page => page.locator('[data-cf=formula]');
-const pick = (page, name) => card(page).getByRole('button', { name, exact: true }).click();
-const pressed = page => card(page).locator('button[aria-pressed=true]').allInnerTexts();
-const exported = async page => {
-    await navigate(page, 'Check / export');
-    return JSON.parse(new TextDecoder().decode((await downloaded(page, '#export-btn')).bytes));
-};
+const withFormula = formula => { const pack = JSON.parse(PACK); pack.content.rpg = { ...pack.content.rpg, formula }; return JSON.stringify(pack); };
 async function settings(page) {
     await navigate(page, 'Pack settings');
-    await card(page).waitFor();
+    await page.locator('main h1', { hasText: 'Pack settings' }).waitFor();
 }
 
-test('the card is first in Pack settings; a choice writes content.rpg.formula, exports, checks, undoes and redoes', async () => {
+test('Pack settings has no Stat formula card, and exporting adds no formula', async () => {
     await withPage({}, async page => {
         await load(page, PACK);
         await settings(page);
-        assert.equal(await page.locator('main > *').nth(3).getAttribute('data-cf'), 'formula');
-        assert.equal(await card(page).locator('h3').innerText(), 'Stat formula');
-        assert.deepEqual(await card(page).locator('button').allInnerTexts(), ["Reader's choice", 'Standard', 'Classic']);
-        assert.deepEqual(await pressed(page), ["Reader's choice"]);
-        assert.equal(await card(page).locator('.cf-hint').innerText(), 'The reader picks in Settings → RPG; a chat that never chose plays Standard.');
-        await pick(page, 'Classic');
-        assert.deepEqual(await pressed(page), ['Classic']);
-        assert.equal(await card(page).locator('.cf-hint').innerText(), 'One stat on its own, stats start at 10, and the bars are fixed.');
-        assert.equal((await exported(page)).content.rpg.formula, 'classic');
-        await settings(page);
-        await pick(page, 'Standard');
-        assert.equal(await card(page).locator('.cf-hint').innerText(), 'A main stat plus half a second one, stats start at 5 and grow, and the bars grow with VIT, AGI and INT.');
-        await page.getByRole('button', { name: 'Undo', exact: true }).click();
-        assert.deepEqual(await pressed(page), ['Classic']);
-        await page.getByRole('button', { name: 'Redo', exact: true }).click();
-        assert.deepEqual(await pressed(page), ['Standard']);
-        await page.reload();
-        await page.locator('.studio').waitFor();
+        assert.equal(await card(page).count(), 0);
+        assert.equal(await page.locator('[data-formula]').count(), 0);
+        assert.doesNotMatch(await page.locator('main').innerText(), /Stat formula|Classic|Reader's choice/);
         await navigate(page, 'Check / export');
-        assert.doesNotMatch(await page.locator('main').innerText(), /content\.rpg\.formula/);
-        await settings(page);
-        await pick(page, "Reader's choice");
-        assert.deepEqual(await pressed(page), ["Reader's choice"]);
-        assert.equal(Object.hasOwn((await exported(page)).content ?? {}, 'rpg'), false);
+        const pack = JSON.parse(new TextDecoder().decode((await downloaded(page, '#export-btn')).bytes));
+        assert.equal(pack.content?.rpg?.formula, undefined);
     });
 });
 
-test('numbers and skill sets of content.rpg stay when the choice changes; the JSON card shows the same record', async () => {
-    const pack = JSON.parse(PACK);
-    pack.content.rpg = { formula: 'classic', numbers: { foeBase: 5 }, skillSets: [{ name: 'Wayfarer', skills: [{ name: 'Spark', about: 'A small burst of magic.', stat: 'int', uses: 'mana' }] }] };
+test('a pack that says standard loads clean and keeps its formula on export', async () => {
     await withPage({}, async page => {
-        await load(page, JSON.stringify(pack));
-        await settings(page);
-        assert.deepEqual(await pressed(page), ['Classic']);
-        await pick(page, "Reader's choice");
-        const json = page.locator('details').filter({ has: page.locator('summary', { hasText: /^content\.rpg$/ }) });
-        await json.locator('summary').click();
-        assert.deepEqual(JSON.parse(await json.locator('textarea').inputValue()), { numbers: pack.content.rpg.numbers, skillSets: pack.content.rpg.skillSets });
-        assert.deepEqual((await exported(page)).content.rpg, { numbers: pack.content.rpg.numbers, skillSets: pack.content.rpg.skillSets });
+        await load(page, withFormula('standard'));
+        await navigate(page, 'Check / export');
+        assert.doesNotMatch(await page.locator('main').innerText(), /content\.rpg\.formula/);
+        const pack = JSON.parse(new TextDecoder().decode((await downloaded(page, '#export-btn')).bytes));
+        assert.equal(pack.content.rpg.formula, 'standard');
+    });
+});
+
+test('a pack that says classic shows the refusal in Check', async () => {
+    await withPage({}, async page => {
+        await load(page, withFormula('classic'));
+        await navigate(page, 'Check / export');
+        const text = await page.locator('main').innerText();
+        assert.match(text, /content\.rpg\.formula/);
+        assert.match(text, /no longer supported/);
+        assert.equal(await card(page).count(), 0);
     });
 });
 
 for (const [name, options] of [['desktop', { width: 1440, height: 900 }], ['phone', { width: 390, height: 844 }]]) {
-    test(`the card keeps the target size, labels and contrast in both themes on a ${name}`, async () => {
+    test(`Pack settings keeps the target size and labels in both themes on a ${name}`, async () => {
         for (const theme of ['dark', 'light']) {
             await withPage({ ...options, theme }, async page => {
                 await load(page, PACK);
                 if (options.width < 600) await openParts(page);
                 await settings(page);
-                await pick(page, 'Classic');
                 assert.deepEqual(await findings(page), []);
-                const ratio = await card(page).locator('.cf-hint').evaluate(node => {
-                    const channel = value => { const v = value / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
-                    const lum = ([r, g, b]) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-                    const hex = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
-                    const [high, low] = [lum(getComputedStyle(node).color.match(/[\d.]+/g).slice(0, 3).map(Number)), lum([1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16)))].sort((a, b) => b - a);
-                    return (high + 0.05) / (low + 0.05);
-                });
-                assert.ok(ratio >= 4.5, `${theme} ${ratio}`);
             });
         }
     });

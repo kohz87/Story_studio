@@ -2,7 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { validatePack, slugify } from '../vendor/story-block/src/v2/packs/index.js';
+import { validatePack } from '../vendor/story-block/src/v2/packs/validate.js';
+import { slugify } from '../vendor/story-block/src/v2/packs/index.js';
 import { openPack } from '../src/model.js';
 import { add, remove, renameId, setField } from '../src/edits.js';
 import { KINDS, records, identity } from '../src/records.js';

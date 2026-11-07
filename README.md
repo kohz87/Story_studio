@@ -1,4 +1,4 @@
-# Story Studio 0.10.1
+# Story Studio 0.10.2
 
 Story Studio is a pack editor for the Story Suite. You write a world, its people and its events here, check it, and export a pack file. Story Block imports that file.
 
@@ -23,7 +23,7 @@ The page has a header (pack name, Undo, Redo, Open pack, Problems, Export, theme
 - **Places, Routes, Items, People / creatures.** Add, edit, rename and remove records. A rename updates everything that points at the record. Removing a record that others use asks first.
 - **Timeline.** Your events, grouped by story year. Each event has a date or an "after another event", the places it needs, the news the narrator is told once, and an optional lasting change in Story Director's chronicle. **Write with an AI** builds a prompt from your pack. You paste it into any AI chat, paste the answer back, and Studio adds the events as drafts for you to keep or discard.
 - **Cast.** The people your story meets, each with a portrait, a starting place, what draws them to the party, relationship meters, stages and up to eight secrets. A secret opens at a meter value, on a story event, or whichever comes first.
-- **Pack settings.** The **Stat formula** a story plays on (Reader's choice, Standard or Classic), then every other pack field (calendar, weather, money, start state and more) as JSON.
+- **Pack settings.** Every pack field (calendar, weather, money, start state and more) as JSON. Packs always play on Standard rules.
 - **Settings defaults.** Shows what a pack can and cannot set. A pack cannot ship reader settings.
 - **Screen builder.** Build screens and layouts with a live preview.
 - **Data modules.** Forms, a grammar preview and a simulator for small rule modules. Story Block checks and runs them.
@@ -38,10 +38,6 @@ The page has a header (pack name, Undo, Redo, Open pack, Problems, Export, theme
 ![A person's Secrets section: title, text, an "at a meter" or "on a story event" switch, a meter and a number, and an optional event.](docs/images/cast-secrets.webp)
 
 *Write a person's hidden notes. Each opens at a meter, on a story event, or whichever comes first.*
-
-![Pack settings, first card: Stat formula with Reader's choice, Standard and Classic.](docs/images/pack-settings.png)
-
-*Choose which stat formula a pack plays on.*
 
 ![Check / export: Ready to export, counts, the Cast check and the file name.](docs/images/check-export.png)
 
@@ -70,7 +66,7 @@ The Story Suite has four parts.
 - **Story Block** (2.16.1) is the hub. It keeps the story's state, runs the packs and draws the reader's screens.
 - **Story Director** (2.9.1) adds the story clock, the map, quests, the world's events and the pack's living cast. It needs Story Block.
 - **NPC State Delta** (1.7.1) adds a dossier for each person you meet, with meters, stages and secrets. It needs Story Block; with Story Director it also follows the cast and Key people.
-- **Story Studio** (0.10.1) is a separate page where you write packs. It is not an extension.
+- **Story Studio** (0.10.2) is a separate page where you write packs. It is not an extension.
 
 Install Story Block first, then Story Director, then NPC State Delta if you want it. Data flows one way: you write a pack in Studio and import it in Story Block; Story Director reads what Story Block holds, and NPC State Delta reads both. Nothing flows back to Studio.
 
