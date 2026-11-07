@@ -38,7 +38,7 @@ for (const width of [1280, 390]) {
     test(`at ${width} px: Ready, the files, the part file, and a typed change updates the viewer`, { timeout: 60000 }, async () => {
         await withPage(SHIPPED, { width }, async page => {
             await openCodeModule(page);
-            assert.match(await page.locator('#cm-validation').textContent(), /^Ready: 9 files written by Studio, 366 copied from Story Block 2\.23\.0 \(commit 480a476\)\.$/);
+            assert.match(await page.locator('#cm-validation').textContent(), /^Ready: 9 files written by Studio, 368 copied from Story Block 2\.24\.0 \(commit 73abadb\)\.$/);
             const names = await page.locator('ul[aria-label="Files in the zip"] li button[aria-pressed]').allTextContents();
             assert.deepEqual(names, ['.gitignore', 'README.md', 'index.js', 'manifest.json', 'package.json', 'src/module.js', 'src/parts/lantern.js', 'tests/module.test.js', 'tests/vendor/README.md']);
             assert.match(await page.locator('#cm-file').textContent(), /export const LABEL = 'Oil';/);
