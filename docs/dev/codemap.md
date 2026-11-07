@@ -98,3 +98,15 @@ Mapped 2026-11-07.
 - `src/screens/dm/sections/rewards.js`: The rewards section: reward templates with bindings (the narrator picks), values (the code picks) and a condition.
 - `src/screens/dm/sections/exports.js`: The exports section: the fields each export shares with other data modules through its named public view.
 - `src/screens/dm/sections/migrations.js`: The migrations section: additive migrations between state versions, and the check of a draft against an earlier pack.
+- `src/model/safe-clone.js`: Bounded, getter-safe cloning of pack data under Story Block's limits.
+- `src/model/references.js`: Typed pack references in traversal order, with pack-local names resolved.
+- `src/model/references/lookups.js`: Place, item, race, talent and legacy-skill lookup tables used by reference indexing.
+- `src/screens/cast/pieces.js`: Shared Cast fieldsets, hints and Story Block problem notes.
+- `src/screens/cast/preview.js`: Player-facing preview of the Cast secrets.
+- `src/screens/cast/form.js`: Cast one-undo edits, nested value writes and labelled controls.
+- `src/screens/cast/identity.js`: Cast names, aliases, appearance, background and key fields.
+- `src/screens/cast/behaviour.js`: Cast personality, levers, mannerisms and player-relationship fields.
+- `src/screens/cast/portrait.js`: Cast portrait field, image fitting and snapshot picture handling.
+- `src/screens/cast/story.js`: Cast start, drawn-to, meter, stage and unmet-death fields.
+- `src/screens/cast/skills.js`: Cast signature-skill rows, ordering and checker notes.
+- `src/screens/cast/secrets.js`: Cast secret cards, opening rules and the player preview.
