@@ -110,3 +110,6 @@ Mapped 2026-11-07.
 - `src/screens/cast/story.js`: Cast start, drawn-to, meter, stage and unmet-death fields.
 - `src/screens/cast/skills.js`: Cast signature-skill rows, ordering and checker notes.
 - `src/screens/cast/secrets.js`: Cast secret cards, opening rules and the player preview.
+- `src/studio/chrome.js`: Studio page shell with header controls, workspace columns, inspector, notices and overlays.
+- `src/studio/events.js`: Page-level unload, Escape and dropped-file listeners, attached and removed as a pair.
+- `src/studio/open-file.js`: JSON and zip pack reading with size, portrait and stale-read guards.
