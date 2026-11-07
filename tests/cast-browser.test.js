@@ -72,6 +72,14 @@ const pictureBytes = page => page.locator('.cf-face img').evaluate(img => {
     const text = atob(data);
     return { type: head, bytes: Array.from(text, char => char.charCodeAt(0)) };
 });
+// The form's redraw replaces every control. Stamp the controls on screen, then wait until none is left and the
+// expected field (label, and value when given) holds focus: a state the page reaches once the redraw has settled.
+const stampForm = page => page.evaluate(() => document.querySelectorAll('.cf-form [data-cast-focus]').forEach(node => node.setAttribute('data-test-old', '')));
+const redrawn = (page, label, value) => page.waitForFunction(([want, text]) => {
+    const node = document.activeElement;
+    return !document.querySelector('.cf-form [data-test-old]') && node?.closest?.('.cf-form')
+        && node.labels?.[0]?.firstChild?.textContent === want && (text === undefined || node.value === text);
+}, [label, value]);
 async function downloaded(page, selector) {
     const pending = page.waitForEvent('download');
     await page.locator(selector).click();
@@ -334,18 +342,18 @@ test('typing across cast fields with Tab keeps focus and every character', async
         const name = page.getByLabel('Name', { exact: true }).first();
         await name.fill('');
         await page.keyboard.type('Fenna Vale');
-        const oldName = await name.elementHandle();
+        await stampForm(page);
         await name.press('Tab');
         const aliases = page.getByLabel('Also called', { exact: true });
         await page.keyboard.type('Captain ');
-        await page.waitForFunction(node => !node.isConnected, oldName);
+        await redrawn(page, 'Also called', 'Captain ');
         assert.equal(await aliases.evaluate(node => node === document.activeElement), true);
         assert.equal(await aliases.inputValue(), 'Captain ');
         await page.keyboard.type('Fen');
         assert.equal(await aliases.inputValue(), 'Captain Fen');
-        const oldAliases = await aliases.elementHandle();
+        await stampForm(page);
         await page.keyboard.press('Tab');
-        await page.waitForFunction(node => !node.isConnected, oldAliases);
+        await redrawn(page, 'In one line');
         assert.equal(await page.getByLabel('In one line', { exact: true }).evaluate(node => node === document.activeElement), true);
         await page.keyboard.press('Shift+Tab');
         assert.equal(await aliases.evaluate(node => node === document.activeElement), true);
