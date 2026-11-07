@@ -303,3 +303,34 @@ test('cast selects, number fields and checkboxes regain focus with their saved v
         h.focus.destroy();
     }
 });
+
+const restoreSnapshot = node => ({
+    key: node.getAttribute('data-cast-focus'), value: 'draft', keepValue: true, start: 1, end: 1, direction: 'none',
+    top: 0, left: 0, inspectorTop: 85, inspectorLeft: 3, pageX: 5, pageY: 6,
+});
+const pairOf = node => ['change', 'blur'].map(type => (node.listeners.get(type) ?? []).length);
+
+test('two restores on one node leave one live listener pair', () => {
+    const h = harness([{ path: 'name', value: 'Fenna' }]);
+    const [name] = h.controls();
+    for (let n = 0; n < 2; n++) {
+        name.value = 'Fenna';
+        h.focus.after({ snapshot: restoreSnapshot(name) });
+    }
+    assert.deepEqual(pairOf(name), [1, 1]);
+    let changes = 0;
+    name.addEventListener('change', () => { changes++; });
+    name.dispatchEvent({ type: 'blur' });
+    assert.equal(changes, 1);
+    assert.deepEqual(pairOf(name), [1, 0]);
+    h.focus.destroy();
+});
+
+test('destroy removes the pending pair', () => {
+    const h = harness([{ path: 'name', value: 'Fenna' }]);
+    const [name] = h.controls();
+    h.focus.after({ snapshot: restoreSnapshot(name) });
+    assert.deepEqual(pairOf(name), [1, 1]);
+    h.focus.destroy();
+    assert.deepEqual(pairOf(name), [0, 0]);
+});

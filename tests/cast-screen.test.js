@@ -275,6 +275,18 @@ test('a drawn-to phrase entered with Enter is saved once and the next field star
     assert.equal(control(ctx, 0, 'drawnTo').value, '');
 });
 
+test('drawnTo Enter then blur adds the phrase once', () => {
+    const ctx = open();
+    ctx.doc.defaultView = { Event: class { constructor(type) { this.type = type; } } };
+    const input = control(ctx, 0, 'drawnTo');
+    input.value = 'the old bridge';
+    // The redraw that follows the edit removes the input, and the browser fires blur then change on it before the edit returns.
+    const draw = ctx.onRender;
+    ctx.onRender = (...args) => { ctx.onRender = draw; input.dispatchEvent({ type: 'change' }); return draw(...args); };
+    input.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault() {} });
+    assert.deepEqual(cast(ctx)[0].drawnTo, ['the weir', 'a flood on the river', 'the old bridge']);
+});
+
 test('list actions after a field edit use the current person while the redraw is pending', () => {
     const people = castEntries();
     people[0].behaviour = ['Care: high - watches the river'];

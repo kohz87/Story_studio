@@ -9,6 +9,9 @@ export function keepCastFocus({ doc, win, inspector, selection, render }) {
     let changeTimer = null;
     let pointerTimer = null;
     const pointers = new Set();
+    // One restore listener pair per node; a second restore on the same node replaces the first.
+    const restorers = new WeakMap();
+    const live = new Set();
 
     const schedule = () => {
         if (!pending) return;
@@ -106,9 +109,20 @@ export function keepCastFocus({ doc, win, inspector, selection, render }) {
             node.value = snapshot.value;
             node.dispatchEvent(new win.Event('input', { bubbles: true }));
             // A value restored by script may not produce a native change if no further typing follows.
+            restorers.get(node)?.();
             let changed = false;
-            node.addEventListener('change', () => { changed = true; }, { once: true });
-            node.addEventListener('blur', () => { if (!changed) node.dispatchEvent(new win.Event('change', { bubbles: true })); }, { once: true });
+            const onNodeChange = () => { changed = true; };
+            const onNodeBlur = () => { remove(); if (!changed) node.dispatchEvent(new win.Event('change', { bubbles: true })); };
+            const remove = () => {
+                node.removeEventListener('change', onNodeChange);
+                node.removeEventListener('blur', onNodeBlur);
+                restorers.delete(node);
+                live.delete(remove);
+            };
+            node.addEventListener('change', onNodeChange, { once: true });
+            node.addEventListener('blur', onNodeBlur, { once: true });
+            restorers.set(node, remove);
+            live.add(remove);
         }
         node.focus({ preventScroll: true });
         if (snapshot.start !== null && snapshot.start !== undefined) node.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction);
@@ -122,6 +136,7 @@ export function keepCastFocus({ doc, win, inspector, selection, render }) {
         if (timer !== null) win.clearTimeout(timer);
         if (changeTimer !== null) win.clearTimeout(changeTimer);
         if (pointerTimer !== null) win.clearTimeout(pointerTimer);
+        for (const remove of [...live]) remove();
         inspector.removeEventListener('change', onChange, true);
         inspector.removeEventListener('change', afterChange);
         win?.removeEventListener?.('pointerdown', onPointerDown, true);

@@ -53,14 +53,14 @@ function drawnFields(ctx, index, person) {
     });
     const input = el(doc, 'input', '', { placeholder: 'Add…', 'aria-label': 'Add something they are drawn to', 'data-path': JSON.stringify(['content', 'cast', index, 'drawnTo']) });
     input.disabled = list.length >= CAST_LIMITS.drawnTo;
-    // Enter and the field losing focus both mean "take this".
-    let taken = false;
+    // Enter and the field losing focus both mean "take this"; `taking` stops a redraw's blur from taking it twice.
+    let taking = false;
     const take = () => {
         const phrase = line(input.value);
-        if (!phrase || taken) return;
-        taken = true;
+        if (!phrase || taking) return;
+        taking = true;
         if (edit(ctx, index, record => put(record, ['drawnTo'], [...current(), phrase]))) input.value = '';
-        taken = false;
+        taking = false;
     };
     input.addEventListener('change', take);
     input.addEventListener('keydown', event => {
