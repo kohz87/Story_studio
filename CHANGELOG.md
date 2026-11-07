@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.1
+
+- **Cast fields no longer pile up focus listeners.** Each field keeps one restore listener pair; closing the screen removes it. Typing across cast fields with Tab keeps every character (unchanged).
+- Vendored Story Block 2.24.0.
+
 ## 0.10.0
 
 - **The Cast form has a Usually wears box under Look.** What the person wears is kept apart from their body (`wears`), so the dossier's appearance shows the outfit and Look stays the body.

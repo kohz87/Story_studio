@@ -16,9 +16,9 @@ const vendorDir = join(root, 'vendor', 'story-block');
 const committed = readFileSync(join(root, 'src', 'code-module', 'assets.js'), 'utf8');
 const copied = new Map(VENDOR_FILES.map(([path, base64]) => [path, Buffer.from(base64, 'base64')]));
 
-// The baseline these counts describe: Story Block 2.23.0 (480a476e, main). The closure contains
-// 363 files, so the copied set has 366 entries (the closure, plus LICENSE, package.json and the generated VERSION text).
-const BASELINE = { version: '2.23.0', commit: '480a476eb439c9782f3947d9f685b2c768c937d3', files: 363 };
+// The baseline these counts describe: Story Block 2.24.0 (73abadb9, main). The closure contains
+// 365 files, so the copied set has 368 entries (the closure, plus LICENSE, package.json and the generated VERSION text).
+const BASELINE = { version: '2.24.0', commit: '73abadb964adef1720971fcf0cc7065a30209606', files: 365 };
 
 test('the committed assets.js is exactly what the generator writes now', () => {
     assert.equal(committed, codeModuleAssets(root));
@@ -35,7 +35,7 @@ test('the stamp names the vendored Story Block version and commit, and the closu
     assert.equal(head[1], `commit ${BASELINE.commit}`);
 });
 
-test('the copied set is the closure, plus VERSION, package.json and the licence: 366 entries', () => {
+test('the copied set is the closure, plus VERSION, package.json and the licence: 368 entries', () => {
     const list = testkitFiles(vendorDir);
     assert.equal(VENDOR_FILES.length, BASELINE.files + 3);
     const paths = VENDOR_FILES.map(([path]) => path);
