@@ -70,6 +70,16 @@ function createMockFile(name, content, size = undefined) {
     };
 }
 
+test('file-opening methods remain async and route zip files through the current handler', async t => {
+    const { ctx } = setupStudio();
+    t.after(() => ctx.destroy());
+    assert.equal(Object.prototype.toString.call(ctx.openFile), '[object AsyncFunction]');
+    assert.equal(Object.prototype.toString.call(ctx.openZip), '[object AsyncFunction]');
+    const file = { name: 'pack.zip' };
+    ctx.openZip = async received => { assert.equal(received, file); return 'opened'; };
+    assert.equal(await ctx.openFile(file), 'opened');
+});
+
 test('file open via input, drop, BOM, and size/read error handling', async () => {
     const { doc, win, root, ctx } = setupStudio();
     const pack = smallWorld();

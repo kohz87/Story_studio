@@ -14,7 +14,7 @@ import { renderProblemsDrawer } from './screens/problems.js';
 import { saveFailed } from './timeline/drafts.js';
 import { createStudioTheme, createStudioChrome } from './studio/chrome.js';
 import { createStudioEvents } from './studio/events.js';
-import { openPackFile, openPackZip } from './studio/open-file.js';
+import { createPackFileReader } from './studio/open-file.js';
 
 // The screens below the record kinds in the rail, in order.
 const SCREENS = [['defaults', 'Settings defaults'], ['presentation', 'Screen builder'], ['data-modules', 'Data modules'], ['code-module', 'Code module'], ['card', 'Character card'], ['lorebook', 'Lorebook'], ['lore-import', 'Import lorebook']];
@@ -120,6 +120,14 @@ export function mountStudio(root) {
         });
     };
 
+    const fileReader = createPackFileReader({
+        destroyed: () => destroyed,
+        nextToken: () => ++seq,
+        isStale: token => destroyed || token !== seq,
+        notify: message => ctx.notify(message),
+        routeZip: file => ctx.openZip(file),
+        loadText: (...args) => ctx.loadText(...args),
+    });
     const ctx = {
         doc, win, root, app, main, inspector: inspectorBody, overlays, selection, file, authoring: {}, filters: {},
         // The Character card page's draft (saved with the pack) and its picture (PNG bytes, kept in IndexedDB beside it).
@@ -301,26 +309,9 @@ export function mountStudio(root) {
             }
             return model;
         },
-        openFile(f) {
-            return openPackFile(f, {
-                destroyed: () => destroyed,
-                nextToken: () => ++seq,
-                isStale: token => destroyed || token !== seq,
-                notify: message => ctx.notify(message),
-                openZip: file => ctx.openZip(file),
-                loadText: (...args) => ctx.loadText(...args),
-            });
-        },
+        openFile: fileReader.openFile,
         // A pack as one zip (pack.json and portraits/): the same reader the game uses, so Studio and Story Block agree on what is a pack.
-        openZip(f) {
-            return openPackZip(f, {
-                destroyed: () => destroyed,
-                nextToken: () => ++seq,
-                isStale: token => destroyed || token !== seq,
-                notify: message => ctx.notify(message),
-                loadText: (...args) => ctx.loadText(...args),
-            });
-        },
+        openZip: fileReader.openZip,
         render() {
             if (destroyed) return false;
             try {
