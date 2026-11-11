@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { openPack, exportPack } from '../src/model.js';
-import { setRecords } from '../src/edits.js';
+import { setRecords, remove } from '../src/edits.js';
 import { renderScreen } from '../src/screens/index.js';
 import { createTestContext } from './helpers/dom.js';
 import { readCondition } from '../src/timeline/condition.js';
@@ -304,6 +304,20 @@ test('several events change in one edit (one undo), and only the events that are
     assert.equal(setRecords(model, 'events', [events[1], events[0]]).ok, false);
     assert.equal(setRecords(model, 'events', [events[0]]).ok, false);
     assert.equal(setRecords(model, 'events', [events[0], { ...events[1], id: 'c' }]).ok, false);
+});
+
+test('removing the last event that counts days from another drops its date guard; one that still has a counter keeps it', () => {
+    const lasting = { command: 'chronicle.lasting', payload: { name: 'Seal cracking', state: 'ongoing' } };
+    const count = id => ({ id, after: 'cracks', when: "query('chronicle.passed', { name: 'Seal cracking', minutes: 2880 })", cue: 'Later.' });
+    const pack = list => openPack(base([{ id: 'cracks', when: 'time() != null', cue: 'Cracks.', then: [lasting] }, ...list, { id: 'other', when: 'true', cue: 'Other.' }]));
+    const one = remove(pack([count('seal-fails')]), 'events', 'seal-fails');
+    assert.equal(one.ok, true, JSON.stringify(one.errors));
+    assert.deepEqual(one.model.document.content.events.map(event => event.when), ['true', 'true']);
+    const two = remove(pack([count('seal-fails'), count('seal-breaks')]), 'events', 'seal-fails');
+    assert.equal(two.model.document.content.events[0].when, 'time() != null');
+    // An event the author wrote by hand is left as it is.
+    const hand = openPack(base([{ id: 'cracks', when: 'time() != null || false', cue: 'Cracks.', then: [lasting] }, count('seal-fails')]));
+    assert.equal(remove(hand, 'events', 'seal-fails').model.document.content.events[0].when, 'time() != null || false');
 });
 
 test('an event others count days from waits until the story has a date, and the form says so', () => {
