@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+## 0.11.0
+
+- **Names and Ripples editors.** Names: the never-use list and one card per culture (regions, place matches, given names, cast-name warning, three-name preview). Ripples: the pack's ripples section. IDs follow Story Block's slug rules; renaming or deleting a power that events read asks first; Ripples has a back button on a phone; a bad names or ripples section now blocks export.
+- Vendored Story Block 2.31.0.
+
+Update Story Block, Story Director and NPC State Delta together, then re-import the Ersveil pack (2.9.5 needs Story Block 2.31.0). The new features apply to new replies; start a new chat to see them all. Replies already written replay and Re-read exactly as before.
+
 ## 0.10.2
 
 - **Pack settings no longer has a Stat formula card.** Packs are always Standard and Studio writes no formula. A pack that says `standard` stays valid; one that says `classic` shows Story Block's refusal in Check.
