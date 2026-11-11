@@ -7,6 +7,7 @@ import { DM_LIMITS } from '../data-modules/schema.js';
 import { isSeed, rng as makeRng } from '../rng.js';
 import { newRoot, occurrenceOf, receiptEvidence } from '../evidence.js';
 import { isPlainJson } from '../replay.js';
+import { ruleMarksOf } from '../turn/rule-marks.js';
 import { CAUSES, ID_STREAM, asCommandError, fail, headReply, isRecord, replyOf } from './shared.js';
 
 export function createTransact({ store, registry, resolve, internal, internalMessage, featureOff, invoke, currentState, sourceOf, originOf }) {
@@ -79,7 +80,7 @@ export function createTransact({ store, registry, resolve, internal, internalMes
     }
 
     // Runs one command against `head` and returns { ok, ops, receipt, state } without storing anything.
-    function transact(head, type, payload, { cause, seed: seedValue, receiptId, capture, carrier = null, chat = null, again = false, standing = null, standingReceipts = null, reply = null, planned = null, replacing = null, occurrence = null, reusing = null }) {
+    function transact(head, type, payload, { cause, seed: seedValue, receiptId, capture, carrier = null, chat = null, again = false, standing = null, standingReceipts = null, reply = null, planned = null, replacing = null, occurrence = null, reusing = null, receiptsBefore = null }) {
         let tx = null;
         try {
             if (!CAUSES.includes(cause)) fail('INVALID', `"${cause}" is not a cause (ui, story or system).`);
@@ -100,6 +101,7 @@ export function createTransact({ store, registry, resolve, internal, internalMes
                 rev: headRev + 1, carrier: carrierOf(carrier), chat: chatOf(chat), again: again === true && cause === 'story',
                 standing: cause === 'story' && isRecord(standing) ? (isDeepFrozen(standing) ? standing : deepFreeze(clone(standing))) : null,
                 standingReceipts: cause === 'story' && Array.isArray(standingReceipts) ? deepFreeze(clone(standingReceipts)) : null,
+                receiptsBefore: cause === 'system' && Array.isArray(receiptsBefore) ? deepFreeze(clone(receiptsBefore)) : null,
                 drafts: new Map(), meta: null, failure: null, closed: false, absolute: new Set(), within: new Set(), unique: new Set(),
                 clockBoundaries: [], guard: null, recorded: null, source: undefined, pending: 0, ordinal: undefined, proofs: newRoot(), cursor: undefined, opsBefore: null, reusing,
                 // The proof a Re-read's earlier lines gave (planned, not stored yet), for parents and story.evidence.
@@ -223,7 +225,7 @@ export function createTransact({ store, registry, resolve, internal, internalMes
         if (!isRecord(carrier) || !Number.isInteger(carrier.index)) return null;
         const swipe = Number.isInteger(carrier.swipe) ? carrier.swipe : 0;
         const key = `${carrier.index}:${swipe}`;
-        const out = { index: carrier.index, swipe, sid: typeof carrier.sid === 'string' ? carrier.sid : null, key, ...(carrier.practiceRule === 'rolls' ? { practiceRule: 'rolls' } : {}) };
+        const out = { index: carrier.index, swipe, sid: typeof carrier.sid === 'string' ? carrier.sid : null, key, ...(carrier.practiceRule === 'rolls' ? { practiceRule: 'rolls' } : {}), ...(carrier.foeCap === 20 ? { foeCap: 20 } : {}), ...(ruleMarksOf(carrier.rules).length ? { rules: Object.freeze(ruleMarksOf(carrier.rules)) } : {}) };
         Object.defineProperty(out, 'toString', { value: () => key });
         return Object.freeze(out);
     }

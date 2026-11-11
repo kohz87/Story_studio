@@ -19,12 +19,17 @@ const defaults = new Map([
         source: 'path => import(path)', count: 2,
         stub: "() => { throw new Error('Branch module loading is unavailable offline.'); }",
     }],
+    // Story Block's pack checker and view code carry the SVG namespace, a name and no request: split it so the scan stays exact.
+    ...['view/icons/index.js', 'view/widgets/dom.js', 'view/template/render/elements.js'].map(file => [fileURLToPath(new URL(`../vendor/story-block/src/v2/${file}`, import.meta.url)), {
+        source: "'http://www.w3.org/2000/svg'", count: 1,
+        stub: "['http:', '//www.w3.org/2000/svg'].join('')",
+    }]),
 ]);
 
 export const offlineRuntime = {
     name: 'offline-runtime',
     setup(builder) {
-        builder.onLoad({ filter: /\/(?:chat-file|referenced|rewind|st-adapter)\.js$/ }, async ({ path }) => {
+        builder.onLoad({ filter: /\/(?:chat-file|referenced|rewind|st-adapter|icons\/index|dom|elements)\.js$/ }, async ({ path }) => {
             const replacement = defaults.get(path);
             if (!replacement) return;
             const contents = await readFile(path, 'utf8');

@@ -72,6 +72,13 @@ export function goToProblem(ctx, issue) {
     }
 
     let norm = [...tokens];
+    if ((norm[0] === 'content' && norm[1] === 'names') || norm[0] === 'ripples') {
+        const names = norm[0] === 'content';
+        const power = names || norm[1] !== 'powers' ? null : ctx.model?.document?.ripples?.powers?.[norm[2]];
+        ctx.select(names ? 'names' : 'ripples', names ? (norm[2] === 'banned' ? '__banned' : (norm[2] ?? null)) : (power?.id ?? null));
+        if (typeof ctx.closeProblems === 'function') ctx.closeProblems(false);
+        return;
+    }
     if (norm[0] !== 'content' && KINDS.includes(norm[0])) norm = ['content', ...norm];
     let coll = null, idx = null;
     if (norm[0] === 'content') {

@@ -19,7 +19,7 @@
 //   module whose handler made this ctx.call (null at the top), `ctx.rev` the meta.rev this receipt will
 //   have, `ctx.id(prefix)` a new `<prefix>_<8 base36>` drawn from the receipt's seed (so the same seed
 //   gives the same IDs, and ctx.rng() is not disturbed), and, for capture runs, `ctx.carrier`
-//   ({ index, swipe, key, practiceRule? }) and `ctx.chat` ({ lastUser, reply }); both are null for other commands.
+//   ({ index, swipe, key, practiceRule?, foeCap?, rules? }) and `ctx.chat` ({ lastUser, reply }); both are null for other commands.
 //   `ctx.reply` ({ index, sid }) is the reply the command's changes are stored on, for every command:
 //   the capture's carrier, else the head carrier (the last reply, where store.append puts a click's
 //   ops, SPEC §2.2); null when the chat has no reply yet. Queries get the same as `tools.reply`, so
@@ -239,8 +239,8 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
          * `replacing` (the proof of the blocks being replaced): a proof of the same kind and key at the same place among those keeps the id of its old one.
          * A guarded transaction's result has a `block` too (REPLAY.md), which store.append or replaceStory keeps.
          */
-        run(type, payload, { cause = 'story', seed: seedValue, state, capture, carrier = null, chat = null, again = false, standing = null, standingReceipts = null, reply = null, planned = null, replacing = null, occurrence = null, reusing = null } = {}) {
-            return guarded(() => transact(state ?? store.head(), type, payload, { ...fresh(cause, seedValue), capture, carrier, chat, again: again === true && cause === 'story', standing, standingReceipts, reply, planned, replacing, occurrence, reusing }));
+        run(type, payload, { cause = 'story', seed: seedValue, state, capture, carrier = null, chat = null, again = false, standing = null, standingReceipts = null, reply = null, planned = null, replacing = null, occurrence = null, reusing = null, receiptsBefore = null } = {}) {
+            return guarded(() => transact(state ?? store.head(), type, payload, { ...fresh(cause, seedValue), capture, carrier, chat, again: again === true && cause === 'story', standing, standingReceipts, reply, planned, replacing, occurrence, reusing, receiptsBefore }));
         },
     };
 }

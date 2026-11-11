@@ -11,13 +11,15 @@ import { renderDataModules } from './dm/index.js';
 import { DRAFT_WITH_AI } from '../draft-hint.js';
 import { renderCodeModule } from './code-module.js';
 import { renderCast } from './cast.js';
+import { renderNames } from './names.js';
+import { renderRipples } from './ripples.js';
 
 export function renderScreen(ctx) {
     if (ctx.selection.kind === 'code-module') {
         renderCodeModule(ctx);
         return;
     }
-    const authoring = { presentation: renderPresentation, defaults: renderSettingsDefaults, card: renderCharacterCard, lorebook: renderLorebook, 'lore-import': renderLoreImport, 'data-modules': renderDataModules };
+    const authoring = { presentation: renderPresentation, defaults: renderSettingsDefaults, card: renderCharacterCard, lorebook: renderLorebook, 'lore-import': renderLoreImport, 'data-modules': renderDataModules, names: renderNames, ripples: renderRipples };
     if (Object.hasOwn(authoring, ctx.selection.kind) && ctx.model?.document) {
         authoring[ctx.selection.kind](ctx);
         return;

@@ -111,8 +111,8 @@ async function findings(page) {
 test('the Cast sits in the rail beside People / creatures, with its count, and opens the list', async () => {
     await withPage({}, async page => {
         await load(page);
-        const names = await page.locator('.rail .parts-list > button').evaluateAll(nodes => nodes.slice(0, 9).map(node => node.querySelector('span').textContent));
-        assert.deepEqual(names, ['Places', 'Routes', 'Timeline', 'Items', 'People / creatures', 'Cast', 'Races', 'Talents', 'Presets']);
+        const names = await page.locator('.rail .parts-list > button').evaluateAll(nodes => nodes.slice(0, 11).map(node => node.querySelector('span').textContent));
+        assert.deepEqual(names, ['Places', 'Routes', 'Timeline', 'Items', 'People / creatures', 'Cast', 'Names', 'Ripples', 'Races', 'Talents', 'Presets']);
         assert.equal(await page.locator('.rail').getByRole('button', { name: /^Cast/ }).locator('small').innerText(), '2');
         await navigate(page, 'Cast');
         await page.locator('main h1', { hasText: 'Cast' }).waitFor();
@@ -752,6 +752,19 @@ test('signature skills: a repeated name shows the checker’s line under it and 
                 assert.ok(box.inputsRight[0] <= box.right && box.inputsLeft[0] >= box.left);
             }
             assert.deepEqual(await findings(page), []);
+        });
+    }
+});
+
+test('the Cast Behaviour rows stack as a column: the Ripples people rows do not change them', async () => {
+    for (const width of [1280, 390]) {
+        await withPage({ width, height: 900 }, async page => {
+            await load(page);
+            await openPerson(page, 'Fenna');
+            await page.locator('.cf-list-rows').first().waitFor({ state: 'attached' });
+            const look = await page.evaluate(() => [...document.querySelectorAll('.cf-list-rows')].map(node => ({ direction: getComputedStyle(node).flexDirection, over: node.scrollWidth > node.clientWidth + 1 })));
+            assert.ok(look.length >= 1);
+            for (const row of look) assert.deepEqual(row, { direction: 'column', over: false }, `at ${width} px`);
         });
     }
 });

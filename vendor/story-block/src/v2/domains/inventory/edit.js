@@ -5,7 +5,7 @@ import { isPlainObject } from '../common.js';
 import { cleanName, trimText, resolveDef, slugify } from '../names.js';
 import { GEAR, slotWordOf, placeOf, gearSlotOf, handDef, statsFor, statsOf } from '../gear.js';
 import { fill } from '../../strings.js';
-import { gearOn, KINDS, RARITIES, MAX_UNSTACKED, condOf, MAX_NOTE } from './state.js';
+import { gearOn, KINDS, RARITIES, MAX_UNSTACKED, condOf, MAX_NOTE, READER_CARRY_MAX } from './state.js';
 import { baseSlot } from './validate.js';
 import { E, refuseBound, addStack, looseMatch, stacksOf, freeId } from './stacks.js';
 
@@ -14,7 +14,7 @@ import { E, refuseBound, addStack, looseMatch, stacksOf, freeId } from './stacks
 // With Gear in fights on, the reader's "+ Add item" and the Edit of a piece they added can set Kind, Slot, Rarity and a Bonus. The full
 // setup (Rarity, Bonus) is the starting kit's: allowed only while the chat has no message from the reader yet (a swipe of the greeting keeps it
 // open; `env.readers()` counts the reader's messages on the line of history and `env.greetingOnly()` is false once anything but the greeting is there, so only a rewind back to the greeting opens it again). After that Rarity
-// stays Common with no Bonus. A def the reader made is marked `hand: true`; the story's, a pack's and a bound piece's are not theirs to change.
+// stays Common (+1). A def the reader made is marked `hand: true`; the story's, a pack's and a bound piece's are not theirs to change.
 /** Whether the starting kit is open: the chat is at its first message (only the opening greeting: no message from the reader and no reply after it). Unknown counts as closed. */
 export function kitOpen(env) {
     try { return env?.readers?.() === 0 && env?.greetingOnly?.() !== false; } catch { return false; }
@@ -84,7 +84,7 @@ export function handPlace(inv, owner, stackId, slot) {
 
 // The reader's Edit of a piece they added by hand (gear on): `kind`, `slot` (a place, or '' for none), `rarity` and `stats`. Only a def with `hand: true` and no
 // story-given stack; a pack's or the story's keeps its words. Rarity and Bonus are the starting kit's: changing them is refused once the reader has sent a message.
-// A piece made Equipment later is Common with no Bonus; one made something else gives up its slot (and is taken off).
+// A piece made Equipment later is Common; one made something else gives up its slot (and is taken off).
 export function handEdit(ctx, env, inv, stack, payload) {
     if (!gearOn(ctx)) ctx.fail('REFUSED', E.gearOff);
     const def = inv.defs[stack.def];
@@ -129,6 +129,24 @@ export function handEdit(ctx, env, inv, stack, payload) {
 // A reader edit is never a story line or a nested module call.
 export function byReader(ctx) {
     if (ctx.cause !== 'ui' || ctx.caller !== null) ctx.fail('REFUSED', E.onlyReader);
+}
+
+/**
+ * `inventory.carry { stack, carry }`: the reader sets what an item adds to carry capacity, 0 to 500 (0 removes it). It lands on the item's
+ * definition, so every piece of it counts. Only the reader can: a story line never reaches this command (byReader), and a pack item keeps its own.
+ */
+export function setCarry(ctx, inv, payload) {
+    byReader(ctx);
+    const stack = inv.stacks[payload.stack];
+    const def = stack && inv.defs[stack.def];
+    if (!def) ctx.fail('NOT_FOUND', 'There is no such item.');
+    if (def.id.startsWith('pack.')) ctx.fail('REFUSED', E.carryPack);
+    if (def.kind === 'money') ctx.fail('REFUSED', E.carryMoney);
+    const carry = payload.carry;
+    if (!Number.isSafeInteger(carry) || carry < 0 || carry > READER_CARRY_MAX) ctx.fail('INVALID', fill(E.carryRange, { max: READER_CARRY_MAX }));
+    if (carry === 0) delete def.carry;
+    else def.carry = carry;
+    return { summary: fill(E.itemSet, { detail: `${def.name}: carry ${carry}` }), data: { edit: true, stack: stack.id, def: def.id, carry }, narrate: true };
 }
 
 export const INVENTORY_EDIT_GUARD = 'inventory.reader-edit';
