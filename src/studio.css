@@ -337,3 +337,9 @@ details.cc-box>summary{font-size:20px;font-weight:800}
 .ripples-dot-0::first-letter{color:var(--accent)}.ripples-dot-1::first-letter{color:var(--power-b)}.ripples-dot-2::first-letter{color:var(--power-c)}
 .ripple-card .cf-bar{width:100%;height:6px;border-radius:999px;overflow:hidden;background:var(--track)}.ripple-card .cf-bar-part{background:var(--accent)}
 .ripples-person{flex-direction:row;align-items:center}.ripples-person>span:first-child{flex:1;min-width:0;overflow-wrap:anywhere}
+/* Names and Ripples as in the approved mockups: labels in capitals, flat list groups, dashed add chips, the sway value at the right */
+.ripples-start{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;align-items:baseline}.ripples-start>*{grid-column:1/-1;min-width:0}.ripples-start>.cf-label{grid-column:1}.ripples-start>.cf-hint{grid-column:2;margin:0;text-align:right}
+.ripples-start .cf-label,.ripples-form .cf>legend,.cf-sway .cf-label:first-child{text-transform:uppercase;letter-spacing:1px}
+.ripples-form .form-fieldset.cf{border:0;padding:0;background:none;gap:6px}.ripples-form .form-fieldset.cf>legend{float:left;width:100%;padding:0;margin:0 0 6px;font-size:12px;font-weight:700;color:var(--muted)}.ripples-form .form-fieldset.cf>legend+*{clear:both}
+.ripples-form .cf-add{border-style:dashed;background:transparent;color:var(--muted);font-weight:400}
+.cf-sway{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:5px 10px}.cf-sway>input{grid-column:1/-1}.cf-sway>.cf-label:nth-child(2){color:var(--text);font-size:14px}
