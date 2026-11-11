@@ -151,7 +151,9 @@ export function readAnswer(source, model) {
         // The delay: days, hours or months after the earlier event's lasting change. Every unit that is there is read, so a second one
         // that is wrong is not hidden behind the first; only one delay can be written.
         const units = [['days', DAY], ['hours', 60], ['months', calendar.monthDays * DAY]].map(([unit, size]) => ({ unit, size, given: isRecord(when) ? when[unit] : undefined })).filter(item => item.given !== undefined);
-        const writable = entry.parent && mode !== 'date' && entry.parent.chronicle;
+        // A lasting name Story Block cannot parse (a line break, say) cannot carry a delay: nothing is kept then, so no note promises one.
+        const writable = entry.parent && mode !== 'date' && entry.parent.chronicle
+            && writeCondition({ ...spec, where: [], since: { name: entry.parent.chronicle, minutes: 1 } }).ok;
         const kept = writable ? units.find(item => { const n = wholeNumber(item.given); return n !== null && Number.isSafeInteger(n * item.size); }) : null;
         const keptText = kept ? `${wholeNumber(kept.given)} ${kept.unit}` : null;
         // What a wrong unit's button says follows what is saved: the delay that is kept, or none (right after).
@@ -163,7 +165,7 @@ export function readAnswer(source, model) {
             else if (mode === 'date') note(entry, 'delay', `A date and a delay after another event cannot both be written, so the delay of ${describe(given)} ${unit} was left out: choose one in the form.`);
             else if (n === null || !Number.isSafeInteger(n * size)) note(entry, 'delay', `The delay of ${describe(given)} ${unit} is not a whole number of at least 1: ${keptText ? `it was left out, and the ${keptText} is kept. Set it in the form` : 'set it in the form'}.`, settle);
             else if (!entry.parent.chronicle) note(entry, 'delay', `${quoted(humanName(entry.parent.id))} has no lasting change, and a delay counts from when one happens: give it one in the form, then set the delay.`);
-            else if (item !== kept) note(entry, 'delay', `Only one delay can be written, so the delay of ${describe(given)} ${unit} was left out beside the ${keptText}: choose one in the form.`, settle);
+            else if (kept && item !== kept) note(entry, 'delay', `Only one delay can be written, so the delay of ${describe(given)} ${unit} was left out beside the ${keptText}: choose one in the form.`, settle);
             else spec.since = { name: entry.parent.chronicle, minutes: n * size };
         }
         const until = raw.until;

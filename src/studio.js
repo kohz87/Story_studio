@@ -87,11 +87,13 @@ export function mountStudio(root) {
     events.attach();
 
     // The pictures are kept in the browser beside the project, whenever the open pack's set of them is a new one.
+    // One save after another, in the order the pictures changed (saveHeld never rejects), so an older set never lands over a newer one.
+    let keeping = Promise.resolve();
     const keepPortraits = () => {
         const held = portraitsOf(history.current);
         if (held === lastKept) return;
         lastKept = held;
-        saveHeld(win, held);
+        keeping = keeping.then(() => saveHeld(win, held));
     };
 
     let cardTimer = null;
