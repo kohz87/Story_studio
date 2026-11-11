@@ -16,7 +16,7 @@ import { wear, repair, gearWear, itemEquip, stow, restore, release } from './wea
 import { lootTake } from './loot.js';
 import {
     byReader, handStats, handSlot, kitOpen, holdBudget, remakeAsEquipment, guardReaderEdit, addDecision,
-    handPlace, handEdit, renameDecision, editStack, editPieces,
+    handPlace, handEdit, renameDecision, editStack, editPieces, setCarry,
 } from './edit.js';
 import { readerCarry } from './lines.js';
 import { TOLD, createWalletCommands } from './commands/wallet.js';
@@ -95,7 +95,7 @@ export function createInventoryCommands(env) {
             const slot = handSlot(ctx, payload.slot);
             // The starting kit: Rarity above Common and a Bonus only while the chat is at its first message (an imported character's `starting: true` things are the file's own).
             const open = kitOpen(env);
-            // A character file's things (`starting: true`) come as written only while the kit is open; later they come in as Common with no bonus, and the Problems list says so.
+            // A character file's things (`starting: true`) come as written only while the kit is open; later they come in as Common, and the Problems list says so.
             let written = name;
             const imported = gear && payload.starting === true && !open;
             if (imported && (keep.rarity ?? 'common') !== 'common' || imported && (slot || Object.keys(stats).length)) {
@@ -185,17 +185,18 @@ export function createInventoryCommands(env) {
                 const editPiece = payload.name !== undefined || payload.note !== undefined;
                 const pieces = Object.values(inv.stacks).filter(item => item.def === stack.def && item.owner === stack.owner);
                 guardReaderEdit(ctx, 'inventory.edit', editStack(stack), editPieces(inv, stack), decision);
-                // If this edit also changes the selected piece, keep that piece when reducing the group.
-                const loose = pieces.filter(item => item.equipped === null && !boundId(ctx, item) && (!editPiece || item.id !== stack.id)).reverse();
+                // The selected piece is never the one removed (the equip that follows in the same Save names it): other loose pieces go, the last added first.
+                const spare = pieces.filter(item => item.equipped === null && !boundId(ctx, item));
+                const loose = spare.filter(item => item.id !== stack.id).reverse();
                 const remove = pieces.length - qty;
-                if (remove > loose.length) ctx.fail('REFUSED', E.itemGroupEquipped);
+                if (remove > loose.length) ctx.fail('REFUSED', spare.length > loose.length ? E.itemGroupSelected : E.itemGroupEquipped);
                 if (remove > 0) for (const item of loose.slice(0, remove)) delete inv.stacks[item.id];
                 if (remove < 0) {
                     readerCarry(ctx, [{ defId: original.id, qty: -remove }], stack.owner);
                     grantInto(ctx, inv, original, -remove, stack.owner, stack.note);
                 }
                 if (!editPiece) {
-                    const remaining = Object.values(inv.stacks).find(item => item.def === original.id && item.owner === stack.owner);
+                    const remaining = inv.stacks[stack.id] ?? Object.values(inv.stacks).find(item => item.def === original.id && item.owner === stack.owner);
                     return { summary: fill(E.itemSet, { detail: fill(E.itemCount, { name: original.name, qty }) }),
                         data: { edit: true, stack: remaining.id, told: TOLD.editKit }, narrate: true };
                 }
@@ -250,6 +251,12 @@ export function createInventoryCommands(env) {
                 ? fill(E.itemGroupRenamed, { name: oldName, qty: groupQty, renamed: name })
                 : payload.qty !== undefined ? fill(E.itemCount, { name, qty: groupQty ?? current.qty }) : payload.note !== undefined ? fill(E.itemNote, { name }) : name;
             return { summary: fill(E.itemSet, { detail }), data: { edit: true, stack: resultStack, told: TOLD.editKit }, narrate: true };
+        },
+
+        // The reader's own carry capacity for an item (0-500, 0 removes it); never from the story.
+        'inventory.carry'(ctx, payload = {}) {
+            const out = setCarry(ctx, ctx.draft('inventory'), payload);
+            return { ...out, data: { ...out.data, told: TOLD.editKit } };
         },
 
         'inventory.consume'(ctx, payload = {}) {

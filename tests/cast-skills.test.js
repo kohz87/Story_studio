@@ -68,7 +68,7 @@ test('stat, uses and rank are checked, and a key the checker does not know is re
     assert.match(problems(withSkills([skill('A', { stat: 'CON' })]))[0], /skills\[0\]\.stat must be one of str, vit, agi, dex, int, luk, cha\./);
     assert.match(problems(withSkills([skill('A', { uses: 'rage' })]))[0], /skills\[0\]\.uses must be stamina or mana\./);
     assert.match(problems(withSkills([skill('A', { rank: 'legend' })]))[0], /skills\[0\]\.rank must be one of novice, adept, expert, master\./);
-    assert.match(problems(withSkills([skill('A', { level: 3 })]))[0], /"level" is not a skill field \(expected name, about, stat, uses, rank\)\./);
+    assert.match(problems(withSkills([skill('A', { level: 3 })]))[0], /"level" is not a skill field \(expected name, about, stat, uses, rank, type\)\./);
     assert.match(problems(withSkills(['A']))[0], /skills\[0\] must be an object like \{ "name": "Spark"/);
     assert.equal(openPack(JSON.stringify(withSkills([skill('A', { stat: 'cha', uses: 'mana', rank: 'master' })]))).validation.errors.length, 0);
 });

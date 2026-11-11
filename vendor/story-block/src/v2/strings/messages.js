@@ -1,6 +1,7 @@
 // Story Block's messages for inline edits and command refusals.
 export const MESSAGE_STRINGS = {
     editMessages: {
+        nothingWorn: 'Nothing to change: no one wears it.', nothingChanged: 'Nothing to change.',
         onlyReader: 'Only the reader can make this edit.', itemName: 'Give the item a name.',
         itemNameLength: 'An item needs a name of 1 to 60 characters.',
         // Hand-set gear (the starting kit, docs/v2/GEAR.md "Your own gear"): the refusals of a reader's add or edit.
@@ -11,17 +12,19 @@ export const MESSAGE_STRINGS = {
         kitSlot: 'The slot is one of {slots}.', kitNeedSlot: 'Choose a slot to put it on.', kitNotEquipment: '{name} is not equipment, so it cannot be put on.',
         kitNoSlot: 'Choose a slot for {name}: its name does not say where it is worn.',
         kitExisting: '{name} is already in your things as {kind}, from the story or a pack or with items of yours still held. Remove it first and add it again, or give this one another name.',
-        importLate: '{name} came in as a Common piece with no bonus: a saved character\'s gear is kept as written only before your first message.',
+        importLate: '{name} came in as a Common piece: a saved character\'s gear is kept as written only before your first message.',
         kitPack: 'Kind, slot and rarity come from the pack.', kitStory: 'Kind, slot and rarity come from the story.',
         kitMany: 'Equipment is one piece each; at most {max} pieces.',
         itemKind: 'The kind of an item is one of {kinds}.', itemRarity: 'The rarity of an item is one of {rarities}.',
         itemAdded: 'You added {item}.', itemCount: '{name} to {qty}', itemNote: "{name}'s note",
         itemGroupRenamed: '{name} to {qty}; one renamed {renamed}',
         itemSet: 'You set {detail}.', itemUnstackable: '{name} does not stack; each piece is kept separately.',
+        carryRange: 'Carry capacity is a whole number from 0 to {max}.', carryPack: 'This item comes from a pack, which sets its own carry capacity.', carryMoney: 'Money has no carry capacity to set.',
         itemEditDamaged: 'The saved item edit is damaged.', itemEditGone: 'The item for this edit has changed or is gone.',
         itemPiecesChanged: 'The separate pieces for this edit have changed.', itemDecisionChanged: 'The item or stack chosen for this edit has changed.',
         itemGroupLimit: 'Keep at most {max} pieces of this item.',
         itemGroupEquipped: 'Unequip pieces before removing them.',
+        itemGroupSelected: 'That count would remove the piece you are editing. Edit another piece, or unequip one first.',
         bound: 'Bound to {name}: {item} stays with them.',
         itemCannotMerge: '{name} cannot be combined with this stack.', itemQuantityLarge: 'That quantity is too large.',
         purseAmount: 'The amount must be a whole number of at least 0.', purseSet: 'You set the purse to {amount}.',

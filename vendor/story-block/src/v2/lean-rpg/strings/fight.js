@@ -72,6 +72,8 @@ export const FIGHT_STRINGS = Object.freeze({
         gearOn: 'On',
         gearHelp: 'On: worn gear adds stat points by rarity (common +0 up to legendary +4); gear wears down after a decisive hit taken, a bag raises what a character can carry, and a heavy load lowers AGI and DEX. Off: fights run as before; items, rarity and slots are kept.',
         rollsHelp: 'Automatic: code rolls the dice for the fights you play on the fight board. Off: no dice; the story decides.',
+        checks: 'Story checks',
+        checksHelp: 'Rolls for attempts outside a fight, before the reply. Off: the narrator decides them, as now.',
         automatic: 'Automatic',
         off: 'Off',
         formula: 'Stat formula',
@@ -91,7 +93,7 @@ export const FIGHT_STRINGS = Object.freeze({
         formulaNums: Object.freeze({ start: 'Stats start at', points: 'Points at creation', perSoul: 'Stat points', foe: 'Foe\'s base' }),
         formulaPoints: '1 per {n} levels',
         formulaFoe: '{base} + level ÷ {divisor}',   // (the foe's roll term, like a party member's; its Health is 4 + level ÷ 30 blocks, said under Health)
-        formulaFootStandard: 'Level ÷ 5 (rounded down) stands where class stood. LUK is a window on the edge (−2..+3 at LUK 5 and 6, 0..+3 at 11 and 12, +3..+5 at 19 and 20): the edge a situation gives is held inside it, and a best case reaches its top. Bars: Health 4 + VIT/5, Stamina 3 + AGI/5, Mana 3 + INT/5 blocks.',
+        formulaFootStandard: 'Level ÷ 5 (rounded down) stands where class stood. LUK is a window on the edge (−2..+3 at LUK 5 and 6, 0..+3 at 11 and 12, +3..+5 at 19 and 20): the edge a situation gives is held inside it, and a best case reaches its top. New character bars: Health 2 × (4 + VIT/5), Stamina 2 × (4 + AGI/5), Mana 2 × (4 + INT/5), with each division rounded down. Earlier characters keep Health 4 + VIT/5, Stamina 3 + AGI/5, Mana 3 + INT/5.',
         difficulty: 'Difficulty',
         gentle: 'Gentle',
         standard: 'Standard',

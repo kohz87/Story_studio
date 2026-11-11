@@ -45,10 +45,12 @@ Mapped 2026-11-07.
 ## src/screens/
 - `src/screens/authoring.js`: Lorebook screens for World Info download and review/import of entries as pack drafts.
 - `src/screens/cast.js`: Cast part: list and per-person dossier editor for portraits, meters, stages, secrets and skills.
+- `src/screens/names.js`: Names screen: the never-use list, one card per culture and the culture editor (regions, place matches, given names, cast-name warning, three-name preview).
 - `src/screens/pack-settings.js`: Pack settings screen with JSON editors for host and content fields.
 - `src/screens/presentation.js`: Screen and layout builder with record forms, template and widget tools, layout editing and live preview.
 - `src/screens/problems.js`: Problem grouping and navigation plus the Check/export screen and the Problems drawer.
 - `src/screens/records.js`: Shared record list, add form and cascading remove dialog with per-record problem display.
+- `src/screens/ripples.js`: Ripples part: the new-chat base-sway bar, power cards and power editor for the pack's `ripples` table, with pure share, leader, event-count and standing-key helpers.
 - `src/screens/timeline-ai.js`: Timeline writing panel and draft banner: build a prompt, read a pasted answer and manage drafts.
 
 ## src/screens/dm/

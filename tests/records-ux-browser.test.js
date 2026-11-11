@@ -17,7 +17,7 @@ async function withPage(options, action) {
         ...(process.env.STUDIO_CHROMIUM_PATH ? { executablePath: process.env.STUDIO_CHROMIUM_PATH } : {}),
     });
     try {
-        const context = await browser.newContext({ viewport: { width: options.width ?? 1280, height: options.height ?? 820 }, colorScheme: 'dark' });
+        const context = await browser.newContext({ viewport: { width: options.width ?? 1280, height: options.height ?? 820 }, colorScheme: options.theme ?? 'dark' });
         const page = await context.newPage();
         page.setDefaultTimeout(5000);
         const errors = [], requests = [];
@@ -288,6 +288,46 @@ for (const width of [1280, 900, 601]) {
             assert.equal(await page.locator('.parts-list').isVisible(), true);
             await page.locator('.rail').getByRole('button', { name: /^Places/ }).click();
             assert.equal(await page.locator('.parts-list').isVisible(), true, 'picking a part does not collapse it');
+        });
+    });
+}
+
+// Names and Ripples on Ersveil with their sections: the sheet's back button shows only on a phone, nothing runs off the screen, and the
+// colours come from the theme.
+function namesRipplesPack() {
+    const pack = JSON.parse(readFileSync(new globalThis.URL('./fixtures/ersveil-pack.json', import.meta.url), 'utf8'));
+    const extra = JSON.parse(readFileSync(new globalThis.URL('./fixtures/ersveil-names-ripples.json', import.meta.url), 'utf8'));
+    pack.content.names = extra.names;
+    pack.ripples = extra.ripples;
+    return JSON.stringify(pack);
+}
+for (const [theme, width] of [['light', 390], ['dark', 390], ['light', 1280]]) {
+    test(`Names and Ripples at ${width} px in the ${theme} theme: no sideways scroll, the back button only on a phone, theme colours`, { timeout: 90000 }, async () => {
+        await withPage({ width, height: width === 390 ? 844 : 820, theme }, async page => {
+            await load(page, namesRipplesPack());
+            for (const part of ['Names', 'Ripples']) {
+                await open(page, part);
+                await page.locator('.records-list button[data-id]').nth(1).click();
+                await page.locator('.inspector h2').first().waitFor();
+                const back = page.locator('.inspector .back-to-list');
+                assert.equal(await back.count(), 1, part);
+                assert.equal(await back.isVisible(), width === 390, `${part} back button visible`);
+                assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, `${part} fits`);
+                if (width === 390) {
+                    assert.ok((await back.boundingBox()).height >= 44);
+                    await back.click();
+                    await page.locator('.inspector .back-to-list').waitFor({ state: 'detached' });
+                }
+            }
+            const bars = await page.evaluate(() => {
+                const color = selector => { const node = document.querySelector(selector); return node ? getComputedStyle(node).backgroundColor : null; };
+                return [color('.cf-bar-1'), color('.cf-bar-2')];
+            });
+            await open(page, 'Ripples');
+            const shown = await page.evaluate(() => ['.cf-bar-1', '.cf-bar-2'].map(selector => getComputedStyle(document.querySelector(selector)).backgroundColor));
+            const expected = theme === 'light' ? ['rgb(26, 138, 144)', 'rgb(185, 101, 31)'] : ['rgb(47, 179, 184)', 'rgb(214, 132, 62)'];
+            assert.deepEqual(shown, expected);
+            assert.equal(bars.length, 2);
         });
     });
 }
