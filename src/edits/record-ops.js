@@ -4,6 +4,7 @@ import { SLUG } from '../../vendor/story-block/src/v2/packs/limits.js';
 import { validateAndCloneValue, cloneDoc } from './values.js';
 import { getPackId, normalizeId, isForeignId, getIdentityKey, getRecordIdentity, ALL_KINDS } from './ids.js';
 import { refuse, commitSnapshot } from './commit.js';
+import { settleGuards } from '../timeline/event.js';
 import { findRecord, readKindList, ensureKindList, setValueAtPath } from './lists.js';
 
 export function add(model, kind, record) {
@@ -93,5 +94,18 @@ export function remove(model, kind, id, { cascade = false } = {}) {
         const key = name === 'legacySkills' ? 'skills' : name;
         doc.content[key] = list.filter(item => !visited.has(`${name}:${normalizeId(getRecordIdentity(name, item), packId)}`));
     }
+    settleParents(doc, model, packId, visited);
     return commitSnapshot(doc, model);
+}
+
+// An event that others count days from waits for the story's date (`time() != null`): once the last of them is removed the
+// guard goes too, so each event left that a removed one followed is settled as the Timeline form settles it.
+function settleParents(doc, model, packId, visited) {
+    const before = readKindList(model.document, 'events');
+    const list = readKindList(doc, 'events');
+    if (!before || !list || before.length === list.length) return;
+    const parents = new Set(before.filter(item => visited.has(`events:${normalizeId(getRecordIdentity('events', item), packId)}`)).map(item => item?.after).filter(ref => typeof ref === 'string' && ref));
+    let next = list;
+    list.forEach((item, at) => { if (parents.has(getRecordIdentity('events', item))) next = settleGuards(next, at, next[at]); });
+    doc.content.events = next;
 }
