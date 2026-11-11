@@ -111,8 +111,8 @@ async function findings(page) {
 test('the Cast sits in the rail beside People / creatures, with its count, and opens the list', async () => {
     await withPage({}, async page => {
         await load(page);
-        const names = await page.locator('.rail .parts-list > button').evaluateAll(nodes => nodes.slice(0, 9).map(node => node.querySelector('span').textContent));
-        assert.deepEqual(names, ['Places', 'Routes', 'Timeline', 'Items', 'People / creatures', 'Cast', 'Races', 'Talents', 'Presets']);
+        const names = await page.locator('.rail .parts-list > button').evaluateAll(nodes => nodes.slice(0, 11).map(node => node.querySelector('span').textContent));
+        assert.deepEqual(names, ['Places', 'Routes', 'Timeline', 'Items', 'People / creatures', 'Cast', 'Names', 'Ripples', 'Races', 'Talents', 'Presets']);
         assert.equal(await page.locator('.rail').getByRole('button', { name: /^Cast/ }).locator('small').innerText(), '2');
         await navigate(page, 'Cast');
         await page.locator('main h1', { hasText: 'Cast' }).waitFor();
