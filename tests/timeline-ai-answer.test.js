@@ -730,6 +730,7 @@ test('review 165-1: the button of a wrong delay unit says what is saved: the del
     const cr = read([{ name: 'Parent', news: 'P', lasting: { name: 'P\rchanged', state: 'ongoing' } }, { name: 'Child', when: { after: 'Parent', days: 2, hours: 'soon' }, news: 'C' }]).items.map(item => item.draft)[1];
     assert.equal(since(cr), null);
     assert.ok(cr.notes.length > 0 && cr.notes.every(item => !/^Just the/.test(item.ack ?? '')), JSON.stringify(cr.notes.map(item => item.ack)));
+    assert.ok(cr.notes.every(item => !/is kept/.test(item.text)), JSON.stringify(cr.notes.map(item => item.text)));
 });
 
 test('review 165-2: an empty faction is an invalid entry: left out, said, and not Ready until the note is set aside', () => {

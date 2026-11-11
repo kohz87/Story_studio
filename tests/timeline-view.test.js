@@ -339,7 +339,7 @@ test('an event others count days from waits until the story has a date, and the 
     ctx.select('events', 'cracks');
     assert.match(ctx.inspector.textContent, /Waits until the story has a date: “Seal fails” counts its days from this event\./);
     assert.match(ctx.inspector.textContent, /When this fires: once the story has a date, on the first reply\./);
-    assert.match(ctx.inspector.textContent, /It can happen on any reply once the story has a date, wherever the party is.* A story with no date never gets it\./);
+    assert.match(ctx.inspector.textContent, /It can happen on any reply, wherever the party is.* A story with no date never gets it\./);
     assert.equal(ctx.main.querySelectorAll('button.tl-row')[0].textContent.includes('Any time'), true);
     // Places keep the guard in front, and the form still reads it.
     click(ctx, 'Only in…');
