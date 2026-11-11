@@ -157,7 +157,7 @@ export function renderRipples(ctx) {
     const header = el(doc, 'div', '', { class: 'records-header' });
     header.append(el(doc, 'h1', 'Ripples'),
         el(doc, 'div', 'Powers your deeds can favour. Each deed for their people, factions or quest givers adds sway; the pack\'s events read who leads.', { class: 'records-subtitle' }),
-        button(doc, '+ Power', () => addPower(ctx)));
+        button(doc, '+ Power', () => addPower(ctx), { class: 'primary' }));
     screen.append(header);
 
     if (!powers.length) screen.append(el(doc, 'p', 'No powers yet. A power is a claimant or a faction your deeds can favour.', { class: 'muted' }));
@@ -235,7 +235,7 @@ function renderPower(ctx, inspector, { power, idx }) {
     const problems = powerProblems(model, idx);
     if (problems.length) inspector.append(el(doc, 'div', problems.join('\n'), { role: 'status', class: 'warning' }));
 
-    const form = el(doc, 'div', '', { class: 'inspector-form-body cf-form' });
+    const form = el(doc, 'div', '', { class: 'inspector-form-body cf-form ripples-form' });
     form.append(
         nameFields(ctx, power, idx),
         listGroup(ctx, 'Also called', power, idx, 'aliases', 'Name'),
@@ -288,7 +288,7 @@ function baseField(ctx, power, idx) {
     range.value = String(power.base);
     range.addEventListener('input', () => { shown.textContent = range.value; });
     range.addEventListener('change', () => commit(ctx, next => { next.powers[idx].base = Number(range.value); }));
-    const wrap = el(doc, 'div', '', { class: 'field' });
+    const wrap = el(doc, 'div', '', { class: 'field cf-sway' });
     wrap.append(el(doc, 'span', 'Base sway', { class: 'cf-label' }), shown, range);
     return wrap;
 }
