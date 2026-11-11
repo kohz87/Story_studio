@@ -1,5 +1,5 @@
 Story Block authoring kit
-commit d71fc06b03325184fe562abd7e8d5afb8e919a31
+commit 4b81cf4c73846475f4a30dc681ef9b7057fbc1c5
 rewritten scripts/sb-root.mjs
 files 20
 1043d72514fa50ce54b4a34d283745619d85f3f6afa685e692bcba0de547da66  .gitignore
@@ -15,7 +15,7 @@ f5fedfe31d56ceb284b1988ed7aee165b50183aa431b658410c01be462f79644  examples/tiny-
 3d3bac36c8ff8b3653768a5580dd0a30e3b4586c4033f7936c025eff4d4515c6  prompts/data-module/02-lines.md
 b59df8662cc27a98cef942d7979d3c63422ae88ee9b74f939b86e1e9f2516d70  prompts/data-module/03-check-and-try.md
 5ccc6b6ee0445da55f921cf198b6b3af82e7f31c39f6c60b1da60456d9a2b967  reference/DATA-MODULES-FORMAT.md
-727103255050005facd1c2d0e8494ba334ebfbf7f3d999e8cf5274e52758b587  reference/LIMITS.md
+9aac063acc07bc56c63bb8dbfe99eebed0b416ece34bd9dd9d9a92a4d97dc8e0  reference/LIMITS.md
 1e34e00a7101f877ff2fbc6e9e920b633cd3f30ec89f9008ead88a462be70bfd  reference/PACK-FORMAT.md
 c735e17551a498a73775db57acf90eb04690e77a357f1e2c0ca737c9477be3ca  reference/data-modules/faction-standing.pack.json
 e0e334e3429357259153fecc3da3776731e6941c71888076bc0c06ebb29f02a3  reference/data-modules/survival-meters.pack.json

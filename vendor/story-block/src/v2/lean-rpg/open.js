@@ -1,4 +1,4 @@
-// A fight opened by the pre-call (stage 47): the planner may list foes that are not on the Foes block yet (`foe <name> | new |
+// Replay-only since 2.25.0 (old planner records). A fight opened by the pre-call (stage 47): the planner could list foes that are not on the Foes block yet (`foe <name> | new |
 // count: n | class: X`) when the reader's message starts a fight against them. Code checks each one (vetOpen) and, only
 // when the plan is rolled, fills a free foe slot through the block's own `set-slot-N` kind (openFoes), as part of the
 // `rpg.resolve` step on the reply, so a swipe plans again, a Re-read keeps it, deleting the reply takes it back and a
@@ -11,8 +11,11 @@ import { createEvaluation } from '../data-modules/interpreter.js';
 import { CLASS_NAMES, FIX_VERSION, FOE_SLOTS } from './names.js';
 import { FOE_LEVEL, bandOfRank, classOfLevel, foeLevelCap, levelOf, levelOfClass, partyLevels } from './foes.js';
 import { fold, readSheet } from './read.js';
+import { FOE_COUNT_MAX } from './templates.js';
 
 export const OPEN_MAX_COUNT = 12;
+// What a recorded opening may hold: the pre-check's packs ("4 scores of rats") run to the Foes block's own count maximum; the old planner's vetOpen still holds its own entries to OPEN_MAX_COUNT.
+export const OPEN_RECORD_MAX_COUNT = FOE_COUNT_MAX;
 export const OPEN_MAX_NAME = 40;
 const STOP = new Set(['the', 'a', 'an', 'of', 'and', 'or', 'to', 'in', 'on']);
 
@@ -33,7 +36,7 @@ export function isNamedIn(name, texts) {
     return wanted.some(word => seen.has(word));
 }
 
-// A level as the planner wrote it: "14", "Lv 14" or "level 14". An old "class: III" (or 3) stands for the level of that class.
+// A level as an old planner record wrote it: "14", "Lv 14" or "level 14". An old "class: III" (or 3) stands for the level of that class.
 const levelWritten = value => {
     const word = oneLine(value).replace(/^(?:level|lv\.?)\s*/iu, '');
     return /^\d+$/u.test(word) ? levelOf(Number(word)) : null;
@@ -53,9 +56,9 @@ const RANK_MAX = 12;
  * held to 1–12 (none: 1). The level is the one written (held to 1–99); else the rank's band (a rank no pack names is passed over); else an old class
  * stands for its level; else the level is left to be drawn when the plan is rolled.
  */
-export function vetOpen(requested, sheet, texts, { rankAt = null } = {}) {
+export function vetOpen(requested, sheet, texts, { rankAt = null, stated = null } = {}) {
     const open = [], refused = [];
-    // A new foe is at most one band (10 levels) above the party's highest level: a level or rank above that is held down to it.
+    // A new foe with a GUESSED level is at most the party's highest level + 20: a level or rank above that is held down to it.
     const cap = foeLevelCap(partyLevels(sheet));
     // (a standing group is already there; a Down one is beaten and a new group of its name is new: openFoes replaces it)
     const known = new Set((sheet?.foes ?? []).filter(foe => foe.filled && foe.hurt > 0).map(foe => fold(foe.name)));
@@ -68,6 +71,11 @@ export function vetOpen(requested, sheet, texts, { rankAt = null } = {}) {
         known.add(key);
         const count = Number.parseInt(oneLine(entry.count), 10);
         const counted = Number.isInteger(count) ? Math.max(1, Math.min(OPEN_MAX_COUNT, count)) : 1;
+        // A person's own Level (stated-level.js, read by the caller before the plan is recorded) passes the cap and wins over what the entry wrote.
+        let given = null;
+        try { given = counted === 1 && typeof stated === 'function' ? stated(name) : null; } catch { given = null; }
+        if (given && Number.isInteger(given.level)) { open.push({ name, count: counted, level: levelOf(given.level) }); continue; }
+        if (given && typeof given.rank === 'string' && Number.isInteger(given.from) && Number.isInteger(given.to) && given.from <= given.to) { open.push({ name, count: counted, rank: given.rank, from: given.from, to: given.to }); continue; }
         const level = levelWritten(entry.level) ?? (oneLine(entry.rank) ? null : classWritten(entry.class));
         if (level !== null) { open.push({ name, count: counted, level: Math.min(level, cap) }); continue; }
         const rank = oneLine(entry.rank).slice(0, RANK_MAX), band = rank ? bandOfRank(rank, rankAt) : null;
@@ -86,7 +94,7 @@ export function openErrors(open) {
         if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) { errors.push(`${where} must be an object.`); return; }
         for (const key of Object.keys(entry)) if (!['name', 'count', 'class', 'level', 'rank', 'from', 'to'].includes(key)) errors.push(`${where} has "${key}", which a plan does not use.`);
         if (typeof entry.name !== 'string' || !entry.name.trim() || entry.name.length > OPEN_MAX_NAME) errors.push(`${where} needs a name (text, at most ${OPEN_MAX_NAME} characters).`);
-        if (!Number.isInteger(entry.count) || entry.count < 1 || entry.count > OPEN_MAX_COUNT) errors.push(`${where} count must be a whole number from 1 to ${OPEN_MAX_COUNT}.`);
+        if (!Number.isInteger(entry.count) || entry.count < 1 || entry.count > OPEN_RECORD_MAX_COUNT) errors.push(`${where} count must be a whole number from 1 to ${OPEN_RECORD_MAX_COUNT}.`);
         // (A plan from before the Levels rules has a class; one from after has a level, a rank with its band, or neither.)
         if (entry.class !== undefined) {
             if (!Number.isInteger(entry.class) || entry.class < 1 || entry.class > CLASS_NAMES.length) errors.push(`${where} class must be a whole number from 1 to ${CLASS_NAMES.length}.`);

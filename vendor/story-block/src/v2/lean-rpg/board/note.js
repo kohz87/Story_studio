@@ -25,13 +25,16 @@ export const barMovement = (damage, resource = false, foe = null) => {
 
 function lineNote(line, members = null) {
     const who = clean(line.pc?.who), foe = clean(line.foe?.name), skill = line.skill ? ` (${clean(line.skill)})` : '';
-    const action = line.flee ? `${who} flees from ${foe}` : line.kind === 'foe' ? `${foe} attacks ${who}` : `${who} attacks ${foe}${skill}`;
+    const area = line.aoe ? (line.reduced ? ' (area, reduced)' : ' (area)') : '';
+    const action = line.flee ? `${who} flees from ${foe}` : line.support ? `${who} heals ${clean(line.target)}${skill}` : line.kind === 'foe' ? `${foe} attacks ${who}` : `${who} attacks ${foe}${skill}${area}`;
     const result = line.outcome === 'cost' ? 'success at a cost' : line.outcome;
-    const verdict = line.kind === 'foe' ? `${who}'s defence${skill}: ${result}` : result;
+    // (a hit soaked by the defender's VIT, even at soak 0: told briefly, no number)
+    const glance = line.kind === 'foe' && Number.isInteger(line.soaked) && line.soaked >= 0;
+    const verdict = glance ? `blow glances off${skill}` : line.kind === 'foe' ? `${who}'s defence${skill}: ${result}` : result;
     const slot = line.foe?.slot ?? Number(/^f:(\d+)/u.exec(line.damage?.id ?? '')?.[1] ?? NaN);
     const target = line.kind === 'foe' ? null : { ...(members?.get(slot) ?? {}), ...(line.foe ?? {}) };
     const changes = [line.damage ? barMovement(line.damage, false, target) : '', line.cost ? barMovement(line.cost, true) : ''].filter(Boolean);
-    return `${action}: ${verdict}${line.decisive ? ', decisive' : ''}${changes.length ? `; ${changes.join('; ')}` : ''}`;
+    return `${action}: ${line.aoeNoTarget ? 'main target already Down; ' : ''}${verdict}${line.decisive ? ', decisive' : ''}${changes.length ? `; ${changes.join('; ')}` : ''}`;
 }
 
 function newFoesNote(result, setup) {
@@ -60,7 +63,8 @@ export function settledNote(result, setup = null) {
             included.add(index);
             return [wearNote(event)];
         });
-        lines.push(`Exchange ${round.n}: ${[...round.lines.map(line => lineNote(line, members)), ...changes].join(' | ') || 'No one acted'}.`);
+        const unpaid = (round.idle ?? []).filter(item => item.why === 'no-resource').map(item => `${clean(item.who)} cannot heal: the skill's resource is Empty`);
+        lines.push(`Exchange ${round.n}: ${[...round.lines.map(line => lineNote(line, members)), ...unpaid, ...changes].join(' | ') || 'No one acted'}.`);
     }
     wear.forEach((event, index) => { if (!included.has(index)) lines.push(`Exchange ${event.n}: ${wearNote(event)}.`); });
     const end = { won: 'The fight is won. Code gives the party its XP.', lost: 'The fight is lost.', fled: 'The party fled.', open: 'The fight is still open.' };
@@ -70,3 +74,21 @@ export function settledNote(result, setup = null) {
             : 'Then follow the reader’s requested aftermath only as the outcome permits; do not assume the foes or their possessions are accessible or looting succeeds.');
     return lines.join(' | ');
 }
+
+// The board's log lines (the view reads them; a followup of an area skill under `areaAll` is a group hit alike, not reduced).
+const signed = n => n >= 0 ? `+${n}` : String(n);
+export const labelLine = line => {
+    const pc = line.pc ?? {}, foe = line.foe ?? {}, who = line.flee ? `${pc.who} flees` : line.support ? `${pc.who} heals ${line.target}` : line.reduced ? `… also hits ${foe.name} (reduced)` : line.kind === 'foe' ? `${foe.name} attacks ${pc.who}` : `${pc.who} → ${foe.name}`;
+    const bonus = (pc.statBonus ?? 0) + (pc.classBonus ?? 0) + (pc.rank ?? 0) + (pc.edge ?? 0);
+    const changes = [line.damage ? barMovement(line.damage) : '', line.cost ? barMovement(line.cost, true) : ''].filter(Boolean);
+    const skill = line.skill ? ` (${line.skill})` : '';
+    const verdict = `${line.kind === 'foe' ? `${pc.who}'s defence${skill}: ` : ''}${line.kind === 'foe' && Number.isInteger(line.soaked) && line.soaked >= 0 ? 'GLANCED OFF' : String(line.outcome).toUpperCase()}`;
+    return `${who}${line.kind === 'foe' ? '' : skill}: d20 ${pc.die} ${signed(bonus)} = ${pc.total} vs ${foe.total ?? line.dc} — ${verdict}${line.decisive ? ', DECISIVE' : ''}${changes.length ? ` · ${changes.join(' · ')}` : ''}`;
+};
+export const labelAreaGroup = group => {
+    const line = group[0], name = line.aoeName || line.foe?.name || '';
+    const changes = group.flatMap(item => [item.damage ? barMovement(item.damage) : '', item.cost ? barMovement(item.cost, true) : '']).filter(Boolean);
+    if (line.reduced || line.aoeFollowup) return `… also ${line.outcome === 'fail' ? 'targets' : 'hits'} ${name}${line.reduced ? ' (reduced)' : ''}${changes.length ? ` → ${changes.join(', ')}` : line.outcome === 'fail' ? ' — FAIL' : ''}`;
+    const base = labelLine({ ...line, foe: { ...line.foe, name }, damage: undefined, cost: undefined });
+    return `${base}${line.aoeNoTarget ? ' · main target Down' : ''}${changes.length ? ` → ${changes.join(', ')}` : ''}`;
+};

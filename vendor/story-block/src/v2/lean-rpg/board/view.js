@@ -1,21 +1,21 @@
-// The touch-first fight board: bars, a scrolling log and numbered choice buttons.
+// The touch-first fight board: status chips (foe groups, party), a one-line log, the choosing member's Mana/Stamina strip and a grid of skill buttons.
 // It reads the staged session and calls its pure rules; only metadata holds unsent choices.
 // Text is placed in DOM nodes, never interpreted as markup.
 
 import { button, h } from '../../view/widgets/dom.js';
 import { zoomOf } from '../../view/scroll.js';
 import { discardHeld, heldForSid } from '../../turn/held-board.js';
-import { meter } from '../../view/widgets/meter.js';
-import { drawStageBars } from '../view/bars.js';
 import { readFoes, readParty, stageTone } from '../view/party-data.js';
 import { readSheet } from '../read.js';
 import { planGear } from '../gear.js';
 import { isStandard } from '../rules.js';
 import { boardFlags } from './overrides.js';
-import { boardChoices, memberGroups as groupsOfMembers, memberHealthWord, memberOrderLine, memberPackLine, memberTargetLine, pendingAwards, pendingAwardsLine, standingMembers, targetLabel } from './view-data.js';
+import { resourceStrip, skillButton, statusChips, targetButton } from './view-chips.js';
+import { boardChoices, foeChips, groupTarget, memberGroups as groupsOfMembers, memberOrderLine, memberTargetLine, partyChips, stagedLine, pendingAwards, pendingAwardsLine, standingMembers, targetLabel } from './view-data.js';
 import { boardSession, discardBoard, openBoard, reconcileBoard, stageExchange } from './session.js';
 import { equipmentForBoard, playBoard } from './engine.js';
-import { barMovement, settledNote } from './note.js';
+import { labelAreaGroup, labelLine, settledNote } from './note.js';
+import { areaLineGroups } from './order.js';
 import { dropOf } from '../ambush.js';
 import { AUTO_CAP, autoExchanges } from '../names.js';
 import { autoNote, runAuto } from './auto-run.js';
@@ -31,40 +31,6 @@ export const pressButton = (doc, text, cls, act) => {
     node.addEventListener('click', fire);
     return node;
 };
-const signed = n => n >= 0 ? `+${n}` : String(n);
-const labelLine = line => {
-    const pc = line.pc ?? {}, foe = line.foe ?? {}, who = line.flee ? `${pc.who} flees` : line.kind === 'foe' ? `${foe.name} attacks ${pc.who}` : `${pc.who} → ${foe.name}`;
-    const bonus = (pc.statBonus ?? 0) + (pc.classBonus ?? 0) + (pc.rank ?? 0) + (pc.edge ?? 0);
-    const changes = [line.damage ? barMovement(line.damage) : '', line.cost ? barMovement(line.cost, true) : ''].filter(Boolean);
-    const skill = line.skill ? ` (${line.skill})` : '';
-    const verdict = `${line.kind === 'foe' ? `${pc.who}'s defence${skill}: ` : ''}${String(line.outcome).toUpperCase()}`;
-    return `${who}${line.kind === 'foe' ? '' : skill}: d20 ${pc.die} ${signed(bonus)} = ${pc.total} vs ${foe.total ?? line.dc} — ${verdict}${line.decisive ? ', DECISIVE' : ''}${changes.length ? ` · ${changes.join(' · ')}` : ''}`;
-};
-
-// A read-only member card in the Fight tab's own foe-card shape: name and level pills, then the existing segmented meter.
-function drawMemberCard(doc, parent, member, realFoes, handles) {
-    const real = (Array.isArray(realFoes) ? realFoes : []).find(foe => Number(foe.slot) === Number(member.group));
-    const value = Math.max(0, Math.trunc(Number(member?.value ?? member?.hurt) || 0));
-    const max = Math.max(1, Math.trunc(Number(member?.size) || 1)), shown = Math.min(value, max);
-    const down = member?.standing === false || value <= 0;
-    const node = h(doc, 'article', `rpg-foe ss-glass${down ? ' rpg-down' : ''}${member?.pack ? ' rpg-foe-pack' : ''}`);
-    node.setAttribute('data-foe', member?.name ?? '');
-    parent.appendChild(node);
-    const top = h(doc, 'div', 'rpg-foe-top');
-    top.appendChild(h(doc, 'p', 'rpg-name', member?.name ?? ''));
-    const side = h(doc, 'span', 'rpg-foe-side');
-    if (real?.levelText) side.appendChild(h(doc, 'span', 'ss-pill rpg-level-pill', real.levelText));
-    if (member?.pack) side.appendChild(h(doc, 'span', 'ss-pill rpg-pack-pill', 'pack'));
-    top.appendChild(side);
-    node.appendChild(top);
-    const bar = h(doc, 'div', 'rpg-foe-bar rpg-bar'), slot = h(doc, 'div', 'rpg-bar-meter');
-    bar.setAttribute('data-foe-health', String(member?.slot ?? ''));
-    bar.appendChild(slot);
-    node.appendChild(bar);
-    handles.push(meter.render(slot, { label: 'Health', value: shown, max, tone: stageTone(shown, max), text: memberHealthWord(member), segments: max, icon: 'fa-heart' }, {}));
-    if (member?.pack && !down) node.appendChild(h(doc, 'p', 'rpg-pack-line', memberPackLine(member)));
-}
-
 // The note for a fight that starts from the last fight's exact bars.
 const resumedLine = (members, carried) => {
     const packed = members.some(member => member?.pack);
@@ -74,7 +40,7 @@ const resumedLine = (members, carried) => {
 };
 
 export function createBoardView({ doc, headState, meta, save, store, rules, query, readerName, roleOf, levels, on = () => false, start = null, cap = () => AUTO_CAP.default } = {}) {
-    let notice = '', autoLine = '', chosen = [], targeting = null, confirm = false, busy = false, generation = 0, activeId = null, keyRoot = null, listening = false, lockedChoices = [];
+    let logOpen = false, notice = '', autoLine = '', chosen = [], targeting = null, confirm = false, busy = false, generation = 0, activeId = null, keyRoot = null, listening = false, lockedChoices = [];
     const releaseAfterResult = () => {
         const wait = () => setTimeout(() => {
             busy = false;
@@ -86,7 +52,7 @@ export function createBoardView({ doc, headState, meta, save, store, rules, quer
     };
     const persist = () => { try { save?.(); } catch { /* staging still works in this page */ } };
     const current = () => boardSession(meta());
-    const reset = () => { chosen = []; targeting = null; confirm = false; notice = ''; autoLine = ''; };
+    const reset = () => { logOpen = false; chosen = []; targeting = null; confirm = false; notice = ''; autoLine = ''; };
     const equipment = state => {
         const sheet = readSheet(state), gear = planGear(sheet, (name, args) => query?.(name, args), readerName());
         const weapons = {};
@@ -118,11 +84,19 @@ export function createBoardView({ doc, headState, meta, save, store, rules, quer
         if (!held) fresh(session, state);
         const played = held ? { error: meta()?.rpgFightHeldDiscarded?.[sid]
             ? 'The fight was discarded. Regenerate the held reply.'
-            : 'The fight reply is waiting. Restore the sheet or gear, or discard the fight and regenerate the reply.' }
-            : !matched ? { error: 'The fight no longer matches this reply. Restore the reply or discard the fight.' }
+            : 'The fight reply is waiting. Restore the sheet or gear, or discard the fight (Fight tab, Discard fight) and regenerate the reply.' }
+            : !matched ? { error: 'The fight no longer matches this reply. Restore the reply or discard the fight (Fight tab, Discard fight).' }
             : !isStandard(rules()) ? { error: 'The fight board needs Standard rules. Switch back to Standard or discard this fight.' }
             : playBoard(state, session.setup, session.exchanges);
         return { session, played, heldSid: held ? sid : null };
+    };
+    // Whether the Fight tab draws a board now (the gate of `snapshot`, with none of its writes): a held reply's fight, a staged exchange, or a board
+    // open on the head reply. The Fight tab stays listed for it with no foe on the sheet, so "Fight tab, Discard fight" always has a place to go.
+    const kept = () => {
+        if (!on()) return false;
+        const index = store?.headIndex?.(), sid = store?.carrierSid?.(index), session = current();
+        if (heldForSid(meta(), sid, (store?.receipts?.() ?? []).filter(entry => entry.index === index).map(entry => entry.receipt))) return true;
+        return Boolean(session) && (session.exchanges?.length > 0 || session.anchor === sid);
     };
     const open = ({ state = headState(), opening = null, result: approach = null } = {}) => {
         if (!on() || !isStandard(rules())) return false;
@@ -169,8 +143,10 @@ export function createBoardView({ doc, headState, meta, save, store, rules, quer
         const discard = () => { discardBoard(meta()); if (heldSid) discardHeld(meta(), heldSid); start?.discard?.(); persist(); reset(); redraw(); };
         const confirmDiscard = panel => {
             panel.appendChild(h(doc, 'p', '', 'Discard this fight and its unsent exchanges?'));
-            panel.appendChild(button(doc, 'Discard fight', 'ss-button rpg-board-confirm', discard));
-            panel.appendChild(button(doc, 'Cancel', 'ss-button', () => { confirm = false; redraw(); }));
+            const pair = h(doc, 'div', 'rpg-board-actions rpg-board-confirm-row');   // one row, 8px apart (never stacked)
+            pair.appendChild(button(doc, 'Discard fight', 'ss-button rpg-board-confirm', discard));
+            pair.appendChild(button(doc, 'Cancel', 'ss-button', () => { confirm = false; redraw(); }));
+            panel.appendChild(pair);
         };
         if (notice) root.appendChild(h(doc, 'p', 'rpg-board-error', notice));
         if (!listening) { doc.addEventListener?.('keydown', keydown, true); listening = true; }
@@ -184,56 +160,51 @@ export function createBoardView({ doc, headState, meta, save, store, rules, quer
             root.appendChild(panel);
             return;
         }
-        const state = played.state, { ranks, playerRank } = levels(), party = readParty(state, { own: readerName(), roleOf, ranks, playerRank }), foes = readFoes(state, { roleOf, ranks });
+        const tools = h(doc, 'div', 'rpg-board-actions');   // Back / Auto / Discard in one row, under the skills
+        const state = played.state, { ranks, playerRank } = levels(), party = readParty(state, { own: readerName(), roleOf, ranks, playerRank }).filter(character => character.left !== true), foes = readFoes(state, { roleOf, ranks });   // a member who left the party is not drawn
         const members = Array.isArray(played.result.members) ? played.result.members : null;
         root.classList.toggle('rpg-board-members', members !== null);
-        const status = h(doc, 'div', 'rpg-board-status');
-        status.appendChild(h(doc, 'h3', '', 'Fight'));
-        const cards = h(doc, 'div', 'rpg-board-cards');
-        if (members) {
-            for (const member of members) drawMemberCard(doc, cards, member, foes, handles);
-        } else {
-            for (const foe of foes) {
-                const card = h(doc, 'article', 'rpg-foe ss-glass');
-                card.appendChild(h(doc, 'p', 'rpg-name', `${foe.name} · ${foe.levelText}`));
-                const slot = h(doc, 'div', 'rpg-bar-meter'); card.appendChild(slot);
-                handles.push(meter.render(slot, { label: 'Health', value: foe.hurt, max: foe.max ?? 5, tone: foe.hurt ? 'warn' : 'bad', text: foe.word, segments: foe.max ?? 5 }, {}));
-                cards.appendChild(card);
-            }
-        }
-        for (const character of party) {
-            const card = h(doc, 'article', 'rpg-pc ss-glass');
-            card.appendChild(h(doc, 'p', 'rpg-name', character.name));
-            const bars = Object.fromEntries(Object.entries(character.bars).map(([key, bar]) => [key, { ...bar, text: bar.word }]));
-            drawStageBars(doc, card, { ...character, bars }, { api: null, handles });
-            cards.appendChild(card);
-        }
+        const body = h(doc, 'div', 'rpg-board-body');   // status, log and controls: one column on a phone, two when the board is wide (board.css)
+        root.appendChild(body);
+        const status = h(doc, 'div', 'rpg-board-status');   // foe groups and the party as chips; sticky on a phone
+        const cards = statusChips(doc, { party: partyChips(party), foes: members ? foeChips(members, foes)
+            : foes.map(foe => ({ name: foe.name, level: foe.level, count: foe.count, value: foe.hurt, max: foe.max ?? 5, tone: foe.hurt ? stageTone(foe.hurt, foe.max ?? 5) : 'bad' })) });
         status.appendChild(cards);
         if (session.resumed && members) status.appendChild(h(doc, 'p', 'rpg-board-resumed', resumedLine(members, session.setup.carriedMembers)));
-        if (played.result.order.length) {
-            const line = members ? memberOrderLine(played.result.order, members, foes) : `Order: ${played.result.order.map(item => item.name).join(' · ')}`;
-            if (line) status.appendChild(h(doc, 'p', 'rpg-board-order', line));
-        }
-        root.appendChild(status);
-        const log = h(doc, 'div', 'rpg-board-log rpg-battle');
+        body.appendChild(status);
+        const ended = played.result.stop !== 'open', sending = ended && Boolean(start?.sending?.());
+        const log = h(doc, 'details', 'rpg-board-log rpg-battle');   // one line; a tap opens the full log (open at the end of a fight)
         const logContent = h(doc, 'div', 'rpg-board-log-content');
         log.setAttribute('aria-live', 'polite');
+        log.open = ended || logOpen;   // the reader's open log stays open across redraws during a fight
+        log.addEventListener('toggle', () => { logOpen = log.open && !ended; });
+        if (played.result.order.length) {
+            const line = members ? memberOrderLine(played.result.order, members, foes) : `Order: ${played.result.order.map(item => item.name).join(' · ')}`;
+            if (line) logContent.appendChild(h(doc, 'p', 'rpg-board-order', line));
+        }
         const history = (store?.receipts?.() ?? []).map(entry => entry.receipt?.data?.v2?.result).filter(result => result?.board?.id === session.id);
+        let lastRound = 0;
         for (const result of [...history, played.result]) {
             for (const line of result.opening ?? []) logContent.appendChild(h(doc, 'p', '', `Opening · ${labelLine(line)}`));
             for (const round of result.rounds ?? []) {
+                lastRound = round.n;
                 logContent.appendChild(h(doc, 'p', 'rpg-board-round', `Exchange ${round.n}`));
-                for (const line of round.lines) logContent.appendChild(h(doc, 'p', '', labelLine(line)));
+                for (const group of areaLineGroups(round.lines)) logContent.appendChild(h(doc, 'p', '', group[0].aoe ? labelAreaGroup(group) : labelLine(group[0])));
+                for (const item of round.idle ?? []) if (item.why === 'no-resource') logContent.appendChild(h(doc, 'p', '', `${item.who} cannot heal: the skill's resource is Empty.`));
             }
         }
-        if (!logContent.childNodes.length) logContent.appendChild(h(doc, 'p', '', 'Choose an action to begin.'));
+        if (!lastRound) logContent.appendChild(h(doc, 'p', '', 'Choose an action to begin.'));
+        log.appendChild(h(doc, 'summary', '', lastRound ? `Exchange ${lastRound} · tap to read the full log` : 'Choose an action to begin.'));
         log.appendChild(logContent);
-        root.appendChild(log);
+        body.appendChild(log);
         const panel = h(doc, 'div', 'rpg-board-controls');
         const gear = session.setup.gear ? equipmentForBoard(state, session.setup.gear) : {};
-        const memberGroupList = members ? groupsOfMembers(members, foes) : null;
-        const data = boardChoices(state, { ...session.setup, ...gear }, chosen, memberGroupList), ended = played.result.stop !== 'open', sending = ended && Boolean(start?.sending?.());
+        const areaAll = session.setup.areaAll === 1;   // the newer area rule: one tap, every group alike. A fight staged before it keeps the main-group choice.
+        const memberGroupList = members ? groupsOfMembers(members, foes, { aoe: session.setup.aoe === 1 }) : null;
+        const data = boardChoices(state, { ...session.setup, ...gear }, chosen, memberGroupList);
         const standing = members ? standingMembers(members) : data.foes;
+        const targetGroups = members ? groupsOfMembers(members, foes) : null;   // plain group names for single targets (the area list above names them as an area does)
+        const nameAt = slot => standing.find(foe => foe.slot === slot)?.name ?? '';
         if (confirm) confirmDiscard(panel);
         else if (ended) {
             if (autoLine) panel.appendChild(h(doc, 'p', 'rpg-board-auto-note', autoLine));
@@ -250,30 +221,44 @@ export function createBoardView({ doc, headState, meta, save, store, rules, quer
             }));
         } else {
             if (autoLine) panel.appendChild(h(doc, 'p', 'rpg-board-auto-note', autoLine));
-            panel.appendChild(h(doc, 'p', 'rpg-board-prompt', targeting ? (targeting.groupMode ? 'Choose a group' : 'Choose a target') : `${data.actor?.who ?? 'Party'}: choose an action`));
-            if (!targeting) panel.appendChild(h(doc, 'p', 'rpg-board-defence', `Defence: ${data.defence ?? 'plain defence'}, automatic`));
+            const mode = targeting?.mode, mainTarget = mode === 'main' && session.setup.aoe === 1;
+            const steps = h(doc, 'div', 'rpg-board-step-row');
+            steps.appendChild(h(doc, 'p', 'rpg-board-prompt', mainTarget ? `${data.actor?.who ?? 'Party'}: ${targeting.action.skill} (area)` : targeting ? (mode === 'group' || mode === 'main' ? 'Choose a group' : 'Choose a target') : `${data.actor?.who ?? 'Party'}: choose an action`));
+            if (data.actors.length > 1) steps.appendChild(h(doc, 'small', 'rpg-board-step', `${Math.min(chosen.length + 1, data.actors.length)} of ${data.actors.length}`));
+            panel.appendChild(steps);
+            for (const action of chosen) panel.appendChild(h(doc, 'p', 'rpg-board-staged', stagedLine(action, action.target === undefined ? '' : nameAt(action.target) || String(action.target))));
+            if (mainTarget) panel.appendChild(h(doc, 'p', 'rpg-board-area-note', 'Hits every enemy group. The group you pick takes the full effect, and the others take one Health block less.'));
+            if (!targeting && data.resources) panel.appendChild(resourceStrip(doc, data.resources));
+            if (!targeting && data.defence) panel.appendChild(h(doc, 'p', 'rpg-board-defence', `Defence: ${data.defence}`));   // only a named defence skill, on one line
             const list = h(doc, 'div', 'rpg-board-choices');
-            const options = targeting ? (targeting.groupMode
-                ? memberGroupList.map((group, at) => ({ label: `${at + 1}. ${group.label}`, group: group.group, literal: true }))
-                : standing.map((foe, at) => members
-                    ? { label: memberTargetLine(foe, at + 1), target: foe.slot, literal: true }
-                    : { label: targetLabel(foe), target: foe.slot }))
-                : data.choices;
+            const memberBar = member => ({ value: Number(member?.value ?? member?.hurt) || 0, max: Number(member?.size) || 1 });
+            const options = !targeting ? data.choices
+                : mode === 'main' ? memberGroupList.map((group, at) => ({ label: session.setup.aoe === 1 ? `Main target: ${group.label}` : `${at + 1}. ${group.label}`, group: group.group, literal: true }))
+                    : mode === 'group' ? targetGroups.map((group, at) => ({ ...groupTarget(group, at), picked: group, literal: true }))
+                        : mode === 'members' ? targeting.picked.members.map((member, at) => ({ label: memberTargetLine(member, at + 1), target: member.slot, ...memberBar(member), tone: stageTone(memberBar(member).value, memberBar(member).max), literal: true }))
+                            : standing.map(foe => ({ label: targetLabel(foe), target: foe.slot }));
             const take = item => {
                 if (busy || thisGeneration !== generation || item.reason) return;
                 notice = '';
                 if (targeting) {
-                    if (targeting.groupMode) chosen.push({ ...targeting.action, group: item.group });
-                    else chosen.push({ ...targeting, target: item.target });
+                    if (mode === 'main') chosen.push({ ...targeting.action, group: item.group });
+                    else if (mode === 'group') {
+                        if (item.picked.members.length > 1) { targeting = { mode: 'members', action: targeting.action, picked: item.picked }; redraw(); return; }   // a group of several opens its members
+                        chosen.push({ ...targeting.action, target: item.picked.members[0].slot });
+                    } else chosen.push({ ...targeting.action, target: item.target });
                     targeting = null;
                 }
                 else if (item.action.kind === 'flee') chosen = [item.action];
-                else if (item.action.area && members) {
-                    if (memberGroupList.length > 1) targeting = { groupMode: true, action: item.action };
+                else if (item.action.support) chosen.push(item.action);
+                else if (item.action.area && members && !areaAll) {
+                    if (memberGroupList.length > 1) targeting = { mode: 'main', action: item.action };
                     else chosen.push({ ...item.action, ...(memberGroupList[0] ? { group: memberGroupList[0].group } : {}) });
                 }
-                else if (!item.action.area && standing.length > 1) targeting = item.action;
-                else chosen.push({ ...item.action, ...(!item.action.area ? { target: standing[0]?.slot } : {}) });
+                else if (item.action.area) chosen.push({ ...item.action });   // one tap: every group in reach alike
+                else if (members && targetGroups.length > 1) targeting = { mode: 'group', action: item.action };
+                else if (members && targetGroups[0]?.members.length > 1) targeting = { mode: 'members', action: item.action, picked: targetGroups[0] };
+                else if (!members && standing.length > 1) targeting = { mode: 'foe', action: item.action };
+                else chosen.push({ ...item.action, target: standing[0]?.slot });
                 let rolled = false;
                 if (!targeting && (chosen[0]?.kind === 'flee' || chosen.length === data.actors.length)) {
                     const result = stageExchange(meta(), headState(), chosen);
@@ -284,25 +269,27 @@ export function createBoardView({ doc, headState, meta, save, store, rules, quer
                 redraw();
                 if (rolled) releaseAfterResult();
             };
-            // Auto sits right under the choices, beside Flee (outside the list, so the list keeps its own scroll rows).
+            // Auto sits in the one row under the choices, between Back and Discard.
             const autoNode = targeting ? null : pressButton(doc, autoLine ? 'Auto again' : 'Auto', 'ss-button ss-button-primary rpg-board-auto', () => { if (!busy && auto()) redraw(); });
             if (autoNode) autoNode.disabled = busy;
             options.forEach((item, at) => {
-                const text = item.literal ? item.label : `${at + 1}  ${item.label}${item.reason ? ` — ${item.reason}` : ''}`;
-                const line = button(doc, text, 'rpg-board-choice', () => take(item));
+                const line = item.view ? skillButton(doc, { ...item.view, blocked: item.reason }) : item.max !== undefined ? targetButton(doc, item) : h(doc, 'button', '', item.literal ? item.label : `${at + 1}  ${item.label}`);
+                line.setAttribute('type', 'button');
+                line.classList.add('rpg-board-choice');
+                if (item.reason) line.title = item.reason; else if (item.view?.about) line.title = item.view.about;
+                line.addEventListener('click', () => take(item));
                 line.disabled = Boolean(item.reason) || busy;
                 if (busy && !item.reason) lockedChoices.push(line);
                 line.setAttribute('data-choice', String(at + 1)); list.appendChild(line);
             });
             panel.appendChild(list);
-            if (autoNode) panel.appendChild(autoNode);
             if (!targeting && autoLine && session.exchanges.length && start?.waiting?.() && !start.sending?.())
                 panel.appendChild(pressButton(doc, 'Send with this fight', 'ss-button ss-button-primary rpg-board-send', () => { start.send(); redraw(); }));
-            if (targeting) panel.appendChild(button(doc, 'Back', 'ss-button rpg-board-back', () => { targeting = null; redraw(); }));
+            if (targeting || chosen.length) tools.appendChild(button(doc, 'Back', 'ss-button rpg-board-back', () => { if (targeting) targeting = null; else chosen.pop(); redraw(); }));
+            if (autoNode) tools.appendChild(autoNode);
         }
         if (ended) panel.classList.add('rpg-board-ended');
         if (!sending) {
-            const tools = h(doc, 'div', 'rpg-board-actions');
             tools.appendChild(button(doc, 'Discard fight', 'ss-button rpg-board-discard', () => { confirm = true; redraw(); }));
             panel.appendChild(tools);
         }
@@ -310,59 +297,21 @@ export function createBoardView({ doc, headState, meta, save, store, rules, quer
         details.appendChild(h(doc, 'summary', '', 'What the narrator will be told'));
         details.appendChild(h(doc, 'p', '', settledNote(played.result, session.setup)));
         panel.appendChild(details);
-        root.appendChild(panel);
-        // Phone rows use real content heights, including wrapped cards and choice labels. Observing
-        // the content rather than the scrollers lets their minimums shrink after a width change.
-        const list = panel.querySelector('.rpg-board-choices');
-        const choiceRows = list ? [...list.children].slice(0, 5) : [];
-        const cardRows = [...cards.children];
-        let followLog = true;
-        log.addEventListener('scroll', () => { followLog = Math.abs(log.scrollHeight - log.clientHeight - log.scrollTop) < 2; });
-        const measure = () => {
-            const setHeight = (node, property, value) => {
-                const height = `${Math.ceil(value)}px`;
-                if (value > 0 && node.style.getPropertyValue(property) !== height) node.style.setProperty(property, height);
-            };
-            setHeight(cards, '--rpg-card-row-height', Math.max(0, ...cardRows.map(card => card.offsetHeight || 0)));
-            const style = doc.defaultView?.getComputedStyle?.bind(doc.defaultView);
-            if (style && list && choiceRows.length) {
-                const gap = parseFloat(style(list).rowGap) || 0;
-                setHeight(list, '--rpg-choice-limit', choiceRows.reduce((height, row) => height + (row.offsetHeight || 0), 0) + gap * (choiceRows.length - 1));
-            }
-            if (style && logContent.offsetHeight) {
-                const frame = style(log);
-                const edges = ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'].reduce((height, name) => height + (parseFloat(frame[name]) || 0), 0);
-                setHeight(log, '--rpg-log-content-height', logContent.offsetHeight + edges);
-                log.classList.add('rpg-board-log-measured');
-            }
-            if (followLog) log.scrollTop = log.scrollHeight;
-        };
+        body.appendChild(panel);
+        // Nothing inside the board scrolls; the page does. Keep the controls clear of the floating bar on a phone after choices or targeting change their height.
         const phone = doc.defaultView?.matchMedia?.('(max-width: 759.98px)');
-        const Observer = doc.defaultView?.ResizeObserver;
-        if (Observer) {
-            const observer = new Observer(measure);
-            for (const node of [...cardRows, ...choiceRows, log]) observer.observe(node);
-            // The wrapper has a measurable box on phones and display: contents at wider widths.
-            const onWidth = event => {
-                if (event.matches) observer.observe(logContent); else observer.unobserve(logContent);
-                measure();
-            };
-            if (phone?.matches) observer.observe(logContent);
-            phone?.addEventListener?.('change', onWidth);
-            handles.push({ destroy: () => { phone?.removeEventListener?.('change', onWidth); observer.disconnect(); } });
-        }
-        measure();
-        log.scrollTop = log.scrollHeight;
-        // A short sheet may need to move after choices or targeting change height. Move only its
-        // own scroller, and keep the controls clear of the floating bar on phones.
         if (!ended && phone?.matches) {
-            const body = root.closest?.('.story-suite-sheet-body, .ss-gameview-body');
-            const frame = body?.closest?.('.story-suite-sheet, .ss-gameview');
+            const scroller = root.closest?.('.story-suite-sheet-body, .ss-gameview-body');
+            const frame = scroller?.closest?.('.story-suite-sheet, .ss-gameview');
             const bar = frame?.querySelector?.('.story-suite-sheet-bar, .ss-gameview-nav');
-            const bodyBox = body?.getBoundingClientRect?.(), barBox = bar?.getBoundingClientRect?.(), panelBox = panel.getBoundingClientRect?.();
+            const bodyBox = scroller?.getBoundingClientRect?.(), barBox = bar?.getBoundingClientRect?.(), panelBox = panel.getBoundingClientRect?.();
+            const statusBox = status.getBoundingClientRect?.();
             if (bodyBox?.height && panelBox?.height) {
-                const limit = Math.min(bodyBox.bottom, barBox?.height ? barBox.top : bodyBox.bottom) - 8;
-                if (panelBox.bottom > limit) body.scrollTop += (panelBox.bottom - limit) / zoomOf(body);
+                const limit = Math.min(bodyBox.bottom, barBox?.height ? barBox.top : bodyBox.bottom) - 8, zoom = zoomOf(scroller);
+                // The sticky status stays clear of the controls: never scroll the panel's top under it, and keep the controls' scroll margin at its height.
+                const pinned = statusBox?.height ? bodyBox.top + statusBox.height + 4 : bodyBox.top;
+                panel.style.scrollMarginTop = `${Math.round((statusBox?.height ?? 0) / zoom) + 4}px`;
+                if (panelBox.bottom > limit) scroller.scrollTop += Math.max(0, Math.min(panelBox.bottom - limit, panelBox.top - pinned)) / zoom;
             }
         }
     };
@@ -371,5 +320,5 @@ export function createBoardView({ doc, headState, meta, save, store, rules, quer
         if (event.key === 'Escape' && targeting) { event.preventDefault?.(); event.stopImmediatePropagation?.(); event.stopPropagation?.(); keyRoot.querySelector('.rpg-board-back')?.click(); return; }
         if (/^[1-9]$/u.test(event.key)) { const node = keyRoot.querySelector(`[data-choice="${event.key}"]`); if (node && !node.disabled) { event.preventDefault?.(); node.click(); } }
     };
-    return { open, auto, snapshot, offer, render, clear() { keyRoot = null; generation += 1; }, destroy() { keyRoot = null; doc.removeEventListener?.('keydown', keydown, true); listening = false; } };
+    return { open, auto, kept, snapshot, offer, render, clear() { keyRoot = null; generation += 1; }, destroy() { keyRoot = null; doc.removeEventListener?.('keydown', keydown, true); listening = false; } };
 }
