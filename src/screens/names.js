@@ -298,7 +298,7 @@ export function renderNames(ctx) {
     const screen = el(doc, 'div', '', { class: 'records-screen names-screen' });
     const header = el(doc, 'div', '', { class: 'records-header' });
     header.append(el(doc, 'h1', 'Names'), el(doc, 'div', `${ids.length} ${ids.length === 1 ? 'culture' : 'cultures'} · first names the narrator picks for new people`, { class: 'records-subtitle' }),
-        button(doc, '+ Culture', () => addCulture(ctx, names, ids)));
+        button(doc, '+ Culture', () => addCulture(ctx, names, ids), { class: 'primary' }));
     screen.append(header);
     const list = el(doc, 'div', '', { class: 'records-list' });
     const banned = Array.isArray(names.banned) ? names.banned : [];
