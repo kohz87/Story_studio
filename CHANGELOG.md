@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.11.1
+
+Update Story Block, Story Director and NPC State Delta together. Replies already written replay and Re-read exactly as before. For the harder foes, start a new chat (or re-add the Foes block).
+
 ## 0.11.0
 
 - **Names and Ripples editors.** Names: the never-use list and one card per culture (regions, place matches, given names, cast-name warning, three-name preview). Ripples: the pack's ripples section. IDs follow Story Block's slug rules; renaming or deleting a power that events read asks first; Ripples has a back button on a phone; a bad names or ripples section now blocks export.
