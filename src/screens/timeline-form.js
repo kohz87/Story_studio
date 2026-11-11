@@ -252,7 +252,7 @@ export function renderEventInspector(ctx, container, { record, idx, problems = [
                 : 'Counts from when the earlier event entered the chronicle, so that event needs a Lasting change (Story Director).'));
             if (info.sinceName !== null && parentChronicle !== info.sinceName) whenSet.append(el(doc, 'p', `This waits for a world event called “${info.sinceName}”, which “${parentInfo?.name ?? humanName(info.after)}” does not add now, so it never happens until that is fixed.`, { class: 'warning' }));
             whenSet.append(small(doc, 'No later than (optional)'), dateRow(ctx, ui, { key: `${id}:until`, role: 'until', abs: info.until, label: 'No later than', optional: true, onCommit: abs => apply({ until: abs }) }));
-        } else whenSet.append(small(doc, 'It can happen on any reply, wherever the party is, unless you choose places below.'));
+        } else whenSet.append(small(doc, `It can happen on any reply${info.dated ? ' once the story has a date' : ''}, wherever the party is, unless you choose places below.${info.dated ? ' A story with no date never gets it.' : ''}`));
         const counters = info.dated && mode !== 'date' ? countersOf(events, record) : [];
         if (counters.length) whenSet.append(small(doc, `Waits until the story has a date: ${counters.map(event => `“${humanName(identity(event, 'events'))}”`).join(', ')} counts its days from this event.`));
     }
