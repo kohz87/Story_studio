@@ -10,12 +10,11 @@ import { el, button } from '../dom.js';
 import { records } from '../records.js';
 import { setSchemaField as setField } from '../edits.js';
 import { isRecord } from './cast/pieces.js';
-import { NAMES_LIMITS as SB_NAMES } from '../../vendor/story-block/src/v2/packs/limits.js';
+import { NAMES_LIMITS as SB_NAMES, SLUG } from '../../vendor/story-block/src/v2/packs/limits.js';
 
 // Story Block's limits (the checker's), under the names this screen uses.
 export const NAMES_LIMITS = Object.freeze({ cultures: SB_NAMES.cultures, regions: SB_NAMES.regions, regionChars: SB_NAMES.region, given: SB_NAMES.given, givenChars: SB_NAMES.name, banned: SB_NAMES.banned, bannedChars: SB_NAMES.bannedName });
 export const BANNED_CARD = '__banned';
-const CULTURE_ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const RESERVED = 'banned';
 // The checker keeps one of two names that differ only in case, so a typed list is cut the same way.
 const fresh = (typed, have) => {
@@ -35,11 +34,12 @@ export function namesOf(model) {
 export function cultureIds(names) {
     return Object.keys(names).filter(key => key !== RESERVED && isRecord(names[key]));
 }
-/** A culture id is a slug (lower-case letters, digits and hyphens) and not the reserved word. */
+/** A culture id is Story Block's slug (lower-case letters and digits, single hyphens between them, up to 64) and not the reserved word. */
 export function cultureIdProblem(id, names = {}, current = null) {
     if (typeof id !== 'string' || !id) return 'Give the culture an id';
     if (id === RESERVED) return '“banned” is reserved for the never-use list';
-    if (!CULTURE_ID.test(id)) return 'Use lower-case letters, digits and hyphens (up to 40)';
+    if (id === 'names') return '“names” is reserved';
+    if (!SLUG.test(id)) return 'Use lower-case letters and digits with single hyphens between them (up to 64)';
     if (id !== current && Object.hasOwn(names, id)) return `A culture named “${id}” already exists`;
     return '';
 }
@@ -52,14 +52,14 @@ export function placeMatches(model, regions) {
         return text && wanted.some(region => text.includes(region));
     }).length;
 }
-/** The cast's names as the narrator would see them: each full name and its first word, case-insensitive. */
+/** The cast's names as the narrator would see them: each full name and every word of it ("Sir Lothar" gives sir and lothar, so a title never hides the given name), case-insensitive. */
 export function castNameSet(model) {
     const set = new Set();
     for (const person of records(model, 'cast').filter(isRecord)) {
         const name = String(person.name ?? '').trim();
         if (!name) continue;
         set.add(lower(name));
-        set.add(lower(name.split(/\s+/)[0]));
+        for (const word of name.split(/\s+/)) set.add(lower(word));
     }
     return set;
 }
@@ -68,7 +68,7 @@ export function castNameOverlap(model, given) {
     const cast = castNameSet(model);
     return (given || []).filter(name => cast.has(lower(name)));
 }
-/** A never-use entry: a one-word entry matches as a given name, a longer one matches the whole name. */
+/** A never-use entry matches a given name when the two are the same text, ignoring case and spaces at the ends (the preview's rule; the game also reads titles and multi-word names, which this preview does not). */
 export function isBanned(banned, name) {
     const target = lower(String(name ?? '').trim());
     return (banned || []).some(entry => {
@@ -100,6 +100,38 @@ export function pickSuggestions(model, culture, placeText, count = 3) {
     const start = hash(placeText) % pool.length;
     return Array.from({ length: count }, (_, i) => pool[(start + i) % pool.length]);
 }
+/** A culture id as a title: `highmark` reads "Highmark", `river-folk` reads "River folk". */
+export function prettyId(id) {
+    const text = String(id ?? '').replace(/-+/g, ' ').trim();
+    return text.charAt(0).toUpperCase() + text.slice(1);
+}
+/** The names of the places a culture's regions reach (the first `limit`), for the "Matches" line. */
+export function matchedPlaceNames(model, regions, limit = 3) {
+    const wanted = (regions || []).map(lower).filter(Boolean);
+    return records(model, 'places').filter(place => wanted.some(region => lower(place?.region).includes(region))).map(place => String(place.name ?? '')).filter(Boolean).slice(0, limit);
+}
+/** The preview picker's options: one per place name, the value being the place's region text; a name listed twice is shown once. */
+export function placeOptions(model) {
+    const seen = new Set();
+    const out = [];
+    for (const place of records(model, 'places')) {
+        if (typeof place?.region !== 'string' || !place.region.trim()) continue;
+        const label = String(place.name ?? '').trim() || place.region;
+        if (seen.has(lower(label))) continue;
+        seen.add(lower(label));
+        out.push({ label, value: place.region });
+    }
+    return out;
+}
+/** The checker's messages for one culture (or the never-use list), for the editor to show. */
+function namesProblems(model, id) {
+    const prefix = `content.names.${id}`;
+    return (model?.validation?.errors ?? []).filter(err => {
+        const path = String(err.path ?? '').replace(/\[(\d+)\]/g, '.$1');
+        return path === prefix || path.startsWith(`${prefix}.`) || path.startsWith(`${prefix}[`);
+    }).map(err => err.message).filter(Boolean);
+}
+
 /** The first culture in key order whose region matches the place text (the same rule the game uses). */
 export function cultureForPlace(names, placeText) {
     const text = lower(placeText);
@@ -139,7 +171,9 @@ function bannedEditor(ctx, names) {
     const { doc } = ctx;
     const banned = Array.isArray(names.banned) ? names.banned : [];
     const box = el(doc, 'div', '', { class: 'names-editor cf-form' });
+    const problems = namesProblems(ctx.model, 'banned');
     box.append(el(doc, 'h2', 'Never use'), el(doc, 'p', 'These names are never chosen for a new person, in any culture. Story Block also merges the names other packs list.', { class: 'muted' }));
+    if (problems.length) box.append(el(doc, 'div', problems.join('\n'), { role: 'status', class: 'warning' }));
     const row = el(doc, 'div', '', { class: 'names-chips' });
     banned.forEach((entry, i) => row.append(chip(doc, entry, () => {
         const next = namesOf(ctx.model);
@@ -170,12 +204,14 @@ function cultureEditor(ctx, id, names) {
     const given = Array.isArray(culture.given) ? culture.given : [];
     const box = el(doc, 'div', '', { class: 'names-editor cf-form' });
     const title = el(doc, 'div', '', { class: 'names-title' });
-    title.append(el(doc, 'h2', id), button(doc, 'Delete', () => {
+    title.append(el(doc, 'h2', prettyId(id)), button(doc, 'Delete', () => {
         const next = namesOf(model);
         delete next[id];
         writeNames(ctx, next, { kind: 'names', id: null });
-    }, { class: 'danger', 'aria-label': 'Remove culture' }));
+    }, { class: 'danger' }));
     box.append(title);
+    const problems = namesProblems(model, id);
+    if (problems.length) box.append(el(doc, 'div', problems.join('\n'), { role: 'status', class: 'warning' }));
     // Id: changing it keeps the culture's place in the order.
     const idInput = el(doc, 'input', '', { value: id, 'aria-label': 'Culture id', type: 'text' });
     idInput.addEventListener('change', () => {
@@ -203,7 +239,9 @@ function cultureEditor(ctx, id, names) {
         if (regions.length >= NAMES_LIMITS.regions) { ctx.notify(`At most ${NAMES_LIMITS.regions} regions per culture`); return; }
         writeNames(ctx, rebuild(names, id, id, { ...culture, regions: [...regions, region] }));
     }));
-    box.append(el(doc, 'span', `Matches ${placeMatches(model, regions)} places`, { class: 'muted' }));
+    const matched = placeMatches(model, regions);
+    const first = matchedPlaceNames(model, regions);
+    box.append(el(doc, 'span', `Matches ${matched} places${first.length ? `: ${first.join(', ')}${matched > first.length ? '…' : ''}` : ''}`, { class: 'muted' }));
     // Given names.
     box.append(el(doc, 'span', `Given names · ${given.length} / ${NAMES_LIMITS.given}`, { class: 'lbl' }));
     const overlap = new Set(castNameOverlap(model, given));
@@ -231,10 +269,10 @@ function preview(ctx, id, names) {
     const { doc, model } = ctx;
     const box = el(doc, 'div', '', { class: 'names-preview' });
     box.append(el(doc, 'span', 'Preview', { class: 'lbl' }));
-    const places = records(model, 'places').filter(place => typeof place?.region === 'string' && place.region.trim());
+    const places = placeOptions(model);
     if (!places.length) { box.append(el(doc, 'p', 'No places with a region yet: add one to preview names for it.', { class: 'muted' })); return box; }
     const select = el(doc, 'select', '', { 'aria-label': 'Place for the preview' });
-    for (const place of places) select.append(el(doc, 'option', place.region, { value: place.region }));
+    for (const place of places) select.append(el(doc, 'option', place.label, { value: place.value }));
     const out = el(doc, 'p', '', { class: 'names-preview-out', 'aria-live': 'polite' });
     const show = () => {
         const placeText = select.value;
@@ -273,7 +311,7 @@ export function renderNames(ctx) {
         const given = Array.isArray(culture.given) ? culture.given : [];
         const regions = Array.isArray(culture.regions) ? culture.regions : [];
         const head = el(doc, 'span', '', { class: 'record-card-header' });
-        head.append(el(doc, 'span', id, { class: 'record-card-name' }), el(doc, 'span', `${given.length} names`, { class: 'record-card-meta' }));
+        head.append(el(doc, 'span', prettyId(id), { class: 'record-card-name' }), el(doc, 'span', `${given.length} names`, { class: 'record-card-meta' }));
         card.append(head, el(doc, 'span', regions.join(', ') || 'no regions', { class: 'record-card-meta' }), el(doc, 'span', `${given.slice(0, 5).join(', ')}${given.length > 5 ? '…' : ''}`, { class: 'names-sample' }));
         list.append(card);
     }
@@ -281,7 +319,7 @@ export function renderNames(ctx) {
     screen.append(list);
     ctx.main.append(screen);
     const inspector = ctx.inspector || screen;
-    const back = button(doc, '‹ Back to the list', () => ctx.select('names', null), { class: 'names-back' });
+    const back = button(doc, '‹ Back to the list', () => ctx.select('names', null), { class: 'back-to-list' });
     if (ctx.selection.id === BANNED_CARD) { inspector.append(back, bannedEditor(ctx, names)); return; }
     if (ctx.selection.id && ids.includes(ctx.selection.id)) { inspector.append(back, cultureEditor(ctx, ctx.selection.id, names)); return; }
     inspector.append(el(doc, 'p', 'Select a culture or “Never use” to edit it.', { class: 'muted' }));

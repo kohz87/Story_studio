@@ -3,13 +3,15 @@
 //
 // The pack shape and every limit are Story Block's (its ripples checker); the form only shows them where the writer types.
 // Every edit replaces the whole `ripples` table in one undoable edit, so a rename of a power's ID also moves the world
-// directions that favour it. Pure helpers (shares, leader, the events that read ripples, standing keys) are exported.
+// directions that favour it; a rename or a delete that events read asks first (events quote a power's ID and are not rewritten),
+// and deleting the last power removes the table. Pure helpers (shares, leader, the events that read ripples, standing keys) are exported.
 
 import { applyEdit } from '../apply-edit.js';
 import { el, button, field } from '../dom.js';
 import { records } from '../records.js';
 import { setSchemaField as setField } from '../edits.js';
-import { RIPPLES_LIMITS } from '../../vendor/story-block/src/v2/packs/limits.js';
+import { commitSnapshot } from '../edits/commit.js';
+import { RIPPLES_LIMITS, SLUG } from '../../vendor/story-block/src/v2/packs/limits.js';
 
 const LIMITS = RIPPLES_LIMITS;
 const READS_RIPPLES = /query\(\s*'ripples\./;
@@ -59,6 +61,19 @@ export function standingKeys(model) {
     return keys;
 }
 
+/** The events whose condition quotes the ID (`'corvin'` or `"corvin"`), by name: a rename or delete leaves these reading nothing. */
+export function eventsQuoting(events, id) {
+    return (Array.isArray(events) ? events : []).filter(event => isRecord(event) && typeof event.when === 'string' && (event.when.includes(`'${id}'`) || event.when.includes(`"${id}"`)));
+}
+
+/** Why a power ID cannot be used, or '': Story Block's slug (up to its 40 characters) and not another power's ID. */
+export function powerIdProblem(id, powers, current = null) {
+    if (!id) return 'ID: a power needs an ID.';
+    if (!SLUG.test(id) || id.length > LIMITS.id) return `ID: use lower-case letters and digits with single hyphens between them (up to ${LIMITS.id}).`;
+    if (id !== current && powers.some(power => power?.id === id)) return `ID: another power already uses “${id}”.`;
+    return '';
+}
+
 /** A power ID no other power uses: `new-power`, then `new-power-2`, `new-power-3`… */
 export function freshPowerId(powers) {
     const taken = new Set(powers.map(power => power?.id));
@@ -90,8 +105,43 @@ function addPower(ctx) {
     ctx.select('ripples', id);
 }
 
-function removePower(ctx, idx, id) {
-    commit(ctx, next => { next.powers.splice(idx, 1); }, { id: null });
+function removePower(ctx, idx) {
+    const left = (ctx.model.document.ripples.powers || []).length - 1;
+    if (left > 0) {
+        const gone = ctx.model.document.ripples.powers[idx]?.id;
+        // A world direction that favours the removed power would point at nothing (the checker refuses it): it goes with the power.
+        commit(ctx, next => {
+            next.powers.splice(idx, 1);
+            if (Array.isArray(next.worldDirections)) {
+                next.worldDirections = next.worldDirections.filter(direction => direction?.favours !== gone);
+                if (!next.worldDirections.length) delete next.worldDirections;
+            }
+        }, { id: null });
+        return;
+    }
+    // The last power: the table goes (an empty one is not valid, and a chat with no table follows the pack's default road).
+    const doc = copy(ctx.model.document);
+    delete doc.ripples;
+    applyEdit(ctx, commitSnapshot(doc, ctx.model), { id: null });
+}
+
+/** What a delete would change beyond the power itself, as sentences for the confirmation. */
+function deleteNotes(model, power, reads) {
+    const notes = [];
+    if (reads > 0) notes.push(`${reads} ${reads === 1 ? 'event reads' : 'events read'} these powers, and the powers they read by position move up`);
+    const directions = (Array.isArray(model?.document?.ripples?.worldDirections) ? model.document.ripples.worldDirections : []).filter(direction => direction?.favours === power.id).length;
+    if (directions) notes.push(`${directions} world ${directions === 1 ? 'direction favours' : 'directions favour'} it and will be removed`);
+    if (powersOf(model).length === 1) notes.push('this is the last power, so the whole Ripples table is removed');
+    return notes;
+}
+
+/** A confirmation under `host`: the message, a button that goes ahead and one that backs out (which also runs `onNo`). */
+function askInline(doc, host, message, yesLabel, onYes, onNo) {
+    const box = el(doc, 'div', '', { class: 'ripples-ask', role: 'alert' });
+    box.append(el(doc, 'p', message),
+        button(doc, yesLabel, onYes, { class: 'danger' }),
+        button(doc, 'Cancel', () => { box.remove(); onNo?.(); }));
+    host.append(box);
 }
 
 // --- the screen --------------------------------------------------------------------------------------------------------
@@ -122,6 +172,7 @@ export function renderRipples(ctx) {
     const inspector = ctx.inspector || screen;
     const selected = powers.find(({ power }) => power.id === ctx.selection.id);
     if (!selected) { inspector.append(el(doc, 'p', 'Select a power from the list to read and edit it.', { class: 'muted' })); return; }
+    inspector.append(button(doc, '‹ Back to the list', () => ctx.select('ripples', null), { class: 'back-to-list' }));
     renderPower(ctx, inspector, selected);
 }
 
@@ -171,8 +222,16 @@ function powerProblems(model, idx) {
 function renderPower(ctx, inspector, { power, idx }) {
     const { doc, model } = ctx;
     const titleRow = el(doc, 'div', '', { class: 'inspector-title-row' });
-    titleRow.append(el(doc, 'h2', power.name || power.id), button(doc, 'Delete', () => removePower(ctx, idx, power.id), { class: 'danger' }));
-    inspector.append(titleRow);
+    const ask = el(doc, 'div', '');
+    const reads = countRippleEvents(records(model, 'events'));
+    const del = button(doc, 'Delete', () => {
+        const notes = deleteNotes(model, power, reads);
+        if (!notes.length) { removePower(ctx, idx); return; }
+        del.disabled = true;
+        askInline(doc, ask, `Delete “${power.name || power.id}”? ${notes.join('; ')}.`, 'Delete anyway', () => removePower(ctx, idx), () => { del.disabled = false; });
+    }, { class: 'danger' });
+    titleRow.append(el(doc, 'h2', power.name || power.id), del);
+    inspector.append(titleRow, ask);
     const problems = powerProblems(model, idx);
     if (problems.length) inspector.append(el(doc, 'div', problems.join('\n'), { role: 'status', class: 'warning' }));
 
@@ -189,10 +248,10 @@ function renderPower(ctx, inspector, { power, idx }) {
     inspector.append(form);
 }
 
-function textField(doc, title, value, onCommit) {
-    const input = el(doc, 'input', '', { type: 'text', maxlength: String(LIMITS.name) });
+function textField(doc, title, value, onCommit, maxlength = LIMITS.name) {
+    const input = el(doc, 'input', '', { type: 'text', maxlength: String(maxlength) });
     input.value = typeof value === 'string' ? value : '';
-    input.addEventListener('change', () => onCommit(input.value.trim()));
+    input.addEventListener('change', () => onCommit(input.value.trim(), input));
     return field(doc, title, input);
 }
 
@@ -204,13 +263,20 @@ function nameFields(ctx, power, idx) {
             if (!value) { ctx.notify('name: a power needs a name.'); return; }
             commit(ctx, next => { next.powers[idx].name = value; });
         }),
-        textField(doc, 'ID', power.id, value => {
-            if (!value || value === power.id) return;
-            commit(ctx, next => {
+        textField(doc, 'ID', power.id, (value, input) => {
+            if (value === power.id) return;
+            const problem = powerIdProblem(value, powersOf(ctx.model).map(item => item.power), power.id);
+            if (problem) { ctx.notify(problem); input.value = power.id; return; }
+            const rename = () => commit(ctx, next => {
                 next.powers[idx].id = value;
                 for (const direction of Array.isArray(next.worldDirections) ? next.worldDirections : []) if (direction?.favours === power.id) direction.favours = value;
             }, { id: value });
-        }),
+            const quoting = eventsQuoting(records(ctx.model, 'events'), power.id);
+            if (!quoting.length) { rename(); return; }
+            // Events that quote the old ID would never match the new one, and Studio does not rewrite a condition: ask first.
+            const names = quoting.slice(0, 3).map(event => event.name || event.id || 'an event').join(', ');
+            askInline(doc, row, `${quoting.length} ${quoting.length === 1 ? 'event compares' : 'events compare'} against “${power.id}” (${names}${quoting.length > 3 ? '…' : ''}) and would stop matching. Rename anyway?`, 'Rename anyway', rename, () => { input.value = power.id; });
+        }, LIMITS.id),
     );
     return row;
 }
@@ -264,9 +330,9 @@ function peopleGroup(ctx, power, idx) {
     const set = el(doc, 'fieldset', '', { class: 'form-fieldset cf' });
     set.append(el(doc, 'legend', 'People who count, and how much'));
     people.forEach((npc, i) => {
-        const row = el(doc, 'div', '', { class: 'cf-list-rows' });
+        const row = el(doc, 'div', '', { class: 'cf-list-rows ripples-person' });
         row.append(el(doc, 'span', npc.name),
-            weightPicker(doc, npc.weight, value => commit(ctx, next => { next.powers[idx].npcs[i].weight = value; })),
+            weightPicker(doc, npc.weight ?? 1, value => commit(ctx, next => { next.powers[idx].npcs[i].weight = value; })),
             button(doc, '✕', () => commit(ctx, next => keepList(next.powers[idx], 'npcs', next.powers[idx].npcs.filter((_, j) => j !== i))), { class: 'x', 'aria-label': `Remove ${npc.name}` }));
         set.append(row);
     });

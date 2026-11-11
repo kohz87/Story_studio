@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { openPack, exportPack } from '../src/model.js';
 import { renderScreen } from '../src/screens/index.js';
 import { goToProblem } from '../src/screens/problems.js';
-import { namesOf, cultureIds, cultureIdProblem, placeMatches, castNameOverlap, isBanned, pickSuggestions, cultureForPlace, NAMES_LIMITS } from '../src/screens/names.js';
+import { namesOf, cultureIds, cultureIdProblem, placeMatches, castNameOverlap, isBanned, pickSuggestions, cultureForPlace, prettyId, matchedPlaceNames, placeOptions, NAMES_LIMITS } from '../src/screens/names.js';
 import { NAMES_LIMITS as SB } from '../vendor/story-block/src/v2/packs/limits.js';
 import { createTestContext } from './helpers/dom.js';
 
@@ -46,6 +46,61 @@ test('the culture id rules: a slug, not the reserved word, not taken', () => {
     assert.match(cultureIdProblem('', names), /id/);
     assert.match(cultureIdProblem('river', names), /already/);
     assert.equal(cultureIdProblem('river', names, 'river'), '');
+    // Story Block's own slug: no trailing or doubled hyphen, up to 64 characters; "names" is reserved too.
+    for (const bad of ['river-', 'a--b', '-river', 'names']) assert.notEqual(cultureIdProblem(bad, names), '', bad);
+    assert.equal(cultureIdProblem('a'.repeat(64), names), '');
+    assert.notEqual(cultureIdProblem('a'.repeat(65), names), '');
+});
+
+test('the culture id field refuses river- with a word and puts the old id back; the pack is untouched', () => {
+    const ctx = open();
+    const id = cultureIds(namesOf(ctx.model))[1];
+    const before = exportPack(ctx.model);
+    ctx.select('names', id);
+    const field = input(ctx.inspector, 'Culture id');
+    field.value = 'river-';
+    field.dispatchEvent({ type: 'change' });
+    assert.equal(ctx.notifications.length, 1);
+    assert.equal(field.value, id);
+    assert.equal(exportPack(ctx.model), before);
+});
+
+test('a title word does not hide a cast name: "Sir Lothar" flags the given name Lothar and keeps it out of the preview', () => {
+    const model = { document: { content: { cast: [{ name: 'Sir Lothar' }, { name: 'Sister Temiwa' }], names: {} } } };
+    assert.deepEqual(castNameOverlap(model, ['Lothar', 'Temiwa', 'Sir Lothar', 'Wenna']), ['Lothar', 'Temiwa', 'Sir Lothar']);
+    assert.deepEqual(pickSuggestions(model, { given: ['Lothar', 'Wenna'] }, 'x'), ['Wenna']);
+});
+
+test('titles, matched places and the preview picker: pretty ids, the first places by name, one option per place name', () => {
+    assert.equal(prettyId('highmark'), 'Highmark');
+    assert.equal(prettyId('river-folk'), 'River folk');
+    const model = { document: { content: { places: [
+        { name: 'A', region: 'North Reach' }, { name: 'B', region: 'North Reach' }, { name: 'a', region: 'North Reach' }, { name: 'C', region: 'North Reach' }, { name: 'D', region: 'South' }, { name: 'E' },
+    ] } } };
+    assert.deepEqual(matchedPlaceNames(model, ['north'], 3), ['A', 'B', 'a']);
+    assert.deepEqual(placeOptions(model), [{ label: 'A', value: 'North Reach' }, { label: 'B', value: 'North Reach' }, { label: 'C', value: 'North Reach' }, { label: 'D', value: 'South' }]);
+    const ctx = open(['names', cultureIds(namesOf(open().model))[1]]);
+    const select = ctx.inspector.querySelectorAll('select')[0];
+    const labels = select.querySelectorAll('option').map(node => node.textContent);
+    assert.equal(new Set(labels.map(text => text.toLowerCase())).size, labels.length);
+});
+
+test('the culture editor shows the checker’s words for its own culture; the Delete button is named Delete', () => {
+    const pack = JSON.parse(ersveil());
+    pack.content.names['bad-'] = { regions: ['X'], given: ['Y'] };
+    const ctx = createTestContext(openPack(JSON.stringify(pack)));
+    ctx.onRender = renderScreen;
+    ctx.select('names', 'bad-');
+    assert.ok(ctx.model.validation.errors.some(err => String(err.path).startsWith('content.names.bad-')));
+    assert.ok(ctx.inspector.querySelectorAll('.warning').length >= 1);
+    assert.equal(buttons(ctx.inspector, 'Delete').length, 1);
+    assert.equal(buttons(ctx.inspector, 'Remove culture').length, 0);
+});
+
+test('the Names inspector has a back button that returns to the list', () => {
+    const ctx = open(['names', cultureIds(namesOf(open().model))[1]]);
+    press(ctx.inspector, '‹ Back to the list');
+    assert.equal(ctx.selection.id, null);
 });
 
 test('places matched by a culture: a region is a case-insensitive substring of the place’s region text', () => {
@@ -85,7 +140,7 @@ test('the screen lists the never-use card and a card per culture, and opens the 
     assert.equal(ctx.main.querySelector('h1').textContent, 'Names');
     assert.equal(ctx.main.querySelectorAll('button.names-card').length, ids.length + 1);
     ctx.select('names', ids[1]);
-    assert.equal(ctx.inspector.querySelector('h2').textContent, ids[1]);
+    assert.equal(ctx.inspector.querySelector('h2').textContent, prettyId(ids[1]));
     assert.equal(input(ctx.inspector, 'Culture id').value, ids[1]);
     ctx.select('names', '__banned');
     assert.equal(ctx.inspector.querySelector('h2').textContent, 'Never use');
@@ -107,7 +162,7 @@ test('add a culture, then a region and a name to it, remove them again: every st
     press(ctx.inspector, 'Remove New region');
     ok(ctx);
     assert.deepEqual(namesOf(ctx.model)[id], { regions: ['Saltmarsh'], given: ['Odo', 'Brann'] });
-    press(ctx.inspector, 'Remove culture');
+    press(ctx.inspector, 'Delete');
     ok(ctx);
     assert.equal(cultureIds(namesOf(ctx.model)).length, count);
     for (let i = 0; i < 6; i++) { ctx.history.undo(); }

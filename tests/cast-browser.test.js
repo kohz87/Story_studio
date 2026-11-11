@@ -755,3 +755,16 @@ test('signature skills: a repeated name shows the checker’s line under it and 
         });
     }
 });
+
+test('the Cast Behaviour rows stack as a column: the Ripples people rows do not change them', async () => {
+    for (const width of [1280, 390]) {
+        await withPage({ width, height: 900 }, async page => {
+            await load(page);
+            await openPerson(page, 'Fenna');
+            await page.locator('.cf-list-rows').first().waitFor({ state: 'attached' });
+            const look = await page.evaluate(() => [...document.querySelectorAll('.cf-list-rows')].map(node => ({ direction: getComputedStyle(node).flexDirection, over: node.scrollWidth > node.clientWidth + 1 })));
+            assert.ok(look.length >= 1);
+            for (const row of look) assert.deepEqual(row, { direction: 'column', over: false }, `at ${width} px`);
+        });
+    }
+});

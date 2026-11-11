@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { openPack, exportPack } from '../src/model.js';
 import { renderScreen } from '../src/screens/index.js';
 import { goToProblem } from '../src/screens/problems.js';
-import { powersOf, baseShares, leaderAtStart, countRippleEvents, standingKeys, freshPowerId } from '../src/screens/ripples.js';
+import { powersOf, baseShares, leaderAtStart, countRippleEvents, standingKeys, freshPowerId, eventsQuoting, powerIdProblem } from '../src/screens/ripples.js';
 import { createTestContext } from './helpers/dom.js';
 
 const read = name => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8'));
@@ -116,6 +116,7 @@ test('a power renamed by id keeps the table valid; a duplicate id is a problem t
     const idInput = ctx.inspector.querySelectorAll('input').find(item => item.value === 'wendhild');
     idInput.value = 'wendhild-2';
     idInput.dispatchEvent({ type: 'change' });
+    press(ctx.inspector, 'Rename anyway');
     ok(ctx);
     assert.equal(powers(ctx)[0].id, 'wendhild-2');
     assert.equal(ctx.selection.id, 'wendhild-2');
@@ -134,4 +135,103 @@ test('an empty list is dropped rather than written, and a problem path leads to 
     goToProblem(ctx, { path: 'ripples.powers.1.base', message: 'x' });
     assert.equal(ctx.selection.kind, 'ripples');
     assert.equal(ctx.selection.id, powers(ctx)[1].id);
+});
+
+const idBox = ctx => ctx.inspector.querySelectorAll('input').find(item => item.value === ctx.selection.id);
+const change = (box, value) => { box.value = value; box.dispatchEvent({ type: 'change' }); };
+
+test('a power ID that is not a slug, is too long or is taken is refused with a word, and the old ID stays in the box', () => {
+    assert.match(powerIdProblem('Corvin II', []), /lower-case/);
+    assert.match(powerIdProblem('a'.repeat(41), []), /40/);
+    assert.match(powerIdProblem('a-', []), /lower-case/);
+    assert.match(powerIdProblem('', []), /needs an ID/);
+    assert.match(powerIdProblem('corvin', [{ id: 'corvin' }], 'wendhild'), /already/);
+    assert.equal(powerIdProblem('corvin', [{ id: 'corvin' }], 'corvin'), '');
+    const ctx = open();
+    const before = exportPack(ctx.model);
+    for (const bad of ['Corvin II', 'corvin', 'x'.repeat(41)]) {
+        const box = idBox(ctx);
+        assert.equal(box.getAttribute('maxlength'), '40');
+        change(box, bad);
+        assert.equal(box.value, 'wendhild');
+    }
+    assert.equal(ctx.notifications.length, 3);
+    assert.equal(exportPack(ctx.model), before);
+});
+
+test('renaming a power that events quote asks first and lists them; backing out keeps the ID; a quiet rename needs no question', () => {
+    const ctx = open();
+    const quoting = eventsQuoting(ctx.model.document.content.events, 'wendhild');
+    assert.ok(quoting.length >= 1);
+    assert.deepEqual(eventsQuoting([{ when: 'a == "x"' }, { when: "a == 'xy'" }, null], 'x').length, 1);
+    change(idBox(ctx), 'wendhild-2');
+    assert.equal(powers(ctx)[0].id, 'wendhild');
+    assert.match(ctx.inspector.querySelector('.ripples-ask').textContent, /compare/);
+    press(ctx.inspector, 'Cancel');
+    assert.equal(ctx.inspector.querySelectorAll('.ripples-ask').length, 0);
+    assert.equal(idBox(ctx).value, 'wendhild');
+    press(ctx.main, '+ Power');
+    assert.equal(eventsQuoting(ctx.model.document.content.events, 'new-power').length, 0);
+    change(idBox(ctx), 'newer-power');
+    ok(ctx);
+    assert.equal(ctx.selection.id, 'newer-power');
+    assert.equal(ctx.inspector.querySelectorAll('.ripples-ask').length, 0);
+});
+
+test('deleting a power that events read asks first; one that a world direction favours takes the direction with it', () => {
+    const pack = JSON.parse(ersveil());
+    pack.ripples.worldDirections = [{ event: 'crown-corvin-over-hasse', favours: 'hasse' }];
+    pack.content.events.push({ id: 'reads-ripples', cue: 'The throne is spoken of.', when: "query('ripples.leader', { pick: 'top' }) == 'corvin'" });
+    const ctx = createTestContext(openPack(JSON.stringify(pack)));
+    ctx.onRender = renderScreen;
+    ctx.select('ripples', 'hasse');
+    const n = powers(ctx).length;
+    press(ctx.inspector, 'Delete');
+    assert.equal(powers(ctx).length, n);
+    assert.match(ctx.inspector.querySelector('.ripples-ask').textContent, /event reads these powers/);
+    press(ctx.inspector, 'Delete anyway');
+    ok(ctx);
+    assert.equal(powers(ctx).length, n - 1);
+    assert.equal(ctx.model.document.ripples.worldDirections, undefined);
+});
+
+test('deleting the last power removes the Ripples table; one undo brings it back byte for byte', () => {
+    const pack = JSON.parse(ersveil());
+    pack.ripples = { powers: [pack.ripples.powers[0]] };
+    pack.content.events = pack.content.events.filter(event => !/query\(\s*'ripples\./.test(event.when || ''));
+    const ctx = createTestContext(openPack(JSON.stringify(pack)));
+    ctx.onRender = renderScreen;
+    ctx.select('ripples', pack.ripples.powers[0].id);
+    const before = exportPack(ctx.model);
+    press(ctx.inspector, 'Delete');
+    assert.match(ctx.inspector.querySelector('.ripples-ask').textContent, /last power/);
+    press(ctx.inspector, 'Delete anyway');
+    ok(ctx);
+    assert.equal(ctx.model.document.ripples, undefined);
+    ctx.history.undo();
+    ctx.render();
+    assert.equal(exportPack(ctx.model), before);
+});
+
+test('a person with no weight shows weight 1 pressed; the inspector has a back button to the list', () => {
+    const pack = JSON.parse(ersveil());
+    delete pack.ripples.powers[0].npcs[0].weight;
+    const ctx = createTestContext(openPack(JSON.stringify(pack)));
+    ctx.onRender = renderScreen;
+    ctx.select('ripples', 'wendhild');
+    const [first] = ctx.inspector.querySelectorAll('.cf-seg');
+    assert.equal(first.querySelectorAll('button').find(node => node.textContent === '1').getAttribute('aria-pressed'), 'true');
+    assert.ok(ctx.inspector.querySelectorAll('.ripples-person').length >= 1);
+    press(ctx.inspector, '‹ Back to the list');
+    assert.equal(ctx.selection.id, null);
+});
+
+test('a bad ripples or names section the game would drop is a problem here: shown in Problems, exports off', () => {
+    const pack = JSON.parse(ersveil());
+    pack.ripples.powers[1].id = 'Corvin II';
+    pack.content.names['bad-'] = { regions: ['X'], given: ['Y'] };
+    const model = openPack(JSON.stringify(pack));
+    assert.equal(model.validation.ok, false);
+    assert.ok(model.validation.errors.some(err => err.code === 'BAD_RIPPLES'));
+    assert.ok(model.validation.errors.some(err => String(err.path).startsWith('content.names.bad-')));
 });
