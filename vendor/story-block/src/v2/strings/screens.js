@@ -40,6 +40,10 @@ export const SCREEN_STRINGS = {
         empty: 'Nothing carried yet.',
         noMatch: 'Nothing matches the filter.',
         wornBy: 'Worn by {name}',
+        wornWho: '{name} \u00b7 {n} pieces', wornWhoOne: '{name} \u00b7 1 piece',
+        // The Grid view: the List | Grid switch, the tile list, the item sheet.
+        viewLabel: 'View', viewList: 'List', viewGrid: 'Grid', tilesLabel: 'Items',
+        sheetLabel: 'Item details', sheetClose: 'Close', weight: 'Weight', editLabel: 'Edit',
         wornByParty: 'Worn by the party',
         equipOn: 'Equip on…',
         equipOnTitle: 'Choose who puts on {name}',
@@ -55,11 +59,15 @@ export const SCREEN_STRINGS = {
         lootTakeTitle: 'Put the things you ticked in the party\'s bag',
         // Gear in fights is on (Settings -> RPG): the Carry card, the sections' order, the rows' chips and the item Edit's two choices.
         gear: {
-            carry: 'Carry', heavy: 'Heavy load', over: 'Encumbered: AGI and DEX \u2212{n}', carryLabel: 'Carried',
+            carry: 'Carry', strength: 'Strength', withParty: '(with the party)', heavy: 'Heavy load', over: 'Encumbered: AGI and DEX \u2212{n}', carryLabel: 'Carried',
             equippedBy: 'Equipped \u00b7 {name}', equippedByTitle: 'Worn by {name}', slotTitle: 'The slot it is worn in',
             words: { good: 'Good', worn: 'Worn', torn: 'Torn', broken: 'Broken' }, noBonus: 'no bonus', brokenNoBonus: '\u2014 no bonus',
             condTitle: 'Condition: Good, Worn, Torn or Broken. A broken piece gives no bonus.',
-            editSlot: 'Slot', editBy: 'Equipped by', none: 'None',
+            editSlot: 'Slot', editBy: 'Equipped by', none: 'None', left: 'Left the party',
+            // The bag list and the folded Worn row: pieces nobody wears are listed; worn ones are under "Worn (N)", by wearer.
+            bagTitle: 'Equipment \u00b7 in the bag', equip: 'Equip', equipWho: 'Who wears it?', equipWhoTitle: 'Put {name} on {who}',
+            wornFold: 'Worn ({n})', wornFoldTitle: 'Show or hide the pieces being worn', signature: 'Signature', signatureTitle: '{name}\'s signature piece: it stays on them',
+            unequipTitle: 'Take {name} off: back to the bag',
             // The hand-set gear form (view/gear-form.js): "+ Add item" and the Edit of a piece the reader added.
             form: {
                 groupItem: 'Item', groupGear: 'Gear', name: 'Name', count: 'Count', note: 'Note', kind: 'Kind', slot: 'Slot', rarity: 'Rarity', bonus: 'Bonus',
@@ -69,6 +77,7 @@ export const SCREEN_STRINGS = {
                 noGreeting: 'This chat has no greeting yet, so there is nothing to add items to. Start the chat first.',
                 kitGreeting: 'Starting kit belongs to this greeting.',
                 laterHint: 'Rarity and bonuses come from the story after the first message.',
+                carry: 'Adds carry capacity (0\u2013500)', carryHelp: 'Only you set this. The story never changes it.',
                 packHint: 'Kind, slot and rarity come from the pack.',
                 laterTitle: 'Fixed after your first message',
                 points: '{n} of {max} points for {a} {rarity} piece', pointsNone: 'A common piece has no bonus',
@@ -227,6 +236,7 @@ export const SCREEN_STRINGS = {
         quests: 'Quests',
         progress: 'Progress',
         moreQuests: 'and more on the Quests screen',
+        openQuests: 'Open Quests ›',
         offered: 'Offered',
     },
 };

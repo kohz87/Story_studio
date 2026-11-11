@@ -102,9 +102,12 @@ export function openPack(json) {
     }
     // Story Block does not know the commands of other modules; Story Director refuses a lasting change outside its limits, so it is flagged here.
     const lasting = document ? lastingProblems(document) : [];
+    // Story Block 2.31 keeps a pack whose names or ripples section is bad and drops that section, saying so as a warning. Studio is where
+    // the section is written, so it counts as a problem: the Problems drawer lists it and the exports stay off until it is fixed.
+    const dropped = checked.warnings ?? [];
     const model = deepFreeze({
         document,
-        validation: { ok: checked.ok && !lasting.length, errors: [...checked.errors ?? [], ...lasting], warnings: checked.warnings ?? [] },
+        validation: { ok: checked.ok && !lasting.length && !dropped.length, errors: [...checked.errors ?? [], ...lasting, ...dropped], warnings: [] },
         references: document ? indexReferences(document) : [],
         packHash: checked.ok ? checked.packHash ?? null : null,
     });

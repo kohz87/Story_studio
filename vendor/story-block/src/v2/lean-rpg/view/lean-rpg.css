@@ -6,7 +6,7 @@
 
 /* ---- Party tab (mockup 21-party) ---- */
 .ss-w-rpg-party { display: grid; gap: 12px; min-width: 0; container-type: inline-size; }
-.rpg-main { display: grid; gap: 12px; }
+.rpg-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .rpg-main[hidden], .rpg-sheet-host:empty { display: none; }
 .rpg-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rpg-head h3 { margin: 0; font-size: 18px; }
@@ -33,6 +33,14 @@
 .rpg-stats { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; font-size: 11px; text-align: center; font-variant-numeric: tabular-nums; }
 .rpg-stat { display: grid; gap: 2px; padding: 4px 0; border-radius: 8px; background: var(--ss-tile); }
 .rpg-stat b { font-size: 14px; }
+/* Gear on a stat: the stat a roll uses in a theme colour, the gear's +N under it; the row's cells stretch to one height. */
+.rpg-stat-gear { align-content: start; }
+.rpg-stat-up { color: var(--ss-good); }
+.rpg-stat-down { color: var(--ss-warn); }
+/* (the +N takes the colour of the number above it) */
+.rpg-stat-up ~ .rpg-stat-add { color: var(--ss-good); }
+.rpg-stat-down ~ .rpg-stat-add { color: var(--ss-warn); }
+.rpg-stat-add { font-size: 10.5px; line-height: 1.1; font-weight: 600; }
 .rpg-skills { font-size: 12.5px; color: var(--ss-muted); overflow-wrap: anywhere; }
 .rpg-card-actions, .rpg-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
@@ -89,6 +97,16 @@
 .rpg-skill-roll { margin: 0; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .rpg-skill-roll span { color: var(--ss-muted); }
 .rpg-skill-empty { padding: 12px; border-radius: 12px; border: 1px dashed color-mix(in srgb, var(--ss-text) 25%, transparent); color: var(--ss-muted); font-size: 13px; }
+/* (a Skills block with types) the two lists' heads, a utility skill's tint, the editor's Combat/Utility switch and its help */
+.rpg-skill-group { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 8px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ss-muted); }
+.rpg-skill-group:not(:first-child) { margin-top: 6px; }
+.rpg-skill-util { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ss-sp) 55%, var(--ss-muted)); }
+.rpg-skill-usedfor { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rpg-skill-seg { display: inline-flex; border: 1px solid color-mix(in srgb, var(--ss-text) 20%, transparent); border-radius: 8px; overflow: hidden; }
+.rpg-skill-seg-option { min-height: 34px; padding: 4px 12px; border: 0; background: transparent; color: var(--ss-muted); font: inherit; font-size: 12.5px; cursor: pointer; }
+.rpg-skill-seg-option:disabled { opacity: 0.45; cursor: not-allowed; }
+.rpg-skill-seg-on { background: var(--ss-accent-soft); color: var(--ss-text); font-weight: 600; }
+.rpg-skill-help { margin: 0; font-size: 12.5px; color: var(--ss-muted); }
 .rpg-skill-form { display: grid; gap: 8px; }
 .rpg-skill-field { display: grid; gap: 4px; font-size: 13px; }
 .rpg-skill-field-label { font-size: 12px; color: var(--ss-muted); }
@@ -133,7 +151,7 @@
 .rpg-wiz-card-src { font-size: 11px; color: var(--ss-muted); margin-top: auto; }
 .rpg-wiz-tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--ss-badge); color: var(--ss-badge-text); font-weight: 700; }
 .rpg-wiz-rows { display: grid; gap: 8px; }
-.rpg-wiz-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr) 78px 104px 104px 36px; gap: 8px; align-items: center; }
+.rpg-wiz-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr) 78px 104px 104px 104px 36px; gap: 8px; align-items: center; }
 .rpg-wiz-colhead { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ss-muted); }
 .rpg-wiz-x { width: 36px; height: 36px; border: 0; background: transparent; color: var(--ss-muted); cursor: pointer; font-size: 18px; }
 .rpg-wiz-add { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
@@ -158,6 +176,8 @@
     .rpg-wiz-row { grid-template-columns: repeat(3, minmax(0, 1fr)) 36px; padding-bottom: 10px; border-bottom: 1px solid color-mix(in srgb, var(--ss-text) 12%, transparent); }
     .rpg-wiz-row .rpg-wiz-n { grid-column: 1 / 4; }
     .rpg-wiz-row .rpg-wiz-d { grid-column: 1 / -1; }
+    .rpg-wiz-row [data-field="start"] { grid-column: 1 / 4; }
+    .rpg-wiz-row .rpg-wiz-x { grid-column: 4; }
     .rpg-wiz-headrow { display: none; }
     .rpg-wiz-stats-body { grid-template-columns: minmax(0, 1fr); justify-items: stretch; }
     .rpg-wiz-steppers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -210,10 +230,6 @@
 .rpg-bl-label { color: var(--ss-muted); }
 .rpg-bl-track { display: block; height: 6px; border-radius: 3px; background: var(--ss-track); overflow: hidden; }
 .rpg-bl-fill { display: block; height: 100%; width: calc(var(--rpg-fill, 0) * 100%); border-radius: 3px; background: var(--ss-text); }
-/* The bars are coloured by stage (good near full, warn in the middle, bad near empty), like the Party tab's, not by resource. */
-.rpg-bl-tone-good .rpg-bl-fill { background: var(--ss-good); }
-.rpg-bl-tone-warn .rpg-bl-fill { background: var(--ss-warn); }
-.rpg-bl-tone-bad .rpg-bl-fill { background: var(--ss-bad); }
 .rpg-bl-foes { grid-template-columns: 5.5em minmax(0, 1fr); gap: 8px; }
 .rpg-bl-foe-list { overflow-wrap: anywhere; }
 @media (max-width: 600px) {
@@ -328,7 +344,7 @@
 .rpg-wiz-level { width: 76px; max-width: 100%; }
 
 /* ---- Slot card (Party -> Inventory, only while Gear in fights is on): eight equal tiles in two columns ---- */
-.rpg-slots { display: grid; grid-auto-flow: column; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(4, 54px); gap: 8px; margin-top: 6px; }
+.rpg-slots { display: grid; grid-auto-flow: column; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(4, minmax(54px, auto)); gap: 8px; margin-top: 6px; }
 .rpg-slot { --rarity: var(--ss-text); position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px 12px; box-sizing: border-box; border-radius: 8px; background: var(--ss-tile); border: 1px solid var(--ss-border); overflow: hidden; }
 .rpg-slot.r-uncommon { --rarity: var(--ss-uncommon); }
 .rpg-slot.r-rare { --rarity: var(--ss-rare); }
@@ -341,6 +357,12 @@
 .rpg-slot-place { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ss-muted); }
 .rpg-slot-name { font-size: 13px; font-weight: 600; color: var(--rarity); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rpg-slot-bonus { font-size: 11px; color: var(--rarity); font-variant-numeric: tabular-nums; }
+.rpg-slot-act { justify-self: start; min-height: 32px; margin-top: 3px; padding: 0 10px; font-size: 12px; }
+.rpg-slot-bag { display: grid; gap: 4px; justify-items: start; margin-top: 3px; }
+.rpg-slot-bag[hidden] { display: none; }
+.rpg-slot-pick { min-height: 32px; max-width: 100%; padding: 0 10px; font-size: 12px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rpg-gear-error { margin: 6px 0 0; color: var(--ss-bad-text, var(--ss-bad)); font-size: 12px; }
+.rpg-gear-error:empty { display: none; }
 .rpg-slot-lock { position: absolute; top: 5px; right: 6px; width: 13px; height: 13px; opacity: 0.95; }
 .rpg-slot-cond { position: absolute; inset: auto 0 0 0; height: 3px; background: transparent; }
 .rpg-slot.w-worn .rpg-slot-cond { background: var(--ss-warn); }
@@ -350,3 +372,12 @@
 /* The card's buttons are a little tighter while Gear in fights is on, and wrap to a second row when a label would not fit its button. */
 .rpg-card-actions-gear { flex-wrap: wrap; gap: 6px; }
 .rpg-card-actions-gear .ss-button { flex: 1 1 auto; min-width: fit-content; justify-content: center; padding-inline: 6px; white-space: nowrap; }
+
+/* ---- Party: the members who left fold into one row under the active cards ---- */
+.rpg-left-fold { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 6px 10px; border: 1px solid var(--ss-border, currentColor); border-radius: 12px; background: transparent; color: var(--ss-muted); font: inherit; text-align: left; cursor: pointer; min-width: 0; overflow: hidden; }
+.rpg-left-fold b { color: var(--ss-text, inherit); white-space: nowrap; flex: none; }
+.rpg-left-line { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.rpg-left-names { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rpg-left-chev { flex: none; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; }
+.rpg-left-chev svg { width: 12px; height: 12px; display: block; transition: transform 0.15s; }
+.rpg-left-open .rpg-left-chev svg { transform: rotate(90deg); }

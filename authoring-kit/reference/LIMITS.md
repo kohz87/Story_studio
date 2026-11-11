@@ -15,6 +15,19 @@
 | Slug length | 64 |
 | Reported problems | 20 |
 
+## Names and ripples
+
+| What | Limit |
+|---|---|
+| Cultures, regions per culture | 20, 8 |
+| Region, given and family name length | 80, 40, 40 characters |
+| Given and family names per culture | 60, 60 |
+| Banned names and length | 200, 80 characters |
+| Ripple powers, power id length | 12, 40 characters |
+| Ripple aliases, factions, givers or NPCs per power | 20 |
+| Ripple name length, directions | 80 characters, 20 |
+| Ripple tier and cap maxima | 50, 100 |
+
 ## The cast and its portraits
 
 | What | Limit |
@@ -36,8 +49,8 @@
 
 | What | Limit |
 |---|---|
-| Definitions in one pack | 8 |
-| Pins per chat, subjects per module | 16, 16 |
+| Definitions in one pack | 20 |
+| Pins per chat, subjects per module | 28, 16 |
 | One definition | 32,768 bytes of JSON |
 | One instance (all its fields and timers) | 16,384 bytes |
 | Fields, kinds, rules, timers, reward templates | 32, 16, 32, 8, 16 |

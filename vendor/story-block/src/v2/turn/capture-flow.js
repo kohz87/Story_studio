@@ -17,10 +17,13 @@ import { within, TIMED_OUT } from './text.js';
 import { occurrenceOf, operationKey } from '../evidence.js';
 import { hash, readRecord } from '../persist.js';
 import { LEAN_RPG_FEATURE, practiceFromRollsOnly } from '../lean-rpg/names.js';
+import { allRuleNames, createMarkHistory, foeLine, ruleMarksFor, ruleMarksOf } from './rule-marks.js';
 import { boardFailure, boardStep } from './held-board.js';
+import { earlierReceipts, moneyWarning } from './money-guard.js';
 
 export function createCaptureFlow(s, deps) {
     const { ctx, store, bus, registry, settings, events, hostSettings, view, viewReader, lateReader, problem, isCarrier, boardError, PRACTICE_LINE, HOOK_TIMEOUT_MS } = deps;
+    const markHistory = createMarkHistory();
     const holdBoard = message => Object.assign(new Error(`${boardFailure('The fight could not be saved:', message)} Once restored, this reply can finish; after discarding, regenerate it.`), { code: 'BOARD_PRELUDE' });
 
     // Runs the reply's change lines; returns { receipts, problems }.
@@ -124,6 +127,7 @@ export function createCaptureFlow(s, deps) {
         const found = [];
         const lines = capped(index, all, found);
         const extra = assistRoom(index, [...late.map(line => ({ line, mark: LATE })), ...assist.map(line => ({ line, mark: NOW }))], used + lines.length, found);
+        const blocked = markHistory(ctx?.chat?.[index], store.carrierSid?.(index), type, before, changeHeads(), type === 'continue' || type === 'late' ? lateLines(index) : []);
         const shown = typeof before === 'string' ? shownIn(before) : new Map();
         // One write of the reply's record for all its lines and its afterCapture steps (store.batch).
         let off = [];
@@ -132,10 +136,10 @@ export function createCaptureFlow(s, deps) {
             // The seeded pre-roll precedes this reply's story lines, as it did in the prompt.
             // Its Source is now this reply's; the previous reply is never changed.
             const prepared = prechecks.length ? await afterCapture(index, { type, problems: found, prechecks, onlyPrechecks: true }) : [];
-            ({ off } = await captureEach(index, lines, receipts, found, null, null, shown));
+            ({ off } = await captureEach(index, lines, receipts, found, null, null, shown, null, null, blocked));
             for (const mark of [LATE, NOW]) {
                 const group = extra.filter(item => item.mark === mark).map(item => item.line);
-                if (group.length) off = [...new Set([...off, ...(await captureEach(index, group, receipts, found, null, null, shown, mark)).off])];
+                if (group.length) off = [...new Set([...off, ...(await captureEach(index, group, receipts, found, null, null, shown, mark, null, blocked)).off])];
             }
             // A pre-roll is part of this reply even when its narration has no Changes block.
             if (receipts.length || prepared.length) steps = [...prepared, ...await afterCapture(index, { type, problems: found })];
@@ -168,6 +172,7 @@ export function createCaptureFlow(s, deps) {
         const planned = () => (live || !plan ? [] : [...plan.blocks.flatMap(piece => piece.block?.evidence ?? []), ...steps.flatMap(step => step.block?.evidence ?? [])]);
         // The reply's own receipts as far as this run knows them (`info.receipts`, read only when a hook asks): the store's for a live reply, a Re-read's planned ones.
         const replyReceipts = () => (live ? (store.receipts?.() ?? []).filter(entry => entry.index === index).map(entry => entry.receipt) : [...(plan?.blocks ?? []).map(piece => piece.receipt), ...steps.map(step => step.receipt)].filter(Boolean)).map(receiptWithCue);
+        const previousReceipts = () => (live ? [] : (store.receipts?.() ?? []).filter(entry => entry.index === index).map(entry => entry.receipt)); // `info.previous` (a Re-read): the reply's stored receipts, still the old ones
         const hooks = [
             ...(prechecks.length ? [{ moduleId: HOST_MODULE, precheck: true, fn: () => ({ commands: prechecks }) }] : []),
             ...(onlyPrechecks ? [] : registry.hookEntries('afterCapture').filter(entry => !alwaysOnly || entry.fn.always === true)),
@@ -175,7 +180,7 @@ export function createCaptureFlow(s, deps) {
         for (const { moduleId, fn, precheck = false } of hooks) {
             const seen = live ? view() : makeView({ store, registry, settings, chat: ctx?.chat, active: viewReader, state: now, reply, pendingProofs: () => planned().map(proof => ({ proof, block: null })) });
             let out;
-            try { out = await within(fn(seen, Object.defineProperty({ index, type, ...(alwaysOnly ? { always: true } : {}) }, 'receipts', { get: replyReceipts })), HOOK_TIMEOUT_MS); } catch (error) {
+            try { out = await within(fn(seen, Object.defineProperties({ index, type, ...(alwaysOnly ? { always: true } : {}) }, { receipts: { get: replyReceipts }, previous: { get: previousReceipts } })), HOOK_TIMEOUT_MS); } catch (error) {
                 problems.push(problem({ module: moduleId, index, code: 'FAILED', message: `afterCapture failed: ${error?.message ?? error}` }));
                 continue;
             }
@@ -270,7 +275,7 @@ export function createCaptureFlow(s, deps) {
         return always || Object.keys(caps).length ? markCaps(mes, caps, from) : mes;
     };
 
-    async function captureEach(index, lines, receipts, found, base = null, seeds = null, shown = new Map(), assist = null, plan = null) {
+    async function captureEach(index, lines, receipts, found, base = null, seeds = null, shown = new Map(), assist = null, plan = null, blocked = { foe: false, rules: [] }) {
         const collected = [];
         const firstProblem = found.length;
         lines = linesInOrder(lines);
@@ -288,6 +293,16 @@ export function createCaptureFlow(s, deps) {
         else if (base === null && lines.some(line => PRACTICE_LINE.test(line.raw ?? '')) && practiceFromRollsOnly(registry.featureOn?.(LEAN_RPG_FEATURE) === true, settings?.('story-block'))) {
             try { store.setPracticeRule?.(index); carrier.practiceRule = 'rolls'; } catch { /* an unmarked reply is judged as before */ }
         }
+        // The foe level cap recorded with the reply: a new foe's guessed level may reach the party's highest + 20 (data-modules/part/act.js). A first live capture
+        // marks the reply even without a foe line; a Re-read or an edit goes by the mark the reply has, so an older reply keeps its +10 cap.
+        if (readRecord(message)?.foeCap === 20) carrier.foeCap = 20;
+        else if (base === null && (blocked.first || (!blocked.foe && lines.some(line => foeLine(line, state)))) && typeof store.setFoeCap === 'function') {
+            try { store.setFoeCap(index); carrier.foeCap = 20; } catch { /* an unmarked reply keeps the old cap */ }
+        }
+        // Rule marks (rule-marks.js): the first live capture gets all current marks; a Re-read goes by those it has (a module reads `ctx.carrier.rules`).
+        const marks = ruleMarksOf(readRecord(message)?.rules), fresh = base === null ? (blocked.first ? allRuleNames() : ruleMarksFor(lines)).filter(name => !marks.includes(name) && !blocked.rules.includes(name)) : [];
+        if (fresh.length && typeof store.setRuleMarks === 'function') { try { store.setRuleMarks(index, fresh); marks.push(...fresh); } catch { /* an unmarked reply keeps the old rule */ } }
+        if (marks.length) carrier.rules = marks;
         // The message right before the reply (system messages aside), and only when it is the reader's: a reply that
         // follows another reply has no message of the reader's to quote (proof, EVIDENCE.md).
         const before = (ctx?.chat ?? []).slice(0, index).findLast(item => !item?.is_system);
@@ -354,10 +369,13 @@ export function createCaptureFlow(s, deps) {
             if (!result?.ok) {
                 // A line refused because a feature the reader turned off answered it (another module's
                 // command it called, MODULES §F100): listed quietly, like a line of a kind that is off.
-                found.push(problem({ module: entry.moduleId, index, line: line.raw, code: result?.code ?? 'FAILED', message: `"${line.raw}" was not used: ${result?.message ?? 'unknown error'}`, ...(result?.code === 'FEATURE_OFF' ? { quiet: true } : {}) }));
+                found.push(problem({ module: entry.moduleId, index, line: line.raw, code: result?.code ?? 'FAILED', message: result?.code === 'RECOVERY_REFUSED' ? result.message : `"${line.raw}" was not used: ${result?.message ?? 'unknown error'}`, ...(result?.code === 'FEATURE_OFF' ? { quiet: true } : {}) }));
                 continue;
             }
             state = result.state ?? (base ? state : store.head());
+            // The money guard (warns only; the line is applied): a repeated payment or one far above the purse.
+            const warned = line.op === '+' ? moneyWarning(result.receipt, [...earlierReceipts(ctx?.chat, index), ...receipts]) : null;
+            if (warned) found.push(problem({ module: entry.moduleId, index, line: line.raw, code: 'LIMITED', message: warned }));
             receipts.push(result.receipt);
             // Used, but not all of it (a clamp): the owner says why, and that goes to the Problems list.
             if (typeof result.problem === 'string' && result.problem) {

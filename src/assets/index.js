@@ -26,6 +26,8 @@ export const SB_ICONS = Object.freeze({
     'kind-places': 'ph-map-pin',
     'kind-cast': 'ph-user',
     'kind-quests': 'ph-scroll',
+    'kind-names': 'ph-identification-card',
+    'kind-ripples': 'ph-crown',
     'kind-more': 'ph-dots-three-outline',
     info: 'ph-info',
     warning: 'ph-warning',

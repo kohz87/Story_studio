@@ -18,7 +18,9 @@ import { createPackFileReader } from './studio/open-file.js';
 
 // The screens below the record kinds in the rail, in order.
 const SCREENS = [['defaults', 'Settings defaults'], ['presentation', 'Screen builder'], ['data-modules', 'Data modules'], ['code-module', 'Code module'], ['card', 'Character card'], ['lorebook', 'Lorebook'], ['lore-import', 'Import lorebook']];
-const SCREEN_LABELS = { ...Object.fromEntries(SCREENS), settings: 'Pack settings', check: 'Check / export' };
+// Parts that are not record lists (a names table and a ripples table), shown after Cast in the rail.
+const EXTRA_PARTS = [['names', 'Names'], ['ripples', 'Ripples']];
+const SCREEN_LABELS = { ...Object.fromEntries(SCREENS), ...Object.fromEntries(EXTRA_PARTS), settings: 'Pack settings', check: 'Check / export' };
 
 export function mountStudio(root) {
     const doc = root.ownerDocument;
@@ -343,6 +345,12 @@ export function mountStudio(root) {
                 const asset = kind === 'creatures' ? 'kind-foes' : `kind-${kind}`;
                 nav.append(icon(doc, asset), el(doc, 'span', LABELS[kind]), el(doc, 'small', records(model, kind).length));
                 list.append(nav);
+                if (kind !== 'cast') continue;
+                for (const [part, label] of EXTRA_PARTS) {
+                    const extra = button(doc, '', () => ctx.select(part), { 'aria-current': selection.kind === part ? 'page' : 'false' });
+                    extra.append(icon(doc, `kind-${part}`), el(doc, 'span', label), el(doc, 'small', 'NEW', { class: 'new' }));
+                    list.append(extra);
+                }
             }
             const more = el(doc, 'details');
             const moreKinds = KINDS.filter(kind => !RAIL_KINDS.includes(kind));
@@ -359,7 +367,7 @@ export function mountStudio(root) {
             const railKind = RAIL_KINDS.includes(selection.kind);
             const summary = el(doc, 'summary');
             summary.append(
-                icon(doc, !railKind ? 'kind-more' : selection.kind === 'creatures' ? 'kind-foes' : `kind-${selection.kind}`),
+                icon(doc, EXTRA_PARTS.some(([part]) => part === selection.kind) ? `kind-${selection.kind}` : !railKind ? 'kind-more' : selection.kind === 'creatures' ? 'kind-foes' : `kind-${selection.kind}`),
                 el(doc, 'span', LABELS[selection.kind] ?? SCREEN_LABELS[selection.kind] ?? 'Pack parts', { class: 'label' }),
             );
             if (KINDS.includes(selection.kind)) summary.append(el(doc, 'small', records(model, selection.kind).length));
