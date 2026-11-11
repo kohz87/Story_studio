@@ -114,3 +114,6 @@ Mapped 2026-11-07.
 - `src/studio/chrome.js`: Studio page shell with header controls, workspace columns, inspector, notices and overlays.
 - `src/studio/events.js`: Page-level unload, Escape and dropped-file listeners, attached and removed as a pair.
 - `src/studio/open-file.js`: JSON and zip pack reading with size, portrait and stale-read guards.
+
+## scripts/
+- `scripts/write-generated.mjs`: Writes a generated source file only when its text changed, via a sibling temp file renamed over the target so readers never see a half-written file.
