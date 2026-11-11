@@ -181,6 +181,8 @@ export function readAnswer(source, model) {
             if (!bare.ok) {
                 note(entry, 'delay', `${bare.reason} Set the delay in the form.`);
                 spec.since = null;
+                // No delay is kept now, so a wrong unit's "Just the 2 days is fine" would promise one: it offers the plain button.
+                for (const item of entry.notes) if (item.kind === 'delay') item.ack = ACK.delay;
                 written = writeCondition(spec);
             }
         }
