@@ -18,7 +18,7 @@ Rules for changing code are in [AGENTS.md](AGENTS.md).
 | Story Studio | 0.12.0 | This repo. Writes and checks packs. Standalone page. |
 
 - Data flows one way: Studio writes a pack file; Story Block imports it (Settings, Tabs & Packs); Story Director and NPC State Delta read what Story Block holds. Nothing flows back to Studio.
-- Studio uses Story Block only through `vendor/story-block/` (Story Block 2.25.0, commit d71fc06). The pack checker is Story Block's own `validatePack`, so Studio and the game cannot disagree on what a valid pack is.
+- Studio uses Story Block only through `vendor/story-block/` (Story Block 2.31.1, commit 6b2948d). The pack checker is Story Block's own `validatePack`, so Studio and the game cannot disagree on what a valid pack is.
 - Studio has no model, no keys and no network access at runtime.
 
 ## Install & requirements
