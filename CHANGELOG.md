@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.12.0
+
+Update Story Block, Story Director, NPC State Delta (and Story Studio for pack authors) together. Replies already written replay and Re-read exactly as before; start a new chat to see the new dossier, mood, ties and drives behaviour.
+
 ## 0.11.1
 
 Update Story Block, Story Director and NPC State Delta together. Replies already written replay and Re-read exactly as before. For the harder foes, start a new chat (or re-add the Foes block).
