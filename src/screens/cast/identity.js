@@ -5,7 +5,14 @@ import { el, safeLabel } from '../../dom.js';
 import { records } from '../../records.js';
 import { setSchemaField as setField, renameId } from '../../edits.js';
 import { CAST_LIMITS, PLACEHOLDER_ID, idForName } from '../../cast/data.js';
+import { packCalendar } from '../../timeline/calendar.js';
 import { line, group, hint, wrap, text } from './form.js';
+
+// The pack calendar's month names, as suggestions for the birthday (none when the pack has no calendar: Story Block needs one).
+function birthdayMonths(ctx) {
+    const calendar = packCalendar(ctx.model.document);
+    return calendar.hasCalendar ? calendar.months.map(month => `${month.name} `) : [];
+}
 
 function whoFields(ctx, index, person) {
     const { doc } = ctx;
@@ -35,6 +42,8 @@ function whoFields(ctx, index, person) {
         text(ctx, index, person, ['wears'], 'Usually wears', { area: true, max: CAST_LIMITS.wears, wide: true,
             note: 'Clothes, armour and gear they usually have on. NPC State Delta shows it as their current appearance until the story changes it.' }),
         text(ctx, index, person, ['voice'], 'Voice', { max: CAST_LIMITS.voice, wide: true }),
+        text(ctx, index, person, ['birthday'], 'Birthday', { max: CAST_LIMITS.birthday, wide: true, suggest: birthdayMonths(ctx),
+            note: 'A month and day of this pack’s calendar, like “Icewane 27”; a year may follow (“Icewane 27, 1204”). Left empty, NPC State Delta chooses one.' }),
         text(ctx, index, person, ['history'], 'Background', { area: true, max: CAST_LIMITS.history, wide: true }),
     ];
     const key = el(doc, 'input', '', { value: person.id, 'data-path': JSON.stringify(['content', 'cast', index, 'id']) });

@@ -68,7 +68,7 @@ function wrap(ctx, label, control, { path, note, max, wide = false } = {}) {
 }
 
 /** A text input or textarea for one value of the entry; the change is saved as one undo step. */
-function text(ctx, index, person, keys, label, { area = false, max, note, wide = false, transform, after } = {}) {
+function text(ctx, index, person, keys, label, { area = false, max, note, wide = false, transform, after, suggest } = {}) {
     const { doc } = ctx;
     const read = entry => keys.reduce((node, key) => (isRecord(node) ? node[key] : undefined), entry);
     const current = read(person);
@@ -83,7 +83,15 @@ function text(ctx, index, person, keys, label, { area = false, max, note, wide =
         if (after && after(value, index) === true) return;
         if (!edit(ctx, index, record => put(record, keys, value))) control.value = safeLabel(saved ?? '');
     });
-    return wrap(ctx, label, control, { path, note, max, wide });
+    const box = wrap(ctx, label, control, { path, note, max, wide });
+    // Suggestions (not limits): a datalist the writer may follow or ignore.
+    if (suggest?.length) {
+        const options = el(doc, 'datalist', '', { id: `cf-suggest-${path.join('-')}` });
+        for (const word of suggest) options.append(el(doc, 'option', '', { value: word }));
+        control.setAttribute('list', options.id);
+        box.append(options);
+    }
+    return box;
 }
 function numberInput(doc, value, attrs = {}) {
     const input = el(doc, 'input', '', { type: 'number', step: '1', min: METER_LIMITS.min, max: METER_LIMITS.max, ...attrs });

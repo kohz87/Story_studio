@@ -67,7 +67,7 @@ test('the form is in the mockup’s order', () => {
     const ctx = open();
     assert.deepEqual(legends(ctx), ['Who they are', 'How they behave', 'Portrait', 'Where their story starts', 'Drawn to (optional)', 'Relationship at the start', 'Before they are met', 'Signature skills · 0 of 8', 'Secrets · 3 of 8']);
     const labels = ctx.inspector.querySelectorAll('fieldset')[0].querySelectorAll('label.field').map(node => node.childNodes[0].textContent);
-    assert.deepEqual(labels, ['Name', 'Also called', 'In one line', 'Look', 'Usually wears', 'Voice', 'Background', 'Key']);
+    assert.deepEqual(labels, ['Name', 'Also called', 'In one line', 'Look', 'Usually wears', 'Voice', 'Birthday', 'Background', 'Key']);
     assert.match(ctx.inspector.textContent, /Hidden from players until they meet Fenna; then NPC State Delta makes the dossier from this, at once\./);
     assert.equal(ctx.inspector.querySelector('h2').textContent, 'Fenna');
 });
@@ -783,4 +783,24 @@ test('Ersveil round trip: import, edit a lever, export, re-open', () => {
     assert.equal(named(group(again), 'Level 1').value, 'high');
     assert.equal(named(group(again), 'Effect 5').value, 'plays on it');
     assert.equal(exportPack(again.model), out);
+});
+
+const icePack = () => ({ ...castPack(), calendar: { era: 'CY', months: [{ name: 'Goldwane', days: 30 }, { name: 'Icewane', days: 28 }] } });
+
+test('Birthday sits with the identity fields, suggests the calendar’s month names, and is written, checked and exported', () => {
+    const ctx = open(icePack());
+    const labels = ctx.inspector.querySelectorAll('fieldset')[0].querySelectorAll('label.field').map(node => node.childNodes[0].textContent);
+    assert.equal(labels.indexOf('Birthday'), labels.indexOf('Voice') + 1);
+    const birthday = control(ctx, 0, 'birthday');
+    assert.equal(birthday.value, '');
+    const options = ctx.inspector.querySelector(`#${birthday.getAttribute('list')}`);
+    assert.deepEqual(options.querySelectorAll('option').map(node => node.getAttribute('value')), ['Goldwane ', 'Icewane ']);
+    edit(ctx, [0, 'birthday'], ' icewane 27 ');
+    assert.equal(cast(ctx)[0].birthday, 'icewane 27');
+    assert.equal(ctx.model.validation.ok, true);
+    assert.equal(JSON.parse(exportPack(ctx.model)).content.cast[0].birthday, 'icewane 27');
+    edit(ctx, [0, 'birthday'], 'Marchember 3');
+    assert.equal(ctx.model.validation.ok, false);
+    edit(ctx, [0, 'birthday'], '');
+    assert.equal('birthday' in cast(ctx)[0], false);
 });
