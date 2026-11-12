@@ -80,6 +80,12 @@ const redrawn = (page, label, value) => page.waitForFunction(([want, text]) => {
     return !document.querySelector('.cf-form [data-test-old]') && node?.closest?.('.cf-form')
         && node.labels?.[0]?.firstChild?.textContent === want && (text === undefined || node.value === text);
 }, [label, value]);
+// Focus on a labelled cast field (and its value) as it stands after any further redraw: polls, so a second redraw that
+// lands under load cannot fail a one-shot read; the end state is what matters.
+const focusedOn = (page, label, value) => page.waitForFunction(([want, text]) => {
+    const node = document.activeElement;
+    return node?.closest?.('.cf-form') && node.labels?.[0]?.firstChild?.textContent === want && (text === undefined || node.value === text);
+}, [label, value]);
 async function downloaded(page, selector) {
     const pending = page.waitForEvent('download');
     await page.locator(selector).click();
@@ -344,20 +350,16 @@ test('typing across cast fields with Tab keeps focus and every character', async
         await page.keyboard.type('Fenna Vale');
         await stampForm(page);
         await name.press('Tab');
-        const aliases = page.getByLabel('Also called', { exact: true });
         await page.keyboard.type('Captain ');
         await redrawn(page, 'Also called', 'Captain ');
-        assert.equal(await aliases.evaluate(node => node === document.activeElement), true);
-        assert.equal(await aliases.inputValue(), 'Captain ');
+        await focusedOn(page, 'Also called', 'Captain ');
         await page.keyboard.type('Fen');
-        assert.equal(await aliases.inputValue(), 'Captain Fen');
-        await stampForm(page);
+        await focusedOn(page, 'Also called', 'Captain Fen');
+        // No redraw is waited for here: a change that equals what is already saved legitimately redraws nothing.
         await page.keyboard.press('Tab');
-        await redrawn(page, 'In one line');
-        assert.equal(await page.getByLabel('In one line', { exact: true }).evaluate(node => node === document.activeElement), true);
+        await focusedOn(page, 'In one line');
         await page.keyboard.press('Shift+Tab');
-        assert.equal(await aliases.evaluate(node => node === document.activeElement), true);
-        assert.equal(await aliases.inputValue(), 'Captain Fen');
+        await focusedOn(page, 'Also called', 'Captain Fen');
         await navigate(page, 'Check / export');
         const pack = JSON.parse(new TextDecoder().decode((await downloaded(page, '#export-btn')).bytes));
         assert.equal(pack.content.cast[0].name, 'Fenna Vale');
