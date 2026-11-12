@@ -1,4 +1,4 @@
-# Story Studio 0.11.1
+# Story Studio 0.12.0
 
 Story Studio is a pack editor for the Story Suite. You write a world, its people and its events here, check it, and export a pack file. Story Block imports that file.
 

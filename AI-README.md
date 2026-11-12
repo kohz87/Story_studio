@@ -5,20 +5,20 @@ Rules for changing code are in [AGENTS.md](AGENTS.md).
 
 ## Purpose
 
-- Story Studio 0.11.1 is an offline, single-file pack editor and creator kit for the Story Suite (SillyTavern extensions).
+- Story Studio 0.12.0 is an offline, single-file pack editor and creator kit for the Story Suite (SillyTavern extensions).
 - It opens, edits, checks and exports world packs (`pack.json`, or a `.zip` with portraits). It is not an extension and not a reader.
 
 ## Suite map
 
 | Part | Version | Owns |
 |---|---|---|
-| Story Block | 2.16.1 | The hub. State, packs and their checker, the reader's screens, the `<Changes>` line grammar, the module SDK. Install first. |
-| Story Director | 2.9.1 | Clock, map and trips, quests and hooks, world events (the chronicle). Needs Story Block. |
-| NPC State Delta | 1.7.1 | Dossiers: meters, stages, secrets, portraits. Needs Story Block. Optional. |
-| Story Studio | 0.11.1 | This repo. Writes and checks packs. Standalone page. |
+| Story Block | 2.32.0 | The hub. State, packs and their checker, the reader's screens, the `<Changes>` line grammar, the module SDK. Install first. |
+| Story Director | 2.15.0 | Clock, map and trips, quests and hooks, world events (the chronicle). Needs Story Block. |
+| NPC State Delta | 1.17.0 | Dossiers: meters, stages, secrets, portraits. Needs Story Block. Optional. |
+| Story Studio | 0.12.0 | This repo. Writes and checks packs. Standalone page. |
 
 - Data flows one way: Studio writes a pack file; Story Block imports it (Settings, Tabs & Packs); Story Director and NPC State Delta read what Story Block holds. Nothing flows back to Studio.
-- Studio uses Story Block only through `vendor/story-block/` (Story Block 2.25.0, commit d71fc06). The pack checker is Story Block's own `validatePack`, so Studio and the game cannot disagree on what a valid pack is.
+- Studio uses Story Block only through `vendor/story-block/` (Story Block 2.31.1, commit 6b2948d). The pack checker is Story Block's own `validatePack`, so Studio and the game cannot disagree on what a valid pack is.
 - Studio has no model, no keys and no network access at runtime.
 
 ## Install & requirements
@@ -222,6 +222,6 @@ Code rules (from `AGENTS.md`): plain ES modules, DOM only through `createElement
 
 ## Version
 
-- Story Studio 0.11.1 (`package.json`, `CHANGELOG.md`). Vendored Story Block 2.25.0 (commit d71fc06); authoring kit stamped with the same commit.
-- Suite today: Story Block 2.25.0, Story Director 2.11.2, NPC State Delta 1.13.0, Story Studio 0.11.1.
+- Story Studio 0.12.0 (`package.json`, `CHANGELOG.md`). Vendored Story Block 2.31.1 (commit 6b2948d); authoring kit stamped with the same commit.
+- Suite today: Story Block 2.32.0, Story Director 2.15.0, NPC State Delta 1.17.0, Story Studio 0.12.0.
 - Licence: AGPL-3.0-only. Phosphor Icons (MIT) are bundled; the notice is in `src/credits.txt` and the built page.
