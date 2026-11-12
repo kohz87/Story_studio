@@ -222,6 +222,6 @@ Code rules (from `AGENTS.md`): plain ES modules, DOM only through `createElement
 
 ## Version
 
-- Story Studio 0.12.0 (`package.json`, `CHANGELOG.md`). Vendored Story Block 2.25.0 (commit d71fc06); authoring kit stamped with the same commit.
+- Story Studio 0.12.0 (`package.json`, `CHANGELOG.md`). Vendored Story Block 2.31.1 (commit 6b2948d); authoring kit stamped with the same commit.
 - Suite today: Story Block 2.32.0, Story Director 2.15.0, NPC State Delta 1.17.0, Story Studio 0.12.0.
 - Licence: AGPL-3.0-only. Phosphor Icons (MIT) are bundled; the notice is in `src/credits.txt` and the built page.
