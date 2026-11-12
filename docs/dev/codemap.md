@@ -105,7 +105,7 @@ Mapped 2026-11-07.
 - `src/screens/cast/pieces.js`: Shared Cast fieldsets, hints and Story Block problem notes.
 - `src/screens/cast/preview.js`: Player-facing preview of the Cast secrets.
 - `src/screens/cast/form.js`: Cast one-undo edits, nested value writes and labelled controls.
-- `src/screens/cast/identity.js`: Cast names, aliases, appearance, background and key fields.
+- `src/screens/cast/identity.js`: Cast names, aliases, appearance, voice, birthday (the calendar's month names as suggestions), background and key fields.
 - `src/screens/cast/behaviour.js`: Cast personality, levers, mannerisms and player-relationship fields.
 - `src/screens/cast/portrait.js`: Cast portrait field, image fitting and snapshot picture handling.
 - `src/screens/cast/story.js`: Cast start, drawn-to, meter, stage and unmet-death fields.
